@@ -1,0 +1,6 @@
+{
+  "top_payables_60_count": 5,
+  "top_receivables_60_count": 5,
+  "top_at_risk_incoming_count": 5,
+  "has_container_exposure": true
+}

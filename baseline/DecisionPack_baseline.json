@@ -1,0 +1,152 @@
+{
+  "as_of": "2026-02-16",
+  "status_flag": "OK",
+  "exposure_flag": "WATCH",
+  "trading_health_score": 5.8,
+  "drift_signals": [
+    "\u26a0 Sales momentum stalled (no improvement this week)."
+  ],
+  "cash": {
+    "cash_today_gbp": 77533.97,
+    "liquidity_60d_gbp": 70898.68,
+    "runway_days": 50.2
+  },
+  "pinch_14d": {
+    "as_of": "2026-02-16",
+    "window_days": 14,
+    "expected_in_gbp": 1901.66,
+    "expected_out_gbp": 3186.43,
+    "net_gbp": -1284.76,
+    "biggest_out": {
+      "date": "2026-02-17",
+      "amount": 1417.5000000000002,
+      "product_id": "P1021",
+      "product_reference": "E-11",
+      "event_type": "initial_payment",
+      "label": "E-11 (P1021)"
+    },
+    "biggest_in": {
+      "date": "2026-02-17",
+      "amount": 1023.36,
+      "product_id": "P1013",
+      "product_reference": "A-05",
+      "event_type": "receivable",
+      "label": "A-05 (P1013)"
+    },
+    "cash_alert": "AMBER"
+  },
+  "pinch_30d": {
+    "as_of": "2026-02-16",
+    "window_days": 30,
+    "expected_in_gbp": 3733.55,
+    "expected_out_gbp": 6287.71,
+    "net_gbp": -2554.15,
+    "biggest_out": {
+      "date": "2026-03-04",
+      "amount": 1848.0,
+      "product_id": "P1025",
+      "product_reference": "A-05",
+      "event_type": "initial_payment",
+      "label": "A-05 (P1025)"
+    },
+    "biggest_in": {
+      "date": "2026-02-17",
+      "amount": 1023.36,
+      "product_id": "P1013",
+      "product_reference": "A-05",
+      "event_type": "receivable",
+      "label": "A-05 (P1013)"
+    },
+    "cash_alert": "AMBER"
+  },
+  "commit": {},
+  "this_week": {
+    "standout_risks": [
+      "Cash Alert (14d): AMBER",
+      "Cash Alert (30d): AMBER",
+      "Landing window stacked: 6 SKUs within 45 days from 2026-03-09"
+    ],
+    "actions": [
+      "Practical options: (1) split the payment, (2) push pre-sell on near-landing lots, (3) delay the due date if possible.",
+      "Action: close \u2248\u00a33,813 total pre-sell gap across incoming coffees.",
+      "Priority: J-02 landing in 28 days \u2014 \u2248\u00a3676 gap."
+    ]
+  },
+  "commit_decision": "BLOCK",
+  "commit_liquidity_60": -79101.32,
+  "make_safe_by_gbp": 79101.32,
+  "top_payables_60": [
+    {
+      "product_id": "P1007",
+      "product_reference": "E-11",
+      "amount": 1879.92,
+      "date": "2026-04-08",
+      "label": "E-11 (P1007)"
+    },
+    {
+      "product_id": "P1025",
+      "product_reference": "A-05",
+      "amount": 1848.0,
+      "date": "2026-03-04",
+      "label": "A-05 (P1025)"
+    },
+    {
+      "product_id": "P1002",
+      "product_reference": "J-01",
+      "amount": 1617.84,
+      "date": "2026-03-23",
+      "label": "J-01 (P1002)"
+    },
+    {
+      "product_id": "P1021",
+      "product_reference": "E-11",
+      "amount": 1417.5,
+      "date": "2026-02-17",
+      "label": "E-11 (P1021)"
+    },
+    {
+      "product_id": "P1021",
+      "product_reference": "E-11",
+      "amount": 1417.5,
+      "date": "2026-04-13",
+      "label": "E-11 (P1021)"
+    }
+  ],
+  "top_receivables_60": [
+    {
+      "product_id": "P1013",
+      "product_reference": "A-05",
+      "amount": 1023.36,
+      "date": "2026-02-17",
+      "label": "A-05 (P1013)"
+    },
+    {
+      "product_id": "P1014",
+      "product_reference": "WBP-03",
+      "amount": 778.75,
+      "date": "2026-04-08",
+      "label": "WBP-03 (P1014)"
+    },
+    {
+      "product_id": "P1024",
+      "product_reference": "Q-01",
+      "amount": 680.61,
+      "date": "2026-03-14",
+      "label": "Q-01 (P1024)"
+    },
+    {
+      "product_id": "P1013",
+      "product_reference": "A-05",
+      "amount": 614.02,
+      "date": "2026-03-03",
+      "label": "A-05 (P1013)"
+    },
+    {
+      "product_id": "P1013",
+      "product_reference": "A-05",
+      "amount": 537.26,
+      "date": "2026-03-12",
+      "label": "A-05 (P1013)"
+    }
+  ]
+}

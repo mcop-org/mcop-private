@@ -1,0 +1,115 @@
+import datetime as dt
+import re
+
+
+def _to_float(x, default=0.0):
+    if x is None:
+        return default
+    t = str(x).strip()
+    if t == "":
+        return default
+    # remove currency + non-numeric junk except . -
+    t = t.replace("£", "")
+    t = re.sub(r"[^0-9.\-]", "", t)
+    if t in ("", ".", "-", "-."):
+        return default
+    try:
+        return float(t)
+    except Exception:
+        return default
+
+
+
+def _parse_date(date_str):
+    if not date_str:
+        return None
+    date_str = str(date_str).strip()
+    for fmt in ("%Y-%m-%d", "%d/%m/%Y"):
+        try:
+            return dt.datetime.strptime(date_str, fmt).date()
+        except:
+            continue
+    return None
+
+
+def compute_landed_aging(products, as_of_date, stress_liquidity_60d):
+    buckets = {
+        "0_30": 0.0,
+        "30_60": 0.0,
+        "60_90": 0.0,
+        "90_plus": 0.0,
+    }
+
+    total_unsold_value = 0.0
+    top_traps = []
+
+    for row in products:
+
+        status = str(row.get("landing_status") or row.get("Landing Status") or "").strip().lower()
+        if "land" not in status:
+            continue
+
+        landing_date = _parse_date(row.get("landing_date") or row.get("Landing Date"))
+        if not landing_date:
+            continue
+
+        try:
+            bag_size = float(row.get("bag_size_kg", row.get("Bag Size", 0)) or 0)
+            bags_remaining = float(row.get("bags_remaining", row.get("Bags Remaining", 0)) or 0)
+            price = float(str(row.get("price_gbp_kg", row.get("Price ¬£/kg", "0"))).replace("£","").strip())
+        except:
+            continue
+
+        if bags_remaining <= 0:
+            continue
+
+        unsold_kg = bag_size * bags_remaining
+        unsold_value = unsold_kg * price
+
+        days = (as_of_date - landing_date).days
+
+        total_unsold_value += unsold_value
+
+        if days <= 30:
+            buckets["0_30"] += unsold_value
+        elif days <= 60:
+            buckets["30_60"] += unsold_value
+        elif days <= 90:
+            buckets["60_90"] += unsold_value
+        else:
+            buckets["90_plus"] += unsold_value
+
+        label = f'{row.get("product_reference", row.get("Product Reference",""))} ({row.get("product_id", row.get("Product Id",""))})'
+
+        top_traps.append({
+            "label": label,
+            "days_since_landing": days,
+            "unsold_value": round(unsold_value, 2)
+        })
+
+    top_traps = sorted(
+        top_traps,
+        key=lambda x: x["unsold_value"],
+        reverse=True
+    )[:5]
+
+    liquidity_60d = max(stress_liquidity_60d, 1)
+    unsold_ratio = total_unsold_value / liquidity_60d
+
+    total_unsold = max(total_unsold_value, 1)
+    pct_60_plus = (buckets["60_90"] + buckets["90_plus"]) / total_unsold
+    pct_90_plus = buckets["90_plus"] / total_unsold
+
+    if pct_90_plus > 0.30 or unsold_ratio > 1.2:
+        flag = "BLOCK"
+    elif unsold_ratio > 0.7 or pct_60_plus > 0.40:
+        flag = "WATCH"
+    else:
+        flag = "OK"
+
+    return {
+        "total_unsold_value": round(total_unsold_value, 2),
+        "buckets": {k: round(v, 2) for k, v in buckets.items()},
+        "top_cash_traps": top_traps,
+        "flag": flag
+    }

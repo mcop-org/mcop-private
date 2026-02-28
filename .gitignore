@@ -1,0 +1,16 @@
+# Secrets
+.env
+*.key
+*.pem
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Outputs
+out/
+*.log
+
+# macOS
+.DS_Store

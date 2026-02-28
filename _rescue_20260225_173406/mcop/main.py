@@ -1,0 +1,885 @@
+from __future__ import annotations
+from mcop.layer2_aging import compute_landed_aging
+import argparse
+import json
+from pathlib import Path
+import pandas as pd
+from mcop.governance.drift import compute_drift_signals
+from mcop.governance.snapshot import run_snapshot_check
+from mcop.governance.regression_guard import run_regression_guard
+from mcop.liquidity.pinch import compute_pinch_14d
+
+from mcop.config import get_paths
+from mcop.ingest.loaders import load_inputs
+from mcop.liquidity.engine import (
+    latest_as_of,
+    build_payables_from_costs,
+    build_receivables_from_activity,
+    compute_liquidity_snapshot,
+    stress_receivables,
+)
+from mcop.liquidity.reporting import (
+    governance_flag,
+    build_product_reference_map,
+    top_events_within,
+    plain_english_summary,
+)
+from mcop.exposure.container import compute_container_exposure
+from mcop.report.html import write_weekly_brief
+from mcop.util.refs import load_product_ref_map, decorate_rows, decorate_event
+
+def write_json(path: Path, payload: dict):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2, default=str)
+
+def build_weekly_focus_line(container_exposure: dict) -> str | None:
+    at_risk = container_exposure.get("top_at_risk_incoming", []) or []
+    if not at_risk:
+        return None
+    at_risk_sorted = sorted(
+        at_risk,
+        key=lambda x: (x.get("days_to_landing") if x.get("days_to_landing") is not None else 9999)
+    )
+    focus_refs = [x.get("product_reference","") for x in at_risk_sorted[:2] if x.get("product_reference")]
+    if not focus_refs:
+        return None
+    return f"This week’s focus: increase pre-sell on {', '.join(focus_refs)}."
+
+def _fmt_gbp(x: float) -> str:
+    try:
+        return f"£{float(x):,.0f}"
+    except Exception:
+        return "£—"
+
+def main():
+    ap = argparse.ArgumentParser(prog="mcop")
+    ap.add_argument("cmd", choices=["run"])
+    ap.add_argument("--precommit-check", action="store_true")
+    ap.add_argument("--commit-cost-gbp", type=float, default=150000.0)
+    ap.add_argument("--commit-due-in-days", type=int, default=30)
+    args = ap.parse_args()
+
+    paths = get_paths()
+    inputs = load_inputs(paths.data_dir)
+
+    payables = build_payables_from_costs(inputs.costs)
+    receivables = build_receivables_from_activity(inputs.activity, delay_buffer_days=7)
+
+    base = compute_liquidity_snapshot(inputs.cash_position, payables, receivables)
+
+    as_of_ts, _cash = latest_as_of(inputs.cash_position)
+    receivables_stress = stress_receivables(receivables, as_of_ts, 0.20, 0.15, 0.02)
+    stress = compute_liquidity_snapshot(inputs.cash_position, payables, receivables_stress)
+
+    status = governance_flag(base.liquidity_60, base.runway_days)
+    product_map = build_product_reference_map(inputs.products)
+
+    # Canonical ref map from products.csv (product_id -> product_reference)
+    ref_map = load_product_ref_map(inputs.products)
+
+
+def _fill_product_reference_rows(rows, product_map):
+    out = []
+    for r in rows or []:
+        if not isinstance(r, dict):
+            continue
+        pid = str(r.get('product_id') or '').strip()
+        ref = str(r.get('product_reference') or '').strip()
+        if not ref and pid:
+            ref = str(product_map.get(pid) or '').strip()
+        if not ref and pid:
+            ref = pid
+        r['product_reference'] = ref
+        out.append(r)
+    return out
+
+def _fill_pinch_labels(payload, product_map):
+    for k in ('pinch_14d','pinch_30d'):
+        blk = payload.get(k) or {}
+        for side in ('biggest_out','biggest_in'):
+            ev = blk.get(side) or {}
+            pid = str(ev.get('product_id') or '').strip()
+            if pid and not ev.get('product_reference'):
+                ev['product_reference'] = product_map.get(pid)
+            if pid and (not ev.get('label') or ev.get('label') == pid):
+                ev['label'] = ev.get('product_reference') or pid
+
+
+    container_exposure = compute_container_exposure(
+    products=inputs.products,
+    costs=inputs.costs,
+    activity=inputs.activity,
+    as_of=as_of_ts,
+    cash_on_hand=float(base.cash_on_hand),
+    liquidity_60=float(base.liquidity_60),
+)
+
+    summary = plain_english_summary(
+        status,
+        base.cash_on_hand,
+        base.receivables_60,
+        base.payables_60,
+        base.runway_days,
+    )
+
+    if container_exposure.get("exposure_flag") != "OK":
+        pct_below = float(container_exposure["dynamic_precommit"]["pct_incoming_value_below_target"]) * 100.0
+        value_below = float(container_exposure["dynamic_precommit"]["value_below_target_gbp"])
+        overlap = container_exposure.get("overlap_window_details", {})
+        sku_count = int(overlap.get("sku_count", 0))
+        window_start = overlap.get("window_start", "")
+
+        summary.append(
+            f"Incoming coffee is behind pre-sell targets: {pct_below:.0f}% of incoming value is below target (≈£{value_below:,.0f})."
+        )
+        if sku_count >= 2 and window_start:
+            summary.append(
+                f"Landing window is stacked: {sku_count} incoming SKUs within 45 days from {window_start}."
+            )
+
+        focus_line = build_weekly_focus_line(container_exposure)
+        if focus_line:
+            summary.append(focus_line)
+
+    # Capital deployment line (simple, non-finance)
+    cdr = container_exposure.get("capital_deployment_ratio", None)
+    dep_flag = container_exposure.get("deployment_flag", "OK")
+    if cdr is not None:
+        summary.append(
+            f"Capital deployment: {dep_flag} — uncommitted incoming is {cdr*100:.0f}% of 60-day liquidity."
+        )
+    else:
+        summary.append("Capital deployment: BLOCK — liquidity is non-positive, treat new commitments as high risk.")
+
+    
+
+    # ---------------------------
+    
+    payload = {
+        "status_flag": status,
+        "exposure_flag": container_exposure.get("exposure_flag", "OK"),
+        "summary": summary,
+        "base": base.to_dict(),
+        "stress": stress.to_dict(),
+        "container_exposure": container_exposure,
+        "top_payables_60": top_events_within(payables, as_of_ts, 60, product_map),
+        "top_receivables_60": top_events_within(receivables, as_of_ts, 60, product_map),
+    }
+    
+    # ---------------------------
+    # LAYER 2: LANDED STOCK AGEING (unsold capital already in UK)
+    # ---------------------------
+    try:
+        as_of_date = as_of_ts.date() if hasattr(as_of_ts, "date") else as_of_ts
+
+        # stress may be LiquiditySnapshot or dict; support both
+        stress_liq60 = float(stress.liquidity_60) if hasattr(stress, "liquidity_60") else float(stress.get("liquidity_60", 0.0))
+
+        # products may be DataFrame; convert to list[dict]
+        products_obj = inputs.products
+        products_rows = products_obj.to_dict(orient="records") if hasattr(products_obj, "to_dict") else list(products_obj)
+
+        landed_aging = compute_landed_aging(products_rows, as_of_date, stress_liq60)
+        payload["landed_aging"] = landed_aging
+
+        total_unsold = float(landed_aging.get("total_unsold_value", 0.0))
+        flag = landed_aging.get("flag", "OK")
+        b = landed_aging.get("buckets", {}) or {}
+        older_60 = float(b.get("60_90", 0.0)) + float(b.get("90_plus", 0.0))
+
+        payload["summary"].append(f"Landed unsold stock: {_fmt_gbp(total_unsold)} ({flag}).")
+        payload["summary"].append(f"Older than 60 days: {_fmt_gbp(older_60)}.")
+
+        traps = landed_aging.get("top_cash_traps", []) or []
+        if traps:
+            t0 = traps[0]
+            payload["summary"].append(
+                f"Biggest landed cash trap: {t0.get('label','—')} — {_fmt_gbp(t0.get('unsold_value',0.0))} ({t0.get('days_since_landing','—')} days)."
+            )
+    except Exception as e:
+        payload["summary"].append(f"⚠ Landed stock ageing skipped: {type(e).__name__}")
+
+
+    # ---------------------------
+    # TRADING HEALTH INDEX (0–10)
+    # ---------------------------
+    try:
+        # Pillars: Liquidity (30), Deployment (20), Pre-sell (30), Landing stack (20)
+        liq60 = float(base.liquidity_60)
+        runway = float(base.runway_days)
+
+        # 1) Liquidity strength
+        if liq60 <= 0:
+            liquidity_score = 1
+        elif liq60 < 20000:
+            liquidity_score = 4
+        elif liq60 < 50000:
+            liquidity_score = 7
+        else:
+            liquidity_score = 9
+
+        # 2) Capital deployment discipline
+        cdr = payload.get("container_exposure", {}).get("capital_deployment_ratio", None)
+        cdr = float(cdr) if cdr is not None else 1.0
+        if cdr > 0.50:
+            deploy_score = 2
+        elif cdr > 0.35:
+            deploy_score = 5
+        elif cdr > 0.20:
+            deploy_score = 7
+        else:
+            deploy_score = 9
+
+        # 3) Pre-sell compliance (share of incoming value below target)
+        pct_below = payload.get("container_exposure", {}).get("dynamic_precommit", {}).get("pct_incoming_value_below_target", 1.0)
+        pct_below = float(pct_below)
+        if pct_below > 0.75:
+            presell_score = 3
+        elif pct_below > 0.50:
+            presell_score = 5
+        elif pct_below > 0.25:
+            presell_score = 7
+        else:
+            presell_score = 9
+
+        # 4) Landing concentration risk (overlap window sku count)
+        sku_count = int(payload.get("container_exposure", {}).get("overlap_window_details", {}).get("sku_count", 0))
+        if sku_count >= 6:
+            landing_score = 4
+        elif sku_count >= 4:
+            landing_score = 6
+        else:
+            landing_score = 8
+
+        score = (
+            liquidity_score * 0.30 +
+            deploy_score * 0.20 +
+            presell_score * 0.30 +
+            landing_score * 0.20
+        )
+
+        payload["trading_health_score"] = round(score, 1)
+
+    except Exception:
+        pass
+
+    if args.precommit_check:
+        due_date = as_of_ts + pd.Timedelta(days=int(args.commit_due_in_days))
+        hyp = pd.DataFrame([{
+            "date": due_date,
+            "amount": float(args.commit_cost_gbp),
+            "event_type": "hypothetical_commit",
+            "product_id": "HYPOTHETICAL",
+        }])
+        payables_plus = pd.concat([payables, hyp], ignore_index=True)
+
+        sim_base = compute_liquidity_snapshot(inputs.cash_position, payables_plus, receivables)
+        sim_stress = compute_liquidity_snapshot(inputs.cash_position, payables_plus, receivables_stress)
+
+        payload["simulation"] = {
+        "post_commit_base": sim_base.to_dict(),
+        "post_commit_stress": sim_stress.to_dict(),
+        }
+
+        # ✅ NEW: One-line, digestible simulation summary
+        sim_liq60 = float(sim_base.liquidity_60)
+        sim_runway = float(sim_base.runway_days)
+        sim_flag = governance_flag(sim_liq60, sim_runway)
+
+        short_text = f"{_fmt_gbp(abs(sim_liq60))} short within 60 days" if sim_liq60 < 0 else f"60-day liquidity {_fmt_gbp(sim_liq60)}"
+        payload["summary"].append(
+        f"Pre-commit check ({_fmt_gbp(args.commit_cost_gbp)} due in {int(args.commit_due_in_days)} days): "
+        f"{sim_flag} — {short_text}."
+        )
+        # --- Commit decision (plain English) ---
+        # Primary gate: post-commit 60-day liquidity must not be negative.
+        # Secondary gate: 30-day cash alert should not be RED.
+        try:
+            post_liq60 = float(sim_base.liquidity_60)
+        except Exception:
+            post_liq60 = 0.0
+
+        pinch30 = payload.get("pinch_30d", {}) or {}
+        alert30 = (pinch30.get("cash_alert") or "AMBER").upper()
+        try:
+            net30 = float(pinch30.get("net_gbp", 0.0))
+        except Exception:
+            net30 = 0.0
+        net30_abs = abs(net30)
+        dir30 = "down" if net30 < 0 else "up"
+
+        if post_liq60 < 0:
+            decision = "BLOCK"
+            why = (
+                f"Paying {_fmt_gbp(args.commit_cost_gbp)} in {int(args.commit_due_in_days)} days "
+                f"would likely push you below zero within 60 days."
+            )
+        elif alert30 == "RED":
+            decision = "WATCH"
+            why = "You can probably afford it on paper, but the next 30 days look tight."
+        else:
+            decision = "OK"
+            why = "This looks affordable based on current cash + expected ins/outs."
+
+        payload["summary"].append(f"Commit decision: {decision} — {why}")
+
+        if decision in ("WATCH", "BLOCK"):
+            gap = abs(post_liq60) if post_liq60 < 0 else 0.0
+            if gap > 0:
+                payload["summary"].append(
+                    f"To make this safe: improve your 60-day position by about {_fmt_gbp(gap)} "
+                    f"(extra pre-sell, delayed payment, or cash buffer)."
+                )
+            payload["summary"].append(
+                f"30-day cash alert is {alert30} (you’re likely to be {dir30} about £{net30_abs:,.0f} over 30 days)."
+            )
+            payload["summary"].append(
+                "Practical options: (1) split the payment, (2) push pre-sell on near-landing lots, (3) delay the due date if possible."
+            )
+
+
+    
+
+    # ---------------------------
+    # ACTION PACK (Operational guidance)
+    # ---------------------------
+    if container_exposure.get("exposure_flag") in ("WATCH", "BLOCK"):
+        at_risk = container_exposure.get("top_at_risk_incoming", []) or []
+
+        if at_risk:
+            total_shortfall = sum(x.get("shortfall_value_gbp", 0.0) for x in at_risk)
+
+            # Most urgent = lowest days_to_landing
+            urgent = sorted(
+                at_risk,
+                key=lambda x: (x.get("days_to_landing") if x.get("days_to_landing") is not None else 9999)
+            )[0]
+
+            urgent_ref = urgent.get("product_reference", "Unknown")
+            urgent_gap = urgent.get("shortfall_value_gbp", 0.0)
+            urgent_days = urgent.get("days_to_landing", "?")
+
+            payload["summary"].append(
+                f"Action: close ≈£{total_shortfall:,.0f} total pre-sell gap across incoming coffees."
+            )
+
+            payload["summary"].append(
+                f"Priority: {urgent_ref} landing in {urgent_days} days — ≈£{urgent_gap:,.0f} gap."
+            )
+
+            
+            # Dynamic urgency weighting
+            if urgent_days is not None:
+                if urgent_days <= 30:
+                    weight = 0.60
+                elif urgent_days <= 45:
+                    weight = 0.40
+                elif urgent_days <= 60:
+                    weight = 0.25
+                else:
+                    weight = 0.15
+            else:
+                weight = 0.30
+
+            weekly_target = urgent_gap * weight if urgent_gap else 0
+
+            payload["summary"].append(
+                f"7-day target: secure ≈£{weekly_target:,.0f} additional pre-sell on {urgent_ref}."
+            )
+
+    
+
+    # ---------------------------
+    
+    # ---------------------------
+    # WEEKLY DELTA INTELLIGENCE
+    # ---------------------------
+    try:
+        previous_file = paths.out_dir / "liquidity_report.json"
+        if previous_file.exists():
+            import json
+            prev = json.loads(previous_file.read_text(encoding="utf-8"))
+
+            prev_risk = prev.get("container_exposure", {}).get("top_at_risk_incoming", []) or []
+            curr_risk = container_exposure.get("top_at_risk_incoming", []) or []
+
+            if curr_risk:
+                # This week's priority = most urgent (lowest days_to_landing)
+                curr_priority = sorted(curr_risk, key=lambda x: x.get("days_to_landing", 9999))[0]
+                ref = curr_priority.get("product_reference", "Unknown")
+
+                # Build lookup maps by product_reference for stable comparisons
+                prev_map = {x.get("product_reference"): float(x.get("shortfall_value_gbp", 0.0) or 0.0) for x in prev_risk}
+                curr_map = {x.get("product_reference"): float(x.get("shortfall_value_gbp", 0.0) or 0.0) for x in curr_risk}
+
+                # Priority SKU delta (compare same SKU even if priority changed)
+                curr_gap = curr_map.get(ref, 0.0)
+                prev_gap = prev_map.get(ref, None)
+
+                if prev_gap is not None:
+                    delta = prev_gap - curr_gap  # +ve means improvement
+                    if abs(delta) > 50:  # ignore tiny noise
+                        if delta > 0:
+                            payload["summary"].append(
+                                f"Progress: {ref} gap reduced by ≈£{abs(delta):,.0f} week-on-week."
+                            )
+                        else:
+                            payload["summary"].append(
+                                f"Warning: {ref} gap increased by ≈£{abs(delta):,.0f} week-on-week."
+                            )
+                else:
+                    payload["summary"].append(
+                        f"New priority focus: {ref} (no baseline last report to compare)."
+                    )
+
+                # Overall delta across top-at-risk list
+                prev_total = sum(float(x.get("shortfall_value_gbp", 0.0) or 0.0) for x in prev_risk)
+                curr_total = sum(float(x.get("shortfall_value_gbp", 0.0) or 0.0) for x in curr_risk)
+                total_delta = prev_total - curr_total
+
+                if abs(total_delta) > 100:  # slightly higher noise threshold for totals
+                    if total_delta > 0:
+                        payload["summary"].append(
+                            f"Overall progress: total pre-sell gap reduced by ≈£{abs(total_delta):,.0f} week-on-week."
+                        )
+                    else:
+                        payload["summary"].append(
+                            f"Overall warning: total pre-sell gap increased by ≈£{abs(total_delta):,.0f} week-on-week."
+                        )
+    except Exception:
+        pass
+    # === Phase 3.1 — Store weekly history snapshot ===
+    # Use payload (dict) rather than LiquiditySnapshot objects (date-safe + json-safe).
+    history_path = paths.out_dir / "history.json"
+
+    base_d = payload.get("base", {}) or {}
+    container_d = payload.get("container_exposure", {}) or {}
+
+    snapshot = {
+        "as_of": base_d.get("as_of"),
+        "total_presell_gap": (container_d.get("dynamic_precommit", {}) or {}).get("value_below_target_gbp"),
+        "deployment_ratio": container_d.get("capital_deployment_ratio"),
+        "liquidity_60": base_d.get("liquidity_60"),
+        "trading_health_score": payload.get("trading_health_score"),
+        "adjusted_trading_health_score": payload.get("trading_health_score"),
+    }
+
+    if history_path.exists():
+        history = json.loads(history_path.read_text(encoding="utf-8"))
+    else:
+        history = []
+
+    history.append(snapshot)
+
+    # Keep last 10 weeks only
+    history = history[-10:]
+
+    history_path.write_text(json.dumps(history, indent=2), encoding="utf-8")
+
+    payload["drift_signals"] = compute_drift_signals(paths.out_dir)
+
+    # === Phase 3.35 — Always show Trading Health line using adjusted score ===
+    th = payload.get("trading_health_score")
+    drift_now = payload.get("drift_signals", []) or []
+
+    # Remove any previous Trading Health lines to avoid duplicates
+    payload["summary"] = [x for x in payload.get("summary", []) if not str(x).startswith("Trading Health")]
+
+    if th is not None:
+        if drift_now:
+            payload["summary"].insert(0, f"Trading Health adjusted for drift: {th}/10")
+            # Add a short drift explanation (1–2 items max)
+            ds = payload.get("drift_signals", []) or []
+            if ds:
+                short = "; ".join(str(x).replace("⚠ ", "").replace("🚨 ", "") for x in ds[:2])
+                payload["summary"].insert(1, f"What’s not improving: {short}")
+
+        else:
+            # If we recovered this week we already inserted a recovering line in Phase 3.3,
+            # but if not, we still show a plain label.
+            payload["summary"].insert(0, f"Trading Health (this week): {th}/10")
+
+
+    
+    # === Phase 3.4 — Single directive line (only if drift exists) ===
+    drift_now = payload.get("drift_signals", []) or []
+    if drift_now:
+        # Use the Priority line already generated (keeps logic simple)
+        priority_line = next((x for x in payload.get("summary", []) if str(x).startswith("Priority:")), None)
+        if priority_line:
+            import re
+            m = re.search(r"Priority: ([A-Z0-9\-]+)", str(priority_line))
+            if m:
+                sku = m.group(1)
+                payload["summary"].append(f"This week’s move: contact 5 target roasters for {sku}.")
+
+    
+    # === Regression guard (data-level, stable) ===
+    
+
+    # === Phase 3.4 — Next 14 days cash pinch (simple) ===
+    pinch_14d = compute_pinch_14d(as_of_ts, payables, receivables, days=14)
+
+    # --- 14-day Cash Alert (simple urgency badge) ---
+    # GREEN: net >= 0
+    # AMBER: -5000 <= net < 0
+    # RED: net < -5000
+    try:
+        net_14d = float(pinch_14d.get("net_gbp", 0.0))
+    except Exception:
+        net_14d = 0.0
+
+    if net_14d >= 0:
+        cash_alert = "GREEN"
+    elif net_14d >= -5000:
+        cash_alert = "AMBER"
+    else:
+        cash_alert = "RED"
+
+    pinch_14d["cash_alert"] = cash_alert
+
+
+    
+    # ---------------------------
+    # Pinch enrichment: attach product_reference using products master
+    # ---------------------------
+    try:
+        # inputs.products should already be loaded; fall back gracefully if not.
+        prod_df = getattr(inputs, "products", None)
+        if prod_df is not None and "Product Id" in prod_df.columns and "Product Reference" in prod_df.columns:
+            ref_map = (
+                prod_df[["Product Id", "Product Reference"]]
+                .dropna()
+                .astype(str)
+                .set_index("Product Id")["Product Reference"]
+                .to_dict()
+            )
+        else:
+            ref_map = {}
+
+        def _enrich_pinch(pinch: dict) -> dict:
+            if not isinstance(pinch, dict) or not ref_map:
+                return pinch
+            for k in ("biggest_out", "biggest_in"):
+                ev = pinch.get(k)
+                if not isinstance(ev, dict):
+                    continue
+                pid = ev.get("product_id")
+                if not pid:
+                    continue
+                pr = ref_map.get(str(pid))
+                if pr:
+                    ev["product_reference"] = pr
+                    # Use reference as label if present
+                    ev["label"] = pr
+            return pinch
+
+        pinch_14d = _enrich_pinch(pinch_14d)
+        pinch_30d = _enrich_pinch(pinch_30d)
+
+    except Exception:
+        pass
+
+
+    payload["pinch_14d"] = pinch_14d
+
+    # === Phase 3.5 — Next 30 days cash pinch (simple, decision-useful) ===
+    def _fmt_gbp30(x):
+        try:
+            x = float(x)
+        except Exception:
+            x = 0.0
+        return f"£{abs(x):,.0f}"
+
+    pinch_30d = compute_pinch_14d(as_of_ts, payables, receivables, days=30)
+    payload["pinch_30d"] = pinch_30d
+
+    # ---------------------------
+    # Pinch FINAL enrichment (payload-level) so nothing overwrites references after
+    # ---------------------------
+    try:
+        prod_df = getattr(inputs, "products", None)
+        if prod_df is not None and "Product Id" in prod_df.columns and "Product Reference" in prod_df.columns:
+            ref_map = (
+                prod_df[["Product Id", "Product Reference"]]
+                .dropna()
+                .astype(str)
+                .set_index("Product Id")["Product Reference"]
+                .to_dict()
+            )
+        else:
+            ref_map = {}
+
+        def _enrich_event(ev: dict) -> None:
+            if not isinstance(ev, dict) or not ref_map:
+                return
+            pid = ev.get("product_id")
+            if not pid:
+                return
+            pr = ref_map.get(str(pid))
+            if pr:
+                ev["product_reference"] = pr
+                ev["label"] = pr
+
+        for key in ("pinch_14d", "pinch_30d"):
+            pinch = payload.get(key)
+            if isinstance(pinch, dict):
+                _enrich_event(pinch.get("biggest_out"))
+                _enrich_event(pinch.get("biggest_in"))
+
+    except Exception:
+        pass
+
+
+
+    net_30 = float(pinch_30d.get("net_gbp", 0.0))
+    dir_30 = "down" if net_30 < 0 else "up"
+    net_30_abs = abs(net_30)
+
+    # 30-day alert thresholds (wider window than 14d)
+    # GREEN: net >= 0
+    # AMBER: -10000 <= net < 0
+    # RED: net < -10000
+    if net_30 >= 0:
+        alert_30 = "GREEN"
+    elif net_30 >= -10000:
+        alert_30 = "AMBER"
+    else:
+        alert_30 = "RED"
+    pinch_30d["cash_alert"] = alert_30
+
+    payload["summary"].append(
+        f"Next 30 days: {_fmt_gbp30(pinch_30d['expected_in_gbp'])} expected in, "
+        f"{_fmt_gbp30(pinch_30d['expected_out_gbp'])} expected out → you’ll be {dir_30} about £{net_30_abs:,.0f}."
+    )
+
+    payload["summary"].append(
+        f"Cash Alert (30d): {alert_30} — you’re likely to be {dir_30} about £{net_30_abs:,.0f}."
+    )
+
+    if net_30 < 0:
+        payload["summary"].append(
+            f"Meaning (30d): you’ll pay out about £{net_30_abs:,.0f} more than you’ll receive over the next 30 days."
+        )
+    elif net_30 > 0:
+        payload["summary"].append(
+            f"Meaning (30d): you’ll receive about £{net_30_abs:,.0f} more than you’ll pay out over the next 30 days."
+        )
+
+    bo30 = pinch_30d.get("biggest_out")
+    if bo30 and bo30.get("amount", 0) > 0:
+        ref = bo30.get("product_reference") or bo30.get("product_id") or "unknown"
+        payload["summary"].append(f"Biggest bill in next 30 days: £{bo30['amount']:,.0f} ({ref}).")
+
+    bi30 = pinch_30d.get("biggest_in")
+    if bi30 and bi30.get("amount", 0) > 0:
+        ref = bi30.get("product_reference") or bi30.get("product_id") or "unknown"
+        payload["summary"].append(f"Biggest expected payment in next 30 days: £{bi30['amount']:,.0f} ({ref}).")
+
+    net_value = float(pinch_14d["net_gbp"])
+    direction = "down" if net_value < 0 else "up"
+    net_abs = abs(net_value)
+
+    # Quick badge line (non-finance)
+    payload["summary"].append(
+        f"Cash Alert (14d): {pinch_14d.get('cash_alert','AMBER')} — you’re likely to be {direction} about £{net_abs:,.0f}."
+    )
+
+
+    payload["summary"].append(
+        f"Next 14 days: {_fmt_gbp(pinch_14d['expected_in_gbp'])} expected in, "
+        f"{_fmt_gbp(pinch_14d['expected_out_gbp'])} expected out → you’ll be {direction} about £{net_abs:,.0f}."
+    )
+
+    if net_value < 0:
+        payload["summary"].append(
+            f"Meaning: you’ll pay out about £{net_abs:,.0f} more than you’ll receive in the next 14 days."
+        )
+    elif net_value > 0:
+        payload["summary"].append(
+            f"Meaning: you’ll receive about £{net_abs:,.0f} more than you’ll pay out in the next 14 days."
+        )
+
+    bo = pinch_14d.get("biggest_out")
+    if bo and bo.get("amount", 0) > 0:
+        ref = bo.get("product_reference") or bo.get("product_id") or "unknown"
+        payload["summary"].append(f"Biggest bill in next 14 days: £{bo['amount']:,.0f} ({ref}).")
+
+    bi = pinch_14d.get("biggest_in")
+    if bi and bi.get("amount", 0) > 0:
+        ref = bi.get("product_reference") or bi.get("product_id") or "unknown"
+        payload["summary"].append(f"Biggest expected payment in next 14 days: £{bi['amount']:,.0f} ({ref}).")
+
+    reg_issues = run_regression_guard(paths.out_dir, payload)
+    if reg_issues:
+        payload["regression_flags"] = reg_issues
+        payload["summary"].insert(0, "⚠ Report data changed unexpectedly — something may have disappeared.")
+
+    write_json(paths.out_dir / "liquidity_report.json", payload)
+
+    as_of = payload.get("base", {}).get("as_of", "unknown")
+    html_path = paths.out_dir / f"WeeklyBrief_{as_of}.html"
+    
+
+    # ============================================
+    # Structured Executive Summary (Cockpit View)
+    # ============================================
+
+    original_summary = payload.get("summary", []) or []
+
+    trading = []
+    capital = []
+    sales = []
+    ops = []
+
+    for line in original_summary:
+        l = line.lower()
+
+        if "trading health" in l or "drift" in l:
+            trading.append(line)
+
+        elif "commit" in l or "pre-commit" in l or "make this safe" in l or "cash alert (30d)" in l or "cash alert (14d)" in l:
+            capital.append(line)
+
+        elif "pre-sell gap" in l or "priority" in l or "7-day target" in l or "this week" in l:
+            sales.append(line)
+
+        elif "next 30 days" in l or "next 14 days" in l or "biggest bill" in l or "biggest expected payment" in l or "meaning" in l:
+            ops.append(line)
+
+        else:
+            trading.append(line)
+
+    structured = []
+    structured.append("=== TRADING HEALTH ===")
+    structured.extend(trading)
+
+    structured.append("")
+    structured.append("=== CAPITAL & COMMIT RISK ===")
+    structured.extend(capital)
+
+    structured.append("")
+    structured.append("=== SALES ENGINE (THIS WEEK) ===")
+    structured.extend(sales)
+
+    structured.append("")
+    structured.append("=== OPERATIONAL CASH FLOW ===")
+    structured.extend(ops)
+
+    payload["summary"] = structured
+
+
+    # Keep HTML summary clean (no section header markers)
+    if isinstance(payload.get('summary'), list):
+        payload['summary'] = [ln for ln in payload['summary'] if not (isinstance(ln,str) and ln.strip().startswith('==='))]
+
+    write_weekly_brief(html_path, payload)
+    # === Snapshot regression check ===
+    issues = run_snapshot_check(paths.out_dir, html_path)
+    if issues:
+        payload["summary"].insert(0, "⚠ Report structure changed — review layout.")
+
+
+    
+    # ---------------------------
+    # Decision Pack v1 (founder-friendly, minimal JSON)
+    # ---------------------------
+    try:
+        dp = {
+            "as_of": payload.get("base", {}).get("as_of") or payload.get("as_of"),
+            "status_flag": payload.get("status_flag"),
+            "exposure_flag": payload.get("exposure_flag"),
+            "trading_health_score": payload.get("trading_health_score"),
+            "drift_signals": payload.get("drift_signals") or [],
+            "cash": {
+                "cash_today_gbp": (payload.get("base") or {}).get("cash_on_hand"),
+                "liquidity_60d_gbp": (payload.get("base") or {}).get("liquidity_60"),
+                "runway_days": (payload.get("base") or {}).get("runway_days"),
+            },
+            "pinch_14d": payload.get("pinch_14d"),
+            "pinch_30d": payload.get("pinch_30d"),
+            "commit": {},
+            "this_week": {
+                "standout_risks": [],
+                "actions": []
+            }
+        }
+
+        # Build standout risks (max 3) in simple language
+        p14 = payload.get("pinch_14d") or {}
+        p30 = payload.get("pinch_30d") or {}
+        if isinstance(p14, dict) and p14.get("cash_alert"):
+            dp["this_week"]["standout_risks"].append(f"Cash Alert (14d): {p14.get('cash_alert')}")
+        if isinstance(p30, dict) and p30.get("cash_alert"):
+            dp["this_week"]["standout_risks"].append(f"Cash Alert (30d): {p30.get('cash_alert')}")
+
+        # Add pre-sell / landing risk if present
+        ce = payload.get("container_exposure") or {}
+        if isinstance(ce, dict) and ce.get("exposure_flag") in ("WATCH", "BLOCK"):
+            if ce.get("overlap_flag"):
+                w = ce.get("overlap_window_details") or {}
+                if w.get("sku_count") and w.get("window_days") and w.get("window_start"):
+                    dp["this_week"]["standout_risks"].append(
+                        f"Landing window stacked: {w['sku_count']} SKUs within {w['window_days']} days from {w['window_start']}"
+                    )
+
+        dp["this_week"]["standout_risks"] = dp["this_week"]["standout_risks"][:3]
+
+        # Commit decision summary (only if simulation present)
+        sim = payload.get("simulation") or {}
+        post = sim.get("post_commit_base") or {}
+        if post:
+            liq60 = float(post.get("liquidity_60", 0.0))
+            decision = "OK" if liq60 >= 0 else "BLOCK"
+            dp["commit_decision"] = decision
+            dp["commit_liquidity_60"] = liq60
+            if liq60 < 0:
+                dp["make_safe_by_gbp"] = round(abs(liq60), 2)
+
+        # Pull top actions from summary lines (max 3, keep it tight)
+        # (Keeps behaviour consistent with your current logic)
+        summary_lines = payload.get("summary") or []
+        for line in summary_lines:
+            if not isinstance(line, str):
+                continue
+            if line.startswith("Action:") or line.startswith("Priority:") or line.startswith("7-day target:") or line.startswith("This week’s move:") or line.startswith("Practical options:"):
+                dp["this_week"]["actions"].append(line)
+
+        dp["this_week"]["actions"] = dp["this_week"]["actions"][:3]
+        as_of = dp.get("as_of") or "unknown"
+        out_path = paths.out_dir / f"DecisionPack_{as_of}.json"
+        out_path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
+        print(f"✅ Wrote Decision Pack: {out_path}")
+        # Also write compact decision summary (dp)
+        summary_path = paths.out_dir / f"DecisionSummary_{as_of}.json"
+        summary_path.write_text(json.dumps(dp, indent=2, default=str), encoding="utf-8")
+        print(f"✅ Wrote Decision Summary: {summary_path}")
+
+    except Exception as e:
+        print(f"⚠️ Decision Pack skipped: {e}")
+
+
+    # --- Fill product references for readability (E-11 not just P1021) ---
+    payload['top_payables_60'] = _fill_product_reference_rows(payload.get('top_payables_60'), product_map)
+    payload['top_receivables_60'] = _fill_product_reference_rows(payload.get('top_receivables_60'), product_map)
+    _fill_pinch_labels(payload, product_map)
+    
+    # --- Label decoration: ensure E-11 (P1021) style labels everywhere ---
+    try:
+        decorate_rows(payload.get("top_payables_60") or [], ref_map)
+        decorate_rows(payload.get("top_receivables_60") or [], ref_map)
+
+        p14 = payload.get("pinch_14d") or {}
+        decorate_event(p14.get("biggest_out") or {}, ref_map)
+        decorate_event(p14.get("biggest_in") or {}, ref_map)
+
+        p30 = payload.get("pinch_30d") or {}
+        decorate_event(p30.get("biggest_out") or {}, ref_map)
+        decorate_event(p30.get("biggest_in") or {}, ref_map)
+    except Exception:
+        pass
+
+print(json.dumps(payload, indent=2, default=str))
+if __name__ == "__main__":
+    main()

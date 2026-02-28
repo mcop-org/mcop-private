@@ -1,0 +1,26 @@
+product_id,product_reference,Country,Region,Farm,Producer,Variety,Process,Cup Profile,Score,bag_size_kg,bags,bags_remaining,Price /kg,harvest_date,Warehouse,Rotation,Marks,status,landing_status,landing_date
+P1001,J-01,Colombia,Cauca,El Jaragual,Smallholders,Bourbon,Natural,"Tropical, juicy, bright",86.4,24,20,12,7.72,2025-08-15,London Hub,C,,Available,Landed,2025-10-20
+P1002,J-01,Colombia,Huila,Finca Aurora,Smallholders,Tabi,Anaerobic Natural,"Tropical, juicy, bright",87.5,35,12,12,12.39,2025-12-10,AGC,B,,Incoming,Incoming,2026-03-18
+P1003,J-02,Colombia,Tolima,El Jaragual,Smallholders,Caturra,Honey,"Citrus, floral, clean",90.2,35,18,12,8.37,2025-05-15,London Hub,B,,Available,Landed,2025-10-12
+P1004,E-11,Colombia,Huila,Finca Aurora,Smallholders,Tabi,Washed,"Chocolate, red fruit",87.7,24,20,20,13.57,2025-09-30,London Hub,B,,Available,Landed,2025-12-14
+P1005,Q-01,Colombia,Cauca,La Palma,Smallholders,Bourbon,Anaerobic Natural,"Spice, panela",86.8,35,20,20,11.76,2026-04-29,AGC,A,,Incoming,Incoming,2026-06-28
+P1006,T-09,Colombia,Cauca,Villa Betulia,Smallholders,Tabi,Anaerobic Natural,"Citrus, floral, clean",87.8,24,20,18,13.14,2025-08-16,AGC,C,,Available,Landed,2025-10-15
+P1007,E-11,Colombia,Tolima,Quebraditas,Smallholders,Pink Bourbon,Anaerobic Natural,"Stone fruit, tea-like",88.5,35,12,12,9.23,2026-01-18,London Hub,C,,Incoming,Incoming,2026-04-03
+P1008,A-05,Colombia,Tolima,Finca Aurora,Smallholders,Castillo,Natural,"Chocolate, red fruit",89.6,24,18,18,11.89,2025-07-30,London Hub,A,,Available,Landed,2025-10-13
+P1009,A-05,Colombia,Nariño,Villa Betulia,Smallholders,Pink Bourbon,Co-ferment,"Stone fruit, tea-like",88.4,35,18,0,12.27,2025-08-04,London Hub,B,,Sold-out,Landed,2025-10-03
+P1010,J-02,Colombia,Tolima,La Palma,Smallholders,Bourbon,Thermal Shock Washed,"Jasmine, bergamot",89.4,24,20,20,14.3,2026-03-23,AGC,C,,Incoming,Incoming,2026-06-21
+P1011,H-07,Colombia,Nariño,El Paraiso,Smallholders,Geshas,Natural,"Stone fruit, tea-like",86.1,24,14,14,9.77,2025-09-16,Bristol 3PL,A,,Available,Landed,2026-02-13
+P1012,J-01,Colombia,Nariño,Quebraditas,Smallholders,Caturra,Washed,"Jasmine, bergamot",88.1,35,10,0,8.4,2025-12-01,AGC,B,,Sold-out,Landed,2026-02-14
+P1013,A-05,Colombia,Nariño,Quebraditas,Smallholders,Tabi,Anaerobic Natural,"Citrus, floral, clean",87.1,24,20,14,10.66,2025-08-07,Bristol 3PL,A,,Available,Landed,2026-01-04
+P1014,WBP-03,Colombia,Huila,Finca Aurora,Smallholders,Caturra,Washed,"Tropical, juicy, bright",86.3,24,12,12,13.52,2026-01-08,Bristol 3PL,C,,Incoming,Incoming,2026-03-09
+P1015,T-09,Colombia,Nariño,Quebraditas,Smallholders,Bourbon,Anaerobic Natural,"Citrus, floral, clean",86.9,35,12,12,13.15,2026-02-09,London Hub,B,,Incoming,Incoming,2026-06-09
+P1016,E-11,Colombia,Tolima,Villa Betulia,Smallholders,Pink Bourbon,Anaerobic Natural,"Citrus, floral, clean",89.6,24,20,20,12.6,2025-06-28,AGC,A,,Available,Landed,2025-10-26
+P1017,WBP-03,Colombia,Tolima,Finca Aurora,Smallholders,Bourbon,Thermal Shock Washed,"Jasmine, bergamot",88.9,24,14,8,8.19,2025-05-23,AGC,A,,Available,Landed,2025-10-20
+P1018,WBP-03,Colombia,Tolima,Quebraditas,Smallholders,Pink Bourbon,Thermal Shock Washed,"Chocolate, red fruit",87.8,24,16,0,7.52,2025-07-15,Bristol 3PL,B,,Sold-out,Landed,2025-11-12
+P1019,T-09,Colombia,Huila,Quebraditas,Smallholders,Castillo,Natural,"Jasmine, bergamot",88.1,24,18,14,7.85,2025-08-17,AGC,A,,Available,Landed,2025-10-16
+P1020,J-02,Colombia,Antioquia,Quebraditas,Smallholders,Geshas,Washed,"Jasmine, bergamot",88.7,24,16,16,9.22,2025-10-17,AGC,B,,Incoming,Incoming,2026-03-16
+P1021,E-11,Colombia,Huila,La Palma,Smallholders,Tabi,Anaerobic Natural,"Chocolate, red fruit",88.9,35,12,12,8.42,2025-12-04,Bristol 3PL,A,,Incoming,Incoming,2026-04-03
+P1022,J-01,Colombia,Nariño,Villa Betulia,Smallholders,Geshas,Washed,"Stone fruit, tea-like",90.0,24,18,16,13.67,2025-09-08,Bristol 3PL,A,,Available,Landed,2025-12-07
+P1023,T-09,Colombia,Cauca,Finca Aurora,Smallholders,Geshas,Anaerobic Natural,"Citrus, floral, clean",86.6,24,20,0,14.07,2025-10-17,AGC,C,,Sold-out,Landed,2025-12-16
+P1024,Q-01,Colombia,Cauca,La Palma,Smallholders,Geshas,Natural,"Citrus, floral, clean",90.1,35,12,4,9.26,2025-08-09,AGC,C,,Available,Landed,2025-12-07
+P1025,A-05,Colombia,Antioquia,La Palma,Smallholders,Caturra,Honey,"Chocolate, red fruit",88.5,24,20,20,12.69,2026-01-18,London Hub,A,,Incoming,Incoming,2026-04-03
