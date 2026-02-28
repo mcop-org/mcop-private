@@ -14,3 +14,8 @@ out/
 
 # macOS
 .DS_Store
+
+# ---- MCOP sensitive data (do not publish) ----
+data/
+_backup_before_normalise/
+_rescue_*/
