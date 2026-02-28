@@ -1,0 +1,14 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "MCOP: Run (precommit check)",
+      "type": "python",
+      "request": "launch",
+      "module": "mcop.main",
+      "args": ["run", "--precommit-check", "--commit-cost-gbp", "150000", "--commit-due-in-days", "30"],
+      "console": "integratedTerminal",
+      "cwd": "${workspaceFolder}"
+    }
+  ]
+}
