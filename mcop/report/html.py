@@ -93,6 +93,10 @@ def _badge_class(flag: str) -> str:
         return "badge badge-red"
     return "badge"
 
+def _severity_rank(sev: str) -> int:
+    s = (sev or "").upper()
+    order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+    return order.get(s, 0)
 
 def _health_colour(score):
     if score is None:
@@ -141,6 +145,15 @@ def write_weekly_brief(path: Path, payload: dict) -> None:
 
     health_score = payload.get("trading_health_score", None)
     dot_colour = _health_colour(health_score)
+    
+    cash_risk_score = payload.get("cash_risk_score", None)
+    score_band = payload.get("score_band", None)
+    score_breakdown = payload.get("score_breakdown", {}) or {}
+    top_drivers = (score_breakdown.get("top_drivers") or []) if isinstance(score_breakdown, dict) else []
+
+    next_actions = payload.get("next_actions", []) or []
+    if not isinstance(next_actions, list):
+        next_actions = []
 
     summary_lines = payload.get("summary", []) or []
 
@@ -181,7 +194,8 @@ def write_weekly_brief(path: Path, payload: dict) -> None:
             return "var(--red)"
         return "var(--amber)"
 
-    now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    # Deterministic footer timestamp (presentation-only): prefer as_of over system clock
+    now_utc = f"{as_of} (as_of)"
 
 
     # --- HTML ---
@@ -364,6 +378,64 @@ td.mono{font-family:var(--mono);color:var(--muted);font-size:12px}
     html.append(f"<p class='v'>{_safe(_pct(incoming_pre))}</p>")
     html.append("</div>")
 
+        # --- Week 3: Cash Risk Score (exec metric) ---
+    band = str(score_band or "—").upper()
+    score_val = "—" if cash_risk_score is None else str(int(cash_risk_score))
+    html.append("<div class='card wide'>")
+    html.append("<p class='k'>Cash Risk Score</p>")
+    html.append(
+        f"<div class='row'>"
+        f"<p class='v small'>{_safe(score_val)}</p>"
+        f"<span class='{_badge_class(band)}'><span class='badge-dot'></span><strong>{_safe(band)}</strong></span>"
+        f"</div>"
+    )
+
+    # Top drivers (from score_breakdown.top_drivers)
+    if isinstance(top_drivers, list) and top_drivers:
+        html.append("<div class='hr'></div>")
+        html.append("<p class='k'>Top drivers</p>")
+        html.append("<ul>")
+        for d in top_drivers[:3]:
+            comp = _safe(str((d or {}).get("component") or "—"))
+            contrib = (d or {}).get("contribution")
+            try:
+                contrib_s = f"{float(contrib):.2f}"
+            except Exception:
+                contrib_s = "—"
+            html.append(f"<li><span class='muted'>{comp}</span> — {contrib_s}</li>")
+        html.append("</ul>")
+    html.append("</div>")  # end card wide
+
+    # --- Week 3: Next Actions (behavioural engine) ---
+    html.append("<div class='card full'>")
+    html.append("<p class='k'>Next actions</p>")
+    if next_actions:
+        # Deterministic display sort (already sorted by engine, but safe to stabilise)
+        def _sort_key(a):
+            return (
+                -int((a or {}).get("priority") or 0),
+                -_severity_rank((a or {}).get("severity") or ""),
+                str((a or {}).get("type") or ""),
+            )
+
+        actions_sorted = sorted(next_actions, key=_sort_key)
+        html.append("<ul>")
+        for a in actions_sorted[:5]:
+            t = _safe(str((a or {}).get("type") or "—"))
+            sev = _safe(str((a or {}).get("severity") or "—"))
+            owner = _safe(str((a or {}).get("owner") or "—"))
+            due = (a or {}).get("due_in_days")
+            try:
+                due_s = str(int(due))
+            except Exception:
+                due_s = "—"
+            msg = _safe(str((a or {}).get("message") or ""))
+            html.append(f"<li><strong>{t}</strong> ({sev}) — {msg} <span class='muted'>[{owner}, due {due_s}d]</span></li>")
+        html.append("</ul>")
+    else:
+        html.append("<p class='muted'>No actions triggered.</p>")
+    html.append("</div>")  # end card full
+    
     # Operational bars (Phase 2.1) — display only
     html.append("<div class='card full'>")
     html.append("<p class='section-title'>Operational bars</p>")
