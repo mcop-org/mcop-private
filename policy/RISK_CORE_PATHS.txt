@@ -1,0 +1,5 @@
+# Paths considered RISK CORE. DO NOT MODIFY unless explicitly authorized.
+mcop/exposure/
+mcop/liquidity/engine.py
+mcop/liquidity/pinch.py
+mcop/governance/
