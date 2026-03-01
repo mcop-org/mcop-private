@@ -8,6 +8,8 @@ from mcop.governance.drift import compute_drift_signals
 from mcop.governance.snapshot import run_snapshot_check
 from mcop.governance.regression_guard import run_regression_guard
 from mcop.liquidity.pinch import compute_pinch_14d
+from mcop.engine.score import compute_cash_risk_score
+from mcop.engine.rules import evaluate_rules
 
 from mcop.config import get_paths
 from mcop.ingest.loaders import load_inputs
@@ -771,10 +773,78 @@ def main():
                 "actions": []
             }
         }
+        def _pinch_bool(p: object) -> bool:
+            # Deterministic conversion:
+            # - if dict with cash_alert: AMBER/RED => True else False
+            # - if bool: return as-is
+            if isinstance(p, bool):
+                return p
+            if isinstance(p, dict):
+                ca = str(p.get("cash_alert") or "").strip().upper()
+                return ca in ("AMBER", "RED")
+            # fallback for string-like
+            s = str(p or "").strip().upper()
+            return s in ("TRUE", "T", "YES", "Y", "1", "AMBER", "RED")
+        
+                # --- Week 3: Next Actions context ---
+        pinch_14d_flag = _pinch_bool(dp.get("pinch_14d"))
+        pinch_30d_flag = _pinch_bool(dp.get("pinch_30d"))
+
+        rules_ctx = {
+            "pinch_14d": pinch_14d_flag,
+            "pinch_30d": pinch_30d_flag,
+            "exposure_flag": dp.get("exposure_flag"),
+            "score_band": dp.get("score_band"),
+        }
+
+        dp["next_actions"] = evaluate_rules(rules_ctx)
+        # --- FIX ENDS HERE ---
+
+        # --- Week 3: Cash Risk Score (exec metric) + Next Actions ---
+        # Derived inputs only (do not mutate existing dp fields)
+        p14 = dp.get("pinch_14d") or {}
+        p30 = dp.get("pinch_30d") or {}
+
+        p14_alert = (p14.get("cash_alert") if isinstance(p14, dict) else None)
+        p30_alert = (p30.get("cash_alert") if isinstance(p30, dict) else None)
+
+        pinch_14d_flag = str(p14_alert or "").strip().upper() in ("AMBER", "RED")
+        pinch_30d_flag = str(p30_alert or "").strip().upper() in ("AMBER", "RED")
+
+        engine_input = {
+            "runway_days": (dp.get("cash") or {}).get("runway_days"),
+            "pinch_14d": dp.get("pinch_14d"),
+            "pinch_30d": dp.get("pinch_30d"),
+            "pinch_14d_flag": pinch_14d_flag,
+            "pinch_30d_flag": pinch_30d_flag,
+            "exposure_flag": dp.get("exposure_flag"),
+            "base": payload.get("base") or {},
+            "stress": payload.get("stress") or {},
+            "trading_health_score": dp.get("trading_health_score"),
+        }
+
+        score_out = compute_cash_risk_score(engine_input)
+        dp["cash_risk_score"] = score_out["cash_risk_score"]
+        dp["score_band"] = score_out["score_band"]
+        dp["score_breakdown"] = score_out["score_breakdown"]
+
 
         # Build standout risks (max 3) in simple language
         p14 = payload.get("pinch_14d") or {}
         p30 = payload.get("pinch_30d") or {}
+        pinch_14d_bool = _pinch_bool(p14)
+        pinch_30d_bool = _pinch_bool(p30)
+
+        # Rules expect score_band plus pinch flags and exposure_flag
+        rules_input = {
+            "pinch_14d": pinch_14d_bool,
+            "pinch_30d": pinch_30d_bool,
+            "exposure_flag": dp.get("exposure_flag"),
+            "score_band": dp.get("score_band"),
+        }
+
+        dp["next_actions"] = evaluate_rules(rules_input)
+
         if isinstance(p14, dict) and p14.get("cash_alert"):
             dp["this_week"]["standout_risks"].append(f"Cash Alert (14d): {p14.get('cash_alert')}")
         if isinstance(p30, dict) and p30.get("cash_alert"):
@@ -850,8 +920,32 @@ def main():
                 ev["label"] = f"{ref} ({pid})" if ref else pid
                 p[ev_key] = ev
             dp[pinch_key] = p
+
+                    # ---------------------------
+        # Week 3: Cash Risk Score + Behavioural next_actions (deterministic, additive)
+        # ---------------------------
+        engine_input = {
+            "runway_days": (payload.get("base") or {}).get("runway_days"),
+            "runway_days_base": (payload.get("base") or {}).get("runway_days"),
+            "runway_days_stress": (payload.get("stress") or {}).get("runway_days"),
+            "pinch_14d": _pinch_bool(payload.get("pinch_14d")),
+            "pinch_30d": _pinch_bool(payload.get("pinch_30d")),
+            # In MCOP this is typically "OK"/"WATCH"/"BLOCK"
+            "exposure_flag": payload.get("exposure_flag"),
+            "trading_health_score": payload.get("trading_health_score"),
+        }
+
+        score_out = compute_cash_risk_score(engine_input)
+        dp["cash_risk_score"] = score_out["cash_risk_score"]
+        dp["score_band"] = score_out["score_band"]
+        dp["score_breakdown"] = score_out["score_breakdown"]
+
+        engine_input["score_band"] = dp["score_band"]
+        dp["next_actions"] = evaluate_rules(engine_input)
+        
+
         out_path = paths.out_dir / f"DecisionPack_{as_of}.json"
-        out_path.write_text(json.dumps(dp, indent=2, default=str), encoding="utf-8")
+        out_path.write_text(json.dumps(dp, indent=2, sort_keys=True, default=str), encoding="utf-8")
         print(f"✅ Wrote Decision Pack: {out_path}")
 
     except Exception as e:
