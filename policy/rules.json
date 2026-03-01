@@ -1,0 +1,62 @@
+[
+  {
+    "id": "BLOCK_IF_PINCH_14D_AND_EXPOSURE",
+    "priority": 100,
+    "conditions": { "pinch_14d": true, "exposure_flag": "BLOCK" },
+    "action": {
+      "type": "BLOCK",
+      "severity": "CRITICAL",
+      "message": "BLOCK: 14-day liquidity pinch while exposure is flagged.",
+      "owner": "CEO",
+      "due_in_days": 0
+    }
+  },
+  {
+    "id": "BLOCK_IF_SCORE_RED",
+    "priority": 90,
+    "conditions": { "score_band": "RED" },
+    "action": {
+      "type": "BLOCK",
+      "severity": "CRITICAL",
+      "message": "BLOCK: Cash Risk Score is RED — halt discretionary commitments.",
+      "owner": "CEO",
+      "due_in_days": 0
+    }
+  },
+  {
+    "id": "PAUSE_BUYING_IF_PINCH_14D",
+    "priority": 80,
+    "conditions": { "pinch_14d": true },
+    "action": {
+      "type": "PAUSE_BUYING",
+      "severity": "HIGH",
+      "message": "Pause buying: 14-day liquidity pinch detected.",
+      "owner": "COO",
+      "due_in_days": 0
+    }
+  },
+  {
+    "id": "TIGHTEN_SPEND_IF_PINCH_30D",
+    "priority": 70,
+    "conditions": { "pinch_30d": true },
+    "action": {
+      "type": "TIGHTEN_SPEND",
+      "severity": "HIGH",
+      "message": "Tighten spend: 30-day liquidity pinch risk — reduce non-essential outflows.",
+      "owner": "COO",
+      "due_in_days": 3
+    }
+  },
+  {
+    "id": "PRESALE_CAMPAIGN_WEEK_IF_AMBER_AND_PINCH_30D",
+    "priority": 60,
+    "conditions": { "score_band": "AMBER", "pinch_30d": true },
+    "action": {
+      "type": "PRESALE_CAMPAIGN_WEEK",
+      "severity": "MEDIUM",
+      "message": "Trigger a pre-sell campaign week to pull cash forward.",
+      "owner": "Sales",
+      "due_in_days": 7
+    }
+  }
+]
