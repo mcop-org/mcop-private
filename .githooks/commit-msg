@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+msg_file="$1"
+first_line="$(head -n 1 "$msg_file" | tr -d '\r')"
+
+if [[ "$first_line" != AI-GEN:* ]]; then
+  echo "❌ Commit message must start with 'AI-GEN:'"
+  echo "   Example: AI-GEN: Add versioned git hooks"
+  exit 1
+fi

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "== pre-commit: MCOP safety gate =="
+./scripts/validate_safety.sh
