@@ -1,0 +1,95 @@
+name: "Agent Task"
+description: "Create a safe, deterministic task for an agent to implement via PR"
+title: "TASK: "
+labels: ["agent-task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template to delegate implementation work safely.
+        Keep tasks small when possible. The agent must open a PR; no direct pushes to main.
+
+  - type: input
+    id: goal
+    attributes:
+      label: Goal
+      description: "One sentence. What do you want changed?"
+      placeholder: "Add header aliases for client_id in activity ingest"
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Context
+      description: "Why is this needed? Any background?"
+      placeholder: |
+        New export changed column names. MCOP should accept both old and new headers.
+    validations:
+      required: false
+
+  - type: textarea
+    id: change_request
+    attributes:
+      label: Change request (explicit)
+      description: "Write 'Do' and 'Do NOT' bullets."
+      placeholder: |
+        Do:
+        - Accept clientId/customer_id aliases for client_id
+        - Add tests for both header variants
+
+        Do NOT:
+        - Change any risk engine thresholds
+        - Add new dependencies
+    validations:
+      required: true
+
+  - type: textarea
+    id: files_scope
+    attributes:
+      label: Files allowed to edit (scope)
+      description: "List the paths the agent is allowed to change."
+      placeholder: |
+        - mcop/ingest/...
+        - tests/...
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: constraints
+    attributes:
+      label: Safety constraints (must comply)
+      options:
+        - label: No network calls / APIs / webhooks
+          required: true
+        - label: No randomness
+          required: true
+        - label: No system clock usage unless as_of is explicitly passed in
+          required: true
+        - label: No new dependencies
+          required: true
+        - label: Must not mutate inputs
+          required: true
+
+  - type: textarea
+    id: tests
+    attributes:
+      label: Tests required
+      description: "What tests must exist or be updated?"
+      placeholder: |
+        - pytest for header alias mapping
+        - determinism test if output ordering could change
+    validations:
+      required: false
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: "What must be true to approve/merge?"
+      placeholder: |
+        - CI passes (pytest + validate_safety)
+        - Output matches requested behavior
+        - No unrelated diffs
+    validations:
+      required: true
