@@ -427,3 +427,221 @@ Reservations and releases must not be treated as independent sales events.
 Releases are typically the event representing **inventory leaving the warehouse**.
 
 Agents must request clarification before defining revenue, exposure, or sales metrics.
+
+---
+
+# Products Dataset
+
+## Purpose
+
+The **products dataset** describes the coffee products available, incoming, landed, or sold out in the MCOP system.
+
+It provides the master product-level reference data used to understand:
+
+- what coffee exists in the system
+- origin and producer details
+- physical stock characteristics
+- offer availability
+- commercial pricing
+- warehouse references
+
+This dataset is primarily used to provide **product context** for trading, reservation, release, warehouse, and dashboard analytics.
+
+If a requested metric depends on product logic not explicitly defined here, the agent must request clarification before implementing logic.
+
+---
+
+## Product Dataset Column Definitions
+
+### Core Product Identity
+
+**product_id**  
+Unique identifier for the product.
+
+**product_reference**  
+Commercial reference used internally to identify the coffee.
+
+---
+
+### Origin
+
+**country_id**  
+Unique identifier for the country of origin.
+
+**country**  
+Country name.
+
+**region_id**  
+Unique identifier for the region.
+
+**region**  
+Region name.
+
+**farm**  
+Name of the farm where the coffee is produced.
+
+---
+
+### Producer
+
+**producer_id**  
+Unique identifier for the producer.
+
+**producer**  
+Producer name.
+
+---
+
+### Coffee Characteristics
+
+**variety_id**  
+Unique identifier for the coffee variety.
+
+**variety**  
+Variety name.
+
+**process_id**  
+Unique identifier for the process.
+
+**process**  
+Processing method of the coffee.
+
+Examples may include:
+
+- washed
+- natural
+- thermal shock
+- honey
+- anaerobic
+
+**cup_profile**  
+Descriptive flavour notes, aromas, and sensory profile.
+
+**cup_score**  
+SCA cupping score.
+
+---
+
+### Physical Stock Information
+
+**bag_size_kg**  
+Weight of a single bag in kilograms.
+
+**bags**  
+Total number of bags of that reference in the shipment or lot.
+
+**bags_available**  
+Number of bags currently available in the offer list.
+
+This is generally interpreted as:
+
+bags available = total bags − reserved bags
+
+If this interpretation changes, agents must request clarification.
+
+---
+
+### Commercial Fields
+
+**price_per_kg**  
+Commercial price per kilogram.
+
+**harvest_date**  
+Harvest date of the coffee.
+
+---
+
+### Product Status
+
+**status**
+
+Possible values may include:
+
+- available
+- sold out
+- incoming
+
+Meaning:
+
+- **available** → coffee is available for reservation or release
+- **sold out** → no bags remain commercially available
+- **incoming** → coffee is not yet landed / not yet available
+
+If status values differ in future exports, agents should inspect the live schema and request clarification if needed.
+
+---
+
+### Warehouse References
+
+**rotation_number**  
+Unique warehouse reference used by warehouse operatives.
+
+**marks**  
+Warehouse marks or reference labels associated with the product.
+
+---
+
+### Farm / Terroir Context
+
+**elevation**  
+Elevation of the farm above sea level.
+
+---
+
+# Products Dataset Analytical Notes
+
+## Product-Level Value
+
+The products dataset contains enough information to estimate product value using:
+
+- bags
+- bag_size_kg
+- price_per_kg
+
+However, if an agent needs to calculate product value for a specific business metric, it must ensure the intended formula and business meaning are appropriate for that metric.
+
+If unclear, the agent must request clarification.
+
+---
+
+## Availability Logic
+
+The products dataset may be used to understand:
+
+- total bags in a lot
+- currently available bags
+- incoming coffee
+- sold out coffee
+
+Agents must not assume that `bags_available` alone fully explains reservation or release balances unless that behavior has been explicitly confirmed.
+
+---
+
+## Relationship to Activity Dataset
+
+The products dataset provides **master product context**.
+
+The activity dataset provides **event-level movement and client interactions**.
+
+Typical relationship:
+
+- `products.product_id` describes the coffee lot
+- `activity.product_id` records client events against that lot
+
+Agents should use the products dataset to enrich:
+
+- dashboards
+- top product analytics
+- warehouse exposure analysis
+- origin / producer / region breakdowns
+
+---
+
+## Deterministic Use Requirement
+
+When products data is used in analytics, agents must:
+
+- preserve deterministic ordering
+- avoid guessing missing business definitions
+- request clarification for ambiguous metrics
+- ignore unknown future columns unless explicitly required
