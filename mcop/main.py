@@ -65,6 +65,24 @@ def main():
 
     paths = get_paths()
     inputs = load_inputs(paths.data_dir)
+    
+        # --- Dynamic schema snapshot (read-only, non-blocking) ---
+    try:
+        import json
+        from pathlib import Path
+
+        activity_df = inputs.activity
+        schema = {
+            "columns": list(activity_df.columns),
+            "dtypes": {col: str(activity_df[col].dtype) for col in activity_df.columns},
+            "row_count": int(len(activity_df)),
+        }
+
+        out_schema_path = Path(paths.out_dir) / "schema_activity.json"
+        out_schema_path.write_text(json.dumps(schema, indent=2), encoding="utf-8")
+    except Exception:
+        # Never break main pipeline due to schema logging
+        pass
 
     payables = build_payables_from_costs(inputs.costs)
     receivables = build_receivables_from_activity(inputs.activity, delay_buffer_days=7)

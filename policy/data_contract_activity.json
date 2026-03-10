@@ -1,0 +1,9 @@
+{
+    "sales_date_field": "approval_date",
+    "client_id_field": "client_id",
+    "client_name_field": "company_name",
+    "status_field": "status",
+    "status_required": "Approved",
+    "value_formula": "bags * bag_size_kg * price_per_kg",
+    "notes": "Used for revenue and client metrics. Edit if data model changes."
+  }
