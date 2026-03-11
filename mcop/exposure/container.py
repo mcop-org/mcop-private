@@ -166,6 +166,25 @@ def build_reserved_kg(activity: pd.DataFrame) -> pd.DataFrame:
     a["reserved_kg"] = _to_num(a["bags"]) * _to_num(a["bag_size_kg"])
     return a.groupby("product_id", as_index=False)["reserved_kg"].sum()
 
+def build_reserved_balance_kg(activity: pd.DataFrame) -> pd.DataFrame:
+    activity = _normalise_activity_columns(activity)
+    required = {"product_id", "bags_remaining", "bag_size_kg", "request_type", "request_status"}
+    missing = required - set(activity.columns)
+    if missing:
+        raise ValueError(f"activity.csv missing columns for reservation balance: {sorted(missing)}")
+
+    a = activity.copy()
+    a["product_id"] = a["product_id"].astype(str).str.strip()
+    a["request_type"] = a["request_type"].astype(str).str.strip().str.lower()
+    a["request_status"] = a["request_status"].astype(str).str.strip().str.lower()
+
+    live_reservations = a[
+        (a["request_type"] == "reservation") &
+        (a["request_status"] != "rejected")
+    ].copy()
+    live_reservations["reserved_balance_kg"] = _to_num(live_reservations["bags_remaining"]) * _to_num(live_reservations["bag_size_kg"])
+    return live_reservations.groupby("product_id", as_index=False)["reserved_balance_kg"].sum()
+
 def _normalise_activity_columns(df: pd.DataFrame) -> pd.DataFrame:
     # Accept canonical CSV exports + legacy headers
     out = df.copy()
@@ -197,6 +216,9 @@ def _normalise_activity_columns(df: pd.DataFrame) -> pd.DataFrame:
         "product_reference": "product_reference",
         "landing_date": "landing_date",
         "landing_status": "landing_status",
+        "request_type": "request_type",
+        "request_status": "request_status",
+        "bags_remaining": "bags_remaining",
 
         "price_per_kg": "price_per_kg",
         "price_gbp_kg": "price_per_kg",
@@ -246,16 +268,21 @@ def compute_container_exposure(
     p["Landing Date"] = _parse_dt(p["Landing Date"])
 
     cost_tbl = build_cost_table(costs)
-    res_tbl = build_reserved_kg(activity)
+    res_tbl = build_reserved_balance_kg(activity)
 
     df = p.merge(cost_tbl, on="product_id", how="left").merge(res_tbl, on="product_id", how="left")
-    df["reserved_kg"] = df["reserved_kg"].fillna(0.0)
+    df["reserved_balance_kg"] = df["reserved_balance_kg"].fillna(0.0)
 
     df["remaining_kg"] = _to_num(df["Bags Remaining"]) * _to_num(df["Bag Size"])
 
-    is_incoming = (df["Landing Status"].astype(str).str.strip().str.lower() == "incoming") | \
-                  (df["Status"].astype(str).str.strip().str.lower() == "incoming")
-    is_landed = df["Landing Status"].astype(str).str.strip().str.lower() == "landed"
+    landing_status = df["Landing Status"].astype(str).str.strip().str.lower()
+    status = df["Status"].astype(str).str.strip().str.lower()
+    if (landing_status != "").any():
+        is_incoming = landing_status == "incoming"
+        is_landed = landing_status == "landed"
+    else:
+        is_incoming = status == "incoming"
+        is_landed = status == "available"
 
     # Landed unsold capital
     landed_unsold = df[is_landed & (df["remaining_kg"] > 0)].copy()
@@ -268,11 +295,11 @@ def compute_container_exposure(
     incoming_capital_total = float(incoming["incoming_value_gbp"].sum())
 
     incoming_total_kg = float(_to_num(incoming["total_kg"]).sum())
-    incoming_reserved_kg = float(_to_num(incoming["reserved_kg"]).sum())
+    incoming_reserved_kg = float(_to_num(incoming["reserved_balance_kg"]).sum())
     overall_precommit = (incoming_reserved_kg / incoming_total_kg) if incoming_total_kg > 0 else 0.0
     overall_precommit = max(0.0, min(1.0, overall_precommit))
 
-    incoming["uncommitted_kg"] = (_to_num(incoming["total_kg"]) - _to_num(incoming["reserved_kg"])).clip(lower=0.0)
+    incoming["uncommitted_kg"] = (_to_num(incoming["total_kg"]) - _to_num(incoming["reserved_balance_kg"])).clip(lower=0.0)
     incoming["uncommitted_value_gbp"] = incoming["uncommitted_kg"] * _to_num(incoming["landed_cost_per_kg"])
     incoming_uncommitted_gbp = float(incoming["uncommitted_value_gbp"].sum())
 
@@ -282,7 +309,7 @@ def compute_container_exposure(
     incoming["days_to_landing"] = pd.to_numeric(incoming["days_to_landing"], errors="coerce").fillna(9999)
 
     incoming["precommit_pct_product"] = (
-        _to_num(incoming["reserved_kg"]) /
+        _to_num(incoming["reserved_balance_kg"]) /
         _to_num(incoming["total_kg"]).replace({0: pd.NA})
     ).fillna(0.0)
 
@@ -407,6 +434,7 @@ def compute_container_exposure(
 
         "incoming_reserved_kg": round(incoming_reserved_kg, 2),
         "incoming_total_kg": round(incoming_total_kg, 2),
+        "incoming_reserved_balance_pct": round(overall_precommit, 3),
         "incoming_precommitted_pct": round(overall_precommit, 3),
         "incoming_uncommitted_gbp": round(incoming_uncommitted_gbp, 2),
 
