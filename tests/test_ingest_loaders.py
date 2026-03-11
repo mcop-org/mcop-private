@@ -212,3 +212,14 @@ def test_compute_container_exposure_uses_reservation_balance_for_incoming_covera
     assert exposure["incoming_reserved_kg"] == 96.0
     assert exposure["incoming_reserved_balance_pct"] == 0.4
     assert exposure["incoming_precommitted_pct"] == 0.4
+    assert exposure["incoming_by_landing_date"] == [
+        {
+            "landing_date": "2026-03-31",
+            "reserved_value_gbp": 648.0,
+            "unreserved_value_gbp": 972.0,
+            "total_value_gbp": 1620.0,
+            "reserved_kg": 96.0,
+            "unreserved_kg": 144.0,
+            "total_kg": 240.0,
+        }
+    ]

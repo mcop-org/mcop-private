@@ -43,6 +43,13 @@ def _intish(value: object) -> str:
         return "-"
 
 
+def _kg(value: object) -> str:
+    try:
+        return f"{float(value):,.0f} kg"
+    except Exception:
+        return "- kg"
+
+
 def _status_class(flag: object) -> str:
     text = str(flag or "").upper()
     if text in {"OK", "GREEN"}:
@@ -182,6 +189,134 @@ def _hbar_chart_svg(rows: list[tuple[str, float, str]], max_value: float, label:
     return "".join(parts)
 
 
+def _compact_date(value: object) -> str:
+    text = str(value or "")
+    if len(text) >= 10 and text[4] == "-" and text[7] == "-":
+        return f"{text[5:7]}/{text[8:10]}"
+    return text or "-"
+
+
+def _stacked_column_chart_svg(rows: list[dict], label: str) -> str:
+    width = 560
+    height = 260
+    left = 28
+    right = 18
+    top = 20
+    bottom = 42
+    inner_width = width - left - right
+    inner_height = height - top - bottom
+    count = max(len(rows), 1)
+    slot = inner_width / count
+    bar_width = min(42.0, slot * 0.56)
+    max_total = max([float(row.get("total", 0.0) or 0.0) for row in rows] + [1.0])
+    parts = [f"<svg viewBox='0 0 {width} {height}' role='img' aria-label='{_safe(label)}'>"]
+    parts.append(
+        f"<line x1='{left}' y1='{top + inner_height}' x2='{width - right}' y2='{top + inner_height}' "
+        "stroke='var(--line-strong)' stroke-width='1' />"
+    )
+    if not rows:
+        parts.append(
+            f"<text x='{left}' y='{top + (inner_height / 2):.1f}' fill='var(--muted)' font-size='12'>No incoming lots</text>"
+        )
+        parts.append("</svg>")
+        return "".join(parts)
+
+    for idx, row in enumerate(rows):
+        reserved = max(float(row.get("reserved", 0.0) or 0.0), 0.0)
+        unreserved = max(float(row.get("unreserved", 0.0) or 0.0), 0.0)
+        total = max(reserved + unreserved, 0.0)
+        x = left + idx * slot + (slot - bar_width) / 2
+        reserved_height = (reserved / max_total) * inner_height
+        unreserved_height = (unreserved / max_total) * inner_height
+        base_y = top + inner_height
+        parts.append(
+            f"<rect x='{x:.3f}' y='{base_y - (reserved_height + unreserved_height):.3f}' width='{bar_width:.3f}' "
+            f"height='{reserved_height + unreserved_height:.3f}' rx='14' fill='var(--track-strong)' />"
+        )
+        if unreserved_height > 0:
+            parts.append(
+                f"<rect x='{x:.3f}' y='{base_y - unreserved_height:.3f}' width='{bar_width:.3f}' "
+                f"height='{unreserved_height:.3f}' rx='14' fill='#d06e3d' />"
+            )
+        if reserved_height > 0:
+            parts.append(
+                f"<rect x='{x:.3f}' y='{base_y - (unreserved_height + reserved_height):.3f}' width='{bar_width:.3f}' "
+                f"height='{reserved_height:.3f}' rx='14' fill='#2a6a58' />"
+            )
+        parts.append(
+            f"<text x='{x + (bar_width / 2):.3f}' y='{height - 16}' text-anchor='middle' fill='var(--muted)' font-size='11'>{_safe(row.get('label') or '-')}</text>"
+        )
+        parts.append(
+            f"<text x='{x + (bar_width / 2):.3f}' y='{max(top + 12.0, base_y - total / max_total * inner_height - 8):.3f}' text-anchor='middle' fill='var(--muted)' font-size='10'>{_safe(_intish(total / 1000.0))}k</text>"
+        )
+    parts.append("</svg>")
+    return "".join(parts)
+
+
+def _line_chart_svg(rows: list[tuple[str, float]], label: str) -> str:
+    width = 560
+    height = 240
+    left = 34
+    right = 34
+    top = 28
+    bottom = 38
+    inner_width = width - left - right
+    inner_height = height - top - bottom
+    max_value = max([float(value or 0.0) for _, value in rows] + [1.0])
+    parts = [f"<svg viewBox='0 0 {width} {height}' role='img' aria-label='{_safe(label)}'>"]
+    base_y = top + inner_height
+    parts.append(
+        f"<line x1='{left}' y1='{base_y}' x2='{width - right}' y2='{base_y}' stroke='var(--line-strong)' stroke-width='1' />"
+    )
+    if not rows:
+        parts.append(
+            f"<text x='{left}' y='{top + (inner_height / 2):.1f}' fill='var(--muted)' font-size='12'>No release activity</text>"
+        )
+        parts.append("</svg>")
+        return "".join(parts)
+
+    if len(rows) == 1:
+        points = [(left + inner_width / 2, base_y - (rows[0][1] / max_value) * inner_height)]
+    else:
+        step = inner_width / (len(rows) - 1)
+        points = [
+            (left + idx * step, base_y - (float(value or 0.0) / max_value) * inner_height)
+            for idx, (_, value) in enumerate(rows)
+        ]
+
+    path = " ".join(
+        [f"M {points[0][0]:.3f} {points[0][1]:.3f}"] +
+        [f"L {x:.3f} {y:.3f}" for x, y in points[1:]]
+    )
+    area = " ".join(
+        [f"M {points[0][0]:.3f} {base_y:.3f}", f"L {points[0][0]:.3f} {points[0][1]:.3f}"] +
+        [f"L {x:.3f} {y:.3f}" for x, y in points[1:]] +
+        [f"L {points[-1][0]:.3f} {base_y:.3f}", "Z"]
+    )
+    parts.append(f"<path d='{area}' fill='var(--accent-soft)' />")
+    parts.append(f"<path d='{path}' fill='none' stroke='var(--accent)' stroke-width='3' stroke-linecap='round' stroke-linejoin='round' />")
+    label_left = left + 10
+    label_right = width - right - 10
+    for idx, ((x, y), (date_label, value)) in enumerate(zip(points, rows)):
+        clamped_x = min(max(x, label_left), label_right)
+        if len(points) == 1:
+            text_anchor = "middle"
+        elif idx == 0:
+            text_anchor = "start"
+        elif idx == len(points) - 1:
+            text_anchor = "end"
+        else:
+            text_anchor = "middle"
+        parts.append(f"<circle cx='{x:.3f}' cy='{y:.3f}' r='4.5' fill='var(--panel-strong)' stroke='var(--accent)' stroke-width='2' />")
+        parts.append(f"<text x='{x:.3f}' y='{height - 14}' text-anchor='middle' fill='var(--muted)' font-size='11'>{_safe(date_label)}</text>")
+        parts.append(
+            f"<text x='{clamped_x:.3f}' y='{max(top + 14.0, y - 12.0):.3f}' text-anchor='{text_anchor}' "
+            f"fill='var(--muted)' font-size='10'>{_safe(_intish(value / 1000.0))}k</text>"
+        )
+    parts.append("</svg>")
+    return "".join(parts)
+
+
 def _render_event_table(title: str, rows: list[dict]) -> str:
     body = []
     for row in rows[:5]:
@@ -223,7 +358,7 @@ def _render_risk_table(rows: list[dict]) -> str:
 
     return (
         "<section class='panel'>"
-        "<div class='section-head'><h3>Incoming Gap Queue</h3><p>Highest shortfall by value and landing urgency.</p></div>"
+        "<div class='section-head'><h3>Incoming Pre-sell Gap Queue</h3><p>Highest shortfall by value and landing urgency.</p></div>"
         "<table>"
         "<thead><tr><th>Reference</th><th class='num'>Gap</th><th class='num'>Days</th></tr></thead>"
         f"<tbody>{''.join(body)}</tbody>"
@@ -261,6 +396,9 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
     aging_buckets = landed.get("buckets", {}) or {}
     top_traps = landed.get("top_cash_traps", []) or []
     top_incoming = container.get("breakdown_top_incoming", []) or []
+    incoming_by_landing = container.get("incoming_by_landing_date", []) or []
+    reservation_pipeline = payload.get("reservation_pipeline_by_status", []) or []
+    released_value_trend = payload.get("released_value_trend", []) or []
 
     alert_html = "".join(
         f"<div class='status-pill {_status_class(value)}'><span>{_safe(label)}</span><strong>{_safe(value)}</strong></div>"
@@ -272,21 +410,29 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
     ) or "<li><span class='bullet-index'>00</span><span>No immediate actions</span></li>"
     summary_html = "".join(f"<li>{_safe(item)}</li>" for item in summary_lines) or "<li>No summary lines</li>"
 
-    incoming_value_meter = _stacked_meter_svg(
+    incoming_landing_chart = _stacked_column_chart_svg(
         [
-            ("Reserved", incoming_reserved_value, "#2a6a58"),
-            ("Unreserved", incoming_unreserved_value, "#d06e3d"),
+            {
+                "label": _compact_date(row.get("landing_date")),
+                "reserved": float(row.get("reserved_value_gbp") or 0.0),
+                "unreserved": float(row.get("unreserved_value_gbp") or 0.0),
+                "total": float(row.get("total_value_gbp") or 0.0),
+            }
+            for row in incoming_by_landing[:6]
         ],
-        max(incoming_total_value, 1.0),
-        "Incoming value split",
+        "Incoming reserved versus unreserved by landing date",
     )
-    incoming_kg_meter = _stacked_meter_svg(
+    incoming_landing_chart_kg = _stacked_column_chart_svg(
         [
-            ("Reserved", incoming_reserved_kg, "#2a6a58"),
-            ("Open", incoming_unreserved_kg, "#d06e3d"),
+            {
+                "label": _compact_date(row.get("landing_date")),
+                "reserved": float(row.get("reserved_kg") or 0.0),
+                "unreserved": float(row.get("unreserved_kg") or 0.0),
+                "total": float(row.get("total_kg") or 0.0),
+            }
+            for row in incoming_by_landing[:6]
         ],
-        max(incoming_total_kg, 1.0),
-        "Incoming kilogram split",
+        "Incoming reserved versus unreserved kg by landing date",
     )
 
     risk_rows = [
@@ -300,7 +446,7 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
     risk_chart = _hbar_chart_svg(
         risk_rows,
         max([value for _, value, _ in risk_rows] + [1.0]),
-        "Incoming risk chart",
+        "Top incoming shortfalls",
     )
 
     aging_rows = [
@@ -313,6 +459,23 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
         aging_rows,
         max([value for _, value, _ in aging_rows] + [1.0]),
         "Landed aging chart",
+    )
+    pipeline_rows = [
+        (
+            str(row.get("status") or "-"),
+            float(row.get("value_gbp") or 0.0),
+            "#255f52" if str(row.get("status") or "").lower() in {"approved", "completed"} else "#d06e3d",
+        )
+        for row in reservation_pipeline
+    ]
+    pipeline_chart = _hbar_chart_svg(
+        pipeline_rows,
+        max([value for _, value, _ in pipeline_rows] + [1.0]),
+        "Reservation pipeline by status",
+    )
+    release_line_chart = _line_chart_svg(
+        [(_compact_date(row.get("date")), float(row.get("value_gbp") or 0.0)) for row in released_value_trend],
+        "Released value trend",
     )
 
     incoming_spotlight = []
@@ -340,7 +503,7 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
         trap_rows.append("<li><strong>No cash traps</strong><span>-</span><em>No landed aging issues</em></li>")
 
     kpi_cards = [
-        ("Cash Today", _money(base.get("cash_on_hand")), "Live snapshot from cash history", "tone-neutral"),
+        ("Cash on Hand", _money(base.get("cash_on_hand")), "Live snapshot from cash history", "tone-neutral"),
         ("Liquidity 60d", _money(base.get("liquidity_60")), "Projected 60-day position", "tone-neutral"),
         ("Runway", f"{_intish(base.get('runway_days'))} days", "Current burn-derived runway", "tone-neutral"),
         ("Trading Health", f"{_number(payload.get('trading_health_score'))}/10", "Composite operating score", "tone-neutral"),
@@ -356,6 +519,30 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
         f"<div class='meta'>{_safe(help_text)}</div>"
         "</article>".format(tone=tone)
         for title, value, help_text, tone in kpi_cards
+    )
+    incoming_value_cards = (
+        "<div class='meter-copy incoming-view' data-exposure-view='value'>"
+        "<div class='mini-stat'>"
+        "<div class='label'>Reserved value</div>"
+        f"<strong>{_money(incoming_reserved_value)}</strong>"
+        "</div>"
+        "<div class='mini-stat'>"
+        "<div class='label'>Unreserved value</div>"
+        f"<strong>{_money(incoming_unreserved_value)}</strong>"
+        "</div>"
+        "</div>"
+    )
+    incoming_kg_cards = (
+        "<div class='meter-copy incoming-view' data-exposure-view='kg' hidden>"
+        "<div class='mini-stat'>"
+        "<div class='label'>Reserved kg</div>"
+        f"<strong>{_kg(incoming_reserved_kg)}</strong>"
+        "</div>"
+        "<div class='mini-stat'>"
+        "<div class='label'>Unreserved kg</div>"
+        f"<strong>{_kg(incoming_unreserved_kg)}</strong>"
+        "</div>"
+        "</div>"
     )
 
     html = f"""<!doctype html>
@@ -519,7 +706,7 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
     .main {{
       min-width: 0;
       display: grid;
-      gap: 18px;
+      gap: 28px;
     }}
     .topbar {{
       position: sticky;
@@ -576,7 +763,11 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
       border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
     }}
     .theme-toggle {{
-      font-weight: 600;
+      padding: 7px 11px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--muted);
+      background: color-mix(in srgb, var(--panel-strong) 82%, transparent);
     }}
     .hero {{
       display: grid;
@@ -654,6 +845,10 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
     }}
     .panel {{
       padding: 22px;
+    }}
+    .section-stack {{
+      display: grid;
+      gap: 26px;
     }}
     .section-head {{
       display: flex;
@@ -751,10 +946,27 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
       color: var(--muted);
       font-size: 13px;
     }}
+    .chart-note {{
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }}
     .swatch {{
       width: 12px;
       height: 12px;
       border-radius: 999px;
+    }}
+    svg {{
+      width: 100%;
+      height: auto;
+      display: block;
+    }}
+    .chart-shell {{
+      padding: 8px 2px 0;
+    }}
+    .line-panel {{
+      min-height: 100%;
     }}
     .meter-copy {{
       display: grid;
@@ -787,6 +999,16 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
       background: var(--navy);
       color: #fff;
       border-color: transparent;
+    }}
+    .incoming-toggle {{
+      margin-bottom: 10px;
+      padding: 4px;
+      gap: 4px;
+    }}
+    .incoming-toggle .tab-button {{
+      padding: 7px 11px;
+      font-size: 12px;
+      font-weight: 600;
     }}
     [hidden] {{ display: none !important; }}
     .rank-list {{
@@ -981,46 +1203,25 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
         <section class="panel">
           <div class="section-head">
             <h3>Incoming Exposure</h3>
-            <p>Reservation balance only. No raw activity flow summing.</p>
+            <p>Current reservation-balance logic, grouped by landing date.</p>
           </div>
-          <div class="tab-strip" role="tablist" aria-label="Incoming views">
-            <button class="tab-button is-active" type="button" data-tab-group="incoming" data-target="incoming-value">Value</button>
-            <button class="tab-button" type="button" data-tab-group="incoming" data-target="incoming-kg">KG</button>
+          <div class="tab-strip incoming-toggle" role="tablist" aria-label="Incoming exposure view">
+            <button class="tab-button is-active" type="button" data-exposure-toggle="value" aria-pressed="true">Value</button>
+            <button class="tab-button" type="button" data-exposure-toggle="kg" aria-pressed="false">KG</button>
           </div>
-          <div data-tab-panel="incoming-value">
-            {incoming_value_meter}
-            <div class="meter-copy">
-              <div class="mini-stat">
-                <div class="label">Reserved value</div>
-                <strong>{_money(incoming_reserved_value)}</strong>
-              </div>
-              <div class="mini-stat">
-                <div class="label">Open value</div>
-                <strong>{_money(incoming_unreserved_value)}</strong>
-              </div>
-            </div>
-            <div class="legend">
-              <div class="legend-item"><span class="swatch" style="background:#2a6a58"></span>Reserved value</div>
-              <div class="legend-item"><span class="swatch" style="background:#d06e3d"></span>Open value</div>
-            </div>
+          <div class="chart-shell incoming-view" data-exposure-view="value">{incoming_landing_chart}</div>
+          <div class="chart-shell incoming-view" data-exposure-view="kg" hidden>{incoming_landing_chart_kg}</div>
+          {incoming_value_cards}
+          {incoming_kg_cards}
+          <div class="legend incoming-view" data-exposure-view="value">
+            <div class="legend-item"><span class="swatch" style="background:#2a6a58"></span>Reserved value</div>
+            <div class="legend-item"><span class="swatch" style="background:#d06e3d"></span>Unreserved value</div>
           </div>
-          <div data-tab-panel="incoming-kg" hidden>
-            {incoming_kg_meter}
-            <div class="meter-copy">
-              <div class="mini-stat">
-                <div class="label">Reserved kg</div>
-                <strong>{_number(incoming_reserved_kg, 0)} kg</strong>
-              </div>
-              <div class="mini-stat">
-                <div class="label">Open kg</div>
-                <strong>{_number(incoming_unreserved_kg, 0)} kg</strong>
-              </div>
-            </div>
-            <div class="legend">
-              <div class="legend-item"><span class="swatch" style="background:#2a6a58"></span>Reserved balance</div>
-              <div class="legend-item"><span class="swatch" style="background:#d06e3d"></span>Open stock</div>
-            </div>
+          <div class="legend incoming-view" data-exposure-view="kg" hidden>
+            <div class="legend-item"><span class="swatch" style="background:#2a6a58"></span>Reserved kg</div>
+            <div class="legend-item"><span class="swatch" style="background:#d06e3d"></span>Unreserved kg</div>
           </div>
+          <p class="chart-note">Landing dates are shown in chronological order with deterministic aggregation.</p>
           <details>
             <summary>Top incoming lots</summary>
             <div class="detail-body">
@@ -1029,13 +1230,20 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
           </details>
         </section>
 
-        <div class="subgrid">
+        <div class="subgrid section-stack">
           <section class="panel">
             <div class="section-head">
-              <h3>Incoming Risk Chart</h3>
-              <p>Shortfall value ranked by landing urgency.</p>
+              <h3>Reservation Pipeline by Status</h3>
+              <p>Latest effective reservation state, valued in GBP.</p>
             </div>
-            {risk_chart}
+            <div class="chart-shell">{pipeline_chart}</div>
+          </section>
+          <section class="panel">
+            <div class="section-head">
+              <h3>Top Incoming Shortfalls</h3>
+              <p>Value gap to target pre-sell, ranked deterministically.</p>
+            </div>
+            <div class="chart-shell">{risk_chart}</div>
           </section>
           {_render_risk_table(incoming_risks)}
         </div>
@@ -1047,7 +1255,7 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
             <h3>Landed Stock Aging</h3>
             <p>Cash tied up in landed unsold inventory.</p>
           </div>
-          {aging_chart}
+          <div class="chart-shell">{aging_chart}</div>
           <div class="legend">
             <div class="legend-item"><span class="swatch" style="background:#6bb08a"></span>0-30 days</div>
             <div class="legend-item"><span class="swatch" style="background:#c2aa52"></span>30-60 days</div>
@@ -1065,8 +1273,17 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
       </section>
 
       <section class="section-grid" id="cashflow">
-        {_render_event_table("Top Payables 60d", payables)}
-        {_render_event_table("Top Receivables 60d", receivables)}
+        <section class="panel line-panel">
+          <div class="section-head">
+            <h3>Released Value Trend</h3>
+            <p>Release activity only, using dispatch date with approved fallbacks.</p>
+          </div>
+          <div class="chart-shell">{release_line_chart}</div>
+        </section>
+        <div class="subgrid section-stack">
+          {_render_event_table("Top Payables 60d", payables)}
+          {_render_event_table("Top Receivables 60d", receivables)}
+        </div>
       </section>
 
       <section class="section-grid" id="briefing">
@@ -1126,19 +1343,25 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
         syncThemeLabel();
       }});
 
-      var buttons = document.querySelectorAll("[data-tab-group]");
-      buttons.forEach(function(button) {{
+      var exposureButtons = Array.prototype.slice.call(document.querySelectorAll("[data-exposure-toggle]"));
+      var exposureViews = Array.prototype.slice.call(document.querySelectorAll("[data-exposure-view]"));
+      function syncExposureView(nextView) {{
+        exposureButtons.forEach(function(button) {{
+          var active = button.getAttribute("data-exposure-toggle") === nextView;
+          button.classList.toggle("is-active", active);
+          button.setAttribute("aria-pressed", active ? "true" : "false");
+        }});
+        exposureViews.forEach(function(node) {{
+          node.hidden = node.getAttribute("data-exposure-view") !== nextView;
+        }});
+      }}
+      exposureButtons.forEach(function(button) {{
         button.addEventListener("click", function() {{
-          var group = button.getAttribute("data-tab-group");
-          var target = button.getAttribute("data-target");
-          document.querySelectorAll("[data-tab-group='" + group + "']").forEach(function(peer) {{
-            peer.classList.toggle("is-active", peer === button);
-          }});
-          document.querySelectorAll("[data-tab-panel]").forEach(function(panel) {{
-            panel.hidden = panel.getAttribute("data-tab-panel") !== target;
-          }});
+          syncExposureView(button.getAttribute("data-exposure-toggle"));
         }});
       }});
+      syncExposureView("value");
+
     }})();
   </script>
 </body>

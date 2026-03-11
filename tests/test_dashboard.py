@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 from pathlib import Path
+import pandas as pd
 
+from mcop.main import build_released_value_trend, build_reservation_pipeline_by_status
 from mcop.report.dashboard import write_dashboard_html
 
 
@@ -27,6 +29,26 @@ def _sample_payload() -> dict:
             "incoming_uncommitted_gbp": 35100.0,
             "capital_deployment_ratio": 0.34,
             "dynamic_precommit": {"value_below_target_gbp": 18000.0},
+            "incoming_by_landing_date": [
+                {
+                    "landing_date": "2026-03-18",
+                    "reserved_value_gbp": 24000.0,
+                    "unreserved_value_gbp": 8000.0,
+                    "total_value_gbp": 32000.0,
+                    "reserved_kg": 960.0,
+                    "unreserved_kg": 320.0,
+                    "total_kg": 1280.0,
+                },
+                {
+                    "landing_date": "2026-03-29",
+                    "reserved_value_gbp": 30900.0,
+                    "unreserved_value_gbp": 27100.0,
+                    "total_value_gbp": 58000.0,
+                    "reserved_kg": 504.0,
+                    "unreserved_kg": 616.0,
+                    "total_kg": 1120.0,
+                },
+            ],
             "breakdown_top_incoming": [
                 {"product_reference": "ALPHA-1", "incoming_value_gbp": 20000.0, "precommit_pct_product": 0.5},
                 {"product_reference": "BETA-2", "incoming_value_gbp": 17000.0, "precommit_pct_product": 0.8},
@@ -55,6 +77,16 @@ def _sample_payload() -> dict:
             {"date": "2026-03-21", "amount": 10000.0, "label": "REC-2"},
             {"date": "2026-03-19", "amount": 8000.0, "label": "REC-1"},
         ],
+        "reservation_pipeline_by_status": [
+            {"status": "Created", "value_gbp": 12000.0},
+            {"status": "Approved", "value_gbp": 27000.0},
+            {"status": "Completed", "value_gbp": 8000.0},
+        ],
+        "released_value_trend": [
+            {"date": "2026-02-20", "value_gbp": 3000.0},
+            {"date": "2026-02-27", "value_gbp": 5200.0},
+            {"date": "2026-03-05", "value_gbp": 6100.0},
+        ],
         "summary": [
             "Trading Health (this week): 5.4/10",
             "Action: close GBP 18,000 total pre-sell gap across incoming coffees.",
@@ -82,9 +114,29 @@ def test_write_dashboard_html_is_deterministic(tmp_path: Path) -> None:
     assert "Summary &lt;needs&gt; escaping &amp; stability." in first
     assert "Immediate Actions" in first
     assert 'id="theme-toggle"' in first
+    assert "Cash on Hand" in first
     assert "Incoming Reserved Balance" in first
     assert "Incoming Exposure" in first
-    assert 'data-tab-panel="incoming-value"' in first
+    assert 'data-exposure-toggle="value"' in first
+    assert 'data-exposure-toggle="kg"' in first
+    assert 'data-exposure-view="value"' in first
+    assert 'data-exposure-view="kg"' in first
+    assert "Reserved kg" in first
+    assert "Unreserved kg" in first
+    assert "Reservation Pipeline by Status" in first
+    assert "Released Value Trend" in first
+    assert "Incoming Pre-sell Gap Queue" in first
+    assert "Top Incoming Shortfalls" in first
+
+
+def test_dashboard_line_chart_labels_use_clamped_edge_anchors(tmp_path: Path) -> None:
+    out = tmp_path / "dashboard.html"
+    write_dashboard_html(out, _sample_payload())
+    html = out.read_text(encoding="utf-8")
+
+    assert "text-anchor='start' fill='var(--muted)' font-size='10'>3k</text>" in html
+    assert "text-anchor='middle' fill='var(--muted)' font-size='10'>5k</text>" in html
+    assert "text-anchor='end' fill='var(--muted)' font-size='10'>6k</text>" in html
 
 
 def test_dashboard_orders_rows_stably(tmp_path: Path) -> None:
@@ -105,3 +157,84 @@ def test_dashboard_orders_rows_stably(tmp_path: Path) -> None:
     rec1_idx = html.index("REC-1")
     rec2_idx = html.index("REC-2")
     assert rec1_idx < rec2_idx
+
+
+def test_reservation_pipeline_uses_latest_effective_row_per_booking() -> None:
+    activity = pd.DataFrame(
+        [
+            {
+                "id_request": "r1",
+                "id_booking": "b1",
+                "request_type": "reservation",
+                "request_status": "created",
+                "request_date": "2026-03-01",
+                "bags": 10,
+                "bags_remaining": 10,
+                "bag_size_kg": 24,
+                "price_per_kg": 10.0,
+            },
+            {
+                "id_request": "r2",
+                "id_booking": "b1",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "approval_date": "2026-03-03",
+                "bags": 10,
+                "bags_remaining": 6,
+                "bag_size_kg": 24,
+                "price_per_kg": 10.0,
+            },
+            {
+                "id_request": "r3",
+                "id_booking": "b2",
+                "request_type": "reservation",
+                "request_status": "created",
+                "request_date": "2026-03-02",
+                "bags": 5,
+                "bag_size_kg": 24,
+                "price_per_kg": 11.0,
+            },
+        ]
+    )
+
+    result = build_reservation_pipeline_by_status(activity)
+
+    assert result == [
+        {"status": "Created", "value_gbp": 1320.0},
+        {"status": "Approved", "value_gbp": 1440.0},
+    ]
+
+
+def test_released_value_trend_uses_dispatch_then_approval_then_request_date() -> None:
+    activity = pd.DataFrame(
+        [
+            {
+                "request_type": "release",
+                "dispatch_date": "2026-03-05",
+                "bags": 5,
+                "bag_size_kg": 24,
+                "price_per_kg": 10.0,
+            },
+            {
+                "request_type": "release",
+                "approval_date": "2026-03-06",
+                "bags": 4,
+                "bag_size_kg": 24,
+                "price_per_kg": 12.0,
+            },
+            {
+                "request_type": "release",
+                "request_date": "2026-03-06",
+                "bags": 1,
+                "bag_size_kg": 24,
+                "price_per_kg": 20.0,
+            },
+        ]
+    )
+
+    result = build_released_value_trend(activity)
+
+    assert result == [
+        {"date": "2026-03-05", "value_gbp": 1200.0},
+        {"date": "2026-03-06", "value_gbp": 1632.0},
+    ]

@@ -301,6 +301,10 @@ def compute_container_exposure(
 
     incoming["uncommitted_kg"] = (_to_num(incoming["total_kg"]) - _to_num(incoming["reserved_balance_kg"])).clip(lower=0.0)
     incoming["uncommitted_value_gbp"] = incoming["uncommitted_kg"] * _to_num(incoming["landed_cost_per_kg"])
+    incoming["reserved_value_gbp"] = (
+        _to_num(incoming["reserved_balance_kg"]).clip(lower=0.0) *
+        _to_num(incoming["landed_cost_per_kg"])
+    )
     incoming_uncommitted_gbp = float(incoming["uncommitted_value_gbp"].sum())
 
     # ---- Dynamic precommit discipline ----
@@ -405,6 +409,36 @@ def compute_container_exposure(
             "below_target": bool(r["below_target"]),
         })
 
+    # ---- Incoming by landing date (uses reservation balance, not raw activity summing) ----
+    by_landing = (
+        incoming.assign(
+            landing_date_key=incoming["Landing Date"].dt.strftime("%Y-%m-%d").fillna("Unknown"),
+        )
+        .groupby("landing_date_key", as_index=False)[
+            [
+                "reserved_value_gbp",
+                "uncommitted_value_gbp",
+                "incoming_value_gbp",
+                "reserved_balance_kg",
+                "uncommitted_kg",
+                "total_kg",
+            ]
+        ]
+        .sum()
+        .sort_values(["landing_date_key"], ascending=[True])
+    )
+    incoming_by_landing_date = []
+    for _, r in by_landing.iterrows():
+        incoming_by_landing_date.append({
+            "landing_date": str(r["landing_date_key"]),
+            "reserved_value_gbp": round(float(r["reserved_value_gbp"]), 2),
+            "unreserved_value_gbp": round(float(r["uncommitted_value_gbp"]), 2),
+            "total_value_gbp": round(float(r["incoming_value_gbp"]), 2),
+            "reserved_kg": round(float(r["reserved_balance_kg"]), 2),
+            "unreserved_kg": round(float(r["uncommitted_kg"]), 2),
+            "total_kg": round(float(r["total_kg"]), 2),
+        })
+
     # ---- Top at-risk (biggest shortfall, value-weighted) ----
     incoming["shortfall_pct"] = (incoming["target_precommit"] - incoming["precommit_pct_product"]).clip(lower=0.0)
     incoming["shortfall_value_gbp"] = incoming["incoming_value_gbp"] * incoming["shortfall_pct"]
@@ -450,6 +484,7 @@ def compute_container_exposure(
         "overlap_flag": bool(overlap_flag),
         "overlap_window_details": overlap_window_details,
 
+        "incoming_by_landing_date": incoming_by_landing_date,
         "breakdown_top_incoming": breakdown_top_incoming,
         "top_at_risk_incoming": top_at_risk_incoming,
     }
