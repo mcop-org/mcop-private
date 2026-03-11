@@ -1,9 +1,28 @@
 from __future__ import annotations
 import pandas as pd
 from dataclasses import dataclass
+import re
 
 def parse_dt(x):
-    return pd.to_datetime(x, errors="coerce", format="mixed", dayfirst=True)
+    iso_pattern = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+    def _parse_one(value):
+        if value is None:
+            return pd.NaT
+        text = str(value).strip()
+        if not text:
+            return pd.NaT
+        if iso_pattern.match(text):
+            return pd.to_datetime(text, errors="coerce", format="%Y-%m-%d")
+        return pd.to_datetime(text, errors="coerce", format="mixed", dayfirst=True)
+
+    if isinstance(x, pd.Series):
+        return x.apply(_parse_one)
+    if isinstance(x, pd.Index):
+        return pd.DatetimeIndex([_parse_one(v) for v in x])
+    if isinstance(x, (list, tuple)):
+        return pd.DatetimeIndex([_parse_one(v) for v in x])
+    return _parse_one(x)
 
 def require_cols(df: pd.DataFrame, cols: set[str], name: str):
     missing = cols - set(df.columns)
