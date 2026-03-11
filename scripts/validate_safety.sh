@@ -3,15 +3,16 @@ set -euo pipefail
 
 echo "== Safety gate =="
 
-# 1) Block changes to RISK CORE (git diff vs main)
+# 1) Compute changed files robustly for local and CI/shallow clones
 if git rev-parse --verify main >/dev/null 2>&1; then
-  base_ref="main"
+  changed_files="$(git diff --name-only main...HEAD || true)"
+elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+  changed_files="$(git diff --name-only HEAD~1...HEAD || true)"
 else
-  base_ref="HEAD~1"
+  changed_files="$(git diff-tree --no-commit-id --name-only -r HEAD || true)"
 fi
 
-changed_files="$(git diff --name-only "$base_ref"...HEAD || true)"
-
+# 2) Block changes to RISK CORE
 risk_core_regex="$(awk '
   NF==0 {next}
   $0 ~ /^#/ {next}
@@ -26,14 +27,14 @@ if [[ -n "${risk_core_regex}" ]]; then
   fi
 fi
 
-# 2) Block new deps (simple heuristic)
+# 3) Block new deps (simple heuristic)
 if echo "$changed_files" | grep -E '(^pyproject\.toml$|^requirements\.txt$|^requirements/|^Pipfile|^poetry\.lock$)' >/dev/null 2>&1; then
   echo "❌ Safety gate failed: dependency file changed (requires explicit approval)."
   echo "$changed_files" | grep -E '(^pyproject\.toml$|^requirements\.txt$|^requirements/|^Pipfile|^poetry\.lock$)' || true
   exit 1
 fi
 
-# 3) Run tests
+# 4) Run tests
 echo "== Running tests =="
 pytest -q
 
