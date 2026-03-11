@@ -28,6 +28,7 @@ from mcop.liquidity.reporting import (
 )
 from mcop.exposure.container import compute_container_exposure
 from mcop.report.html import write_weekly_brief
+from mcop.report.dashboard import write_dashboard_html
 
 def write_json(path: Path, payload: dict):
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -761,6 +762,8 @@ def main():
 
 
     write_weekly_brief(html_path, payload)
+    dashboard_path = paths.out_dir / f"Dashboard_{as_of}.html"
+    write_dashboard_html(dashboard_path, payload)
     # === Snapshot regression check ===
     issues = run_snapshot_check(paths.out_dir, html_path)
     if issues:
