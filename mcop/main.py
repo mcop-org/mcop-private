@@ -49,6 +49,31 @@ def build_weekly_focus_line(container_exposure: dict) -> str | None:
         return None
     return f"This week’s focus: increase pre-sell on {', '.join(focus_refs)}."
 
+
+def _parse_snapshot_ts(snapshot_date: object) -> pd.Timestamp:
+    snapshot_ts = pd.to_datetime(snapshot_date, errors="coerce")
+    if pd.isna(snapshot_ts):
+        raise ValueError(f"Invalid snapshot_date: {snapshot_date}")
+    return snapshot_ts.normalize()
+
+
+def _days_between_dates(snapshot_ts: pd.Timestamp, landing_date: object) -> int | None:
+    landing_ts = pd.to_datetime(landing_date, errors="coerce")
+    if pd.isna(landing_ts):
+        return None
+    return int((landing_ts.normalize() - snapshot_ts).days)
+
+
+def _apply_snapshot_days_to_landing(rows: object, snapshot_ts: pd.Timestamp) -> list[dict]:
+    updated_rows: list[dict] = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        updated = dict(row)
+        updated["days_to_landing"] = _days_between_dates(snapshot_ts, updated.get("landing_date"))
+        updated_rows.append(updated)
+    return updated_rows
+
 def _fmt_gbp(x: float) -> str:
     try:
         return f"£{float(x):,.0f}"
@@ -109,6 +134,7 @@ def main():
     args = ap.parse_args()
 
     snapshot_date = args.as_of or date.today().isoformat()
+    snapshot_ts = _parse_snapshot_ts(snapshot_date)
     paths = get_paths()
     inputs = load_inputs(paths.data_dir)
     
@@ -200,10 +226,21 @@ def main():
         "base": base.to_dict(),
         "stress": stress.to_dict(),
         "container_exposure": container_exposure,
-        "top_payables_60": top_events_within(payables, as_of_ts, 60, product_map),
-        "top_receivables_60": top_events_within(receivables, as_of_ts, 60, product_map),
+        "top_payables_60": top_events_within(payables, snapshot_ts, 60, product_map),
+        "top_receivables_60": top_events_within(receivables, snapshot_ts, 60, product_map),
         "released_value_trend": build_released_value_trend(inputs.activity),
     }
+
+    container_exposure = dict(container_exposure)
+    container_exposure["top_at_risk_incoming"] = _apply_snapshot_days_to_landing(
+        container_exposure.get("top_at_risk_incoming"),
+        snapshot_ts,
+    )
+    container_exposure["breakdown_top_incoming"] = _apply_snapshot_days_to_landing(
+        container_exposure.get("breakdown_top_incoming"),
+        snapshot_ts,
+    )
+    payload["container_exposure"] = container_exposure
     
     # ---------------------------
     # LAYER 2: LANDED STOCK AGEING (unsold capital already in UK)
@@ -557,7 +594,7 @@ def main():
     
 
     # === Phase 3.4 — Next 14 days cash pinch (simple) ===
-    pinch_14d = compute_pinch_14d(as_of_ts, payables, receivables, days=14)
+    pinch_14d = compute_pinch_14d(snapshot_ts, payables, receivables, days=14)
 
     # --- 14-day Cash Alert (simple urgency badge) ---
     # GREEN: net >= 0
@@ -630,7 +667,7 @@ def main():
             x = 0.0
         return f"£{abs(x):,.0f}"
 
-    pinch_30d = compute_pinch_14d(as_of_ts, payables, receivables, days=30)
+    pinch_30d = compute_pinch_14d(snapshot_ts, payables, receivables, days=30)
     payload["pinch_30d"] = pinch_30d
 
     # ---------------------------
@@ -809,7 +846,7 @@ def main():
 
 
     write_weekly_brief(html_path, payload)
-    dashboard_path = paths.out_dir / f"Dashboard_{as_of}.html"
+    dashboard_path = paths.out_dir / f"Dashboard_{snapshot_date}.html"
     write_dashboard_html(dashboard_path, payload)
     # === Snapshot regression check ===
     issues = run_snapshot_check(paths.out_dir, html_path)

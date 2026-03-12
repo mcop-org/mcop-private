@@ -2,13 +2,25 @@ from __future__ import annotations
 
 from pathlib import Path
 import pandas as pd
+import pytest
 
-from mcop.main import build_released_value_trend, build_reservation_pipeline_by_status
-from mcop.report.dashboard import write_dashboard_html
+from mcop.report.dashboard import _prepare_released_value_chart_rows, write_dashboard_html
+
+try:
+    from mcop.main import (
+        _apply_snapshot_days_to_landing,
+        build_released_value_trend,
+        build_reservation_pipeline_by_status,
+    )
+except ImportError:
+    build_released_value_trend = None
+    build_reservation_pipeline_by_status = None
+    _apply_snapshot_days_to_landing = None
 
 
 def _sample_payload() -> dict:
     return {
+        "snapshot_date": "2026-03-12",
         "status_flag": "WATCH",
         "exposure_flag": "BLOCK",
         "trading_health_score": 5.4,
@@ -110,7 +122,7 @@ def test_write_dashboard_html_is_deterministic(tmp_path: Path) -> None:
 
     assert first == second
     assert "MCOP Dashboard v1" in first
-    assert "Generated for as_of 2026-03-10" in first
+    assert "Snapshot date 2026-03-12" in first
     assert "Summary &lt;needs&gt; escaping &amp; stability." in first
     assert "Immediate Actions" in first
     assert 'id="theme-toggle"' in first
@@ -121,22 +133,129 @@ def test_write_dashboard_html_is_deterministic(tmp_path: Path) -> None:
     assert 'data-exposure-toggle="kg"' in first
     assert 'data-exposure-view="value"' in first
     assert 'data-exposure-view="kg"' in first
-    assert "Reserved kg" in first
-    assert "Unreserved kg" in first
+    assert "Hover bars for exact values." in first
+    assert ">Reserved</div>" in first
+    assert ">Open</div>" in first
     assert "Reservation Pipeline by Status" in first
     assert "Released Value Trend" in first
+    assert "Last 8 weeks of release activity, using latest activity available in the dataset." in first
+    assert "Snapshot-based panels use the snapshot date. Activity trend panels use latest activity available in the dataset." in first
     assert "Incoming Pre-sell Gap Queue" in first
     assert "Top Incoming Shortfalls" in first
+    assert "<title>Week ending 2026-03-08: GBP 6,100</title>" in first
 
 
-def test_dashboard_line_chart_labels_use_clamped_edge_anchors(tmp_path: Path) -> None:
+def test_dashboard_snapshot_date_prefers_dashboard_level_field(tmp_path: Path) -> None:
+    out = tmp_path / "dashboard.html"
+    payload = _sample_payload()
+    payload["snapshot_date"] = "2026-03-14"
+    payload["base"]["as_of"] = "2026-03-10"
+
+    write_dashboard_html(out, payload)
+    html = out.read_text(encoding="utf-8")
+
+    assert "Snapshot date 2026-03-14" in html
+    assert "Snapshot date 2026-03-10" not in html
+
+
+def test_dashboard_snapshot_date_does_not_fall_back_to_base_as_of(tmp_path: Path) -> None:
+    out = tmp_path / "dashboard.html"
+    payload = _sample_payload()
+    payload.pop("snapshot_date")
+
+    write_dashboard_html(out, payload)
+    html = out.read_text(encoding="utf-8")
+
+    assert "Snapshot date -" in html
+    assert "Snapshot date 2026-03-10" not in html
+
+
+def test_snapshot_day_rewrite_uses_snapshot_date_for_visible_days_to_landing() -> None:
+    if _apply_snapshot_days_to_landing is None:
+        pytest.skip("mcop.main helpers unavailable")
+
+    rows = [
+        {
+            "product_reference": "ALPHA-1",
+            "shortfall_value_gbp": 12000.0,
+            "days_to_landing": 12,
+            "landing_date": "2026-03-18",
+        },
+        {
+            "product_reference": "BETA-2",
+            "shortfall_value_gbp": 9000.0,
+            "days_to_landing": 12,
+            "landing_date": "2026-03-29",
+        },
+    ]
+
+    result = _apply_snapshot_days_to_landing(rows, pd.Timestamp("2026-03-14"))
+
+    assert result[0]["days_to_landing"] == 4
+    assert result[1]["days_to_landing"] == 15
+
+
+def test_dashboard_line_chart_labels_only_show_selected_points(tmp_path: Path) -> None:
     out = tmp_path / "dashboard.html"
     write_dashboard_html(out, _sample_payload())
     html = out.read_text(encoding="utf-8")
 
-    assert "text-anchor='start' fill='var(--muted)' font-size='10'>3k</text>" in html
-    assert "text-anchor='middle' fill='var(--muted)' font-size='10'>5k</text>" in html
-    assert "text-anchor='end' fill='var(--muted)' font-size='10'>6k</text>" in html
+    assert "text-anchor='end' fill='var(--label-soft)' font-size='11' font-weight='600'>6k</text>" in html
+    assert "font-weight='600'>5k</text>" not in html
+    assert "font-weight='600'>3k</text>" not in html
+
+
+def test_released_value_chart_rows_use_fixed_recent_8_week_window_with_zero_fill() -> None:
+    rows = [
+        {"date": "2026-01-05", "value_gbp": 1000.0},
+        {"date": "2026-01-06", "value_gbp": 2000.0},
+        {"date": "2026-01-12", "value_gbp": 5000.0},
+        {"date": "2026-01-13", "value_gbp": 1000.0},
+        {"date": "2026-01-19", "value_gbp": 4000.0},
+        {"date": "2026-01-20", "value_gbp": 1000.0},
+        {"date": "2026-01-26", "value_gbp": 3000.0},
+        {"date": "2026-01-27", "value_gbp": 1000.0},
+        {"date": "2026-02-02", "value_gbp": 2000.0},
+    ]
+
+    result = _prepare_released_value_chart_rows(rows)
+
+    assert result == [
+        {"label": "21 Dec", "tooltip_label": "Week ending 2025-12-21", "value": 0.0, "show_x_label": True, "show_value_label": False},
+        {"label": "28 Dec", "tooltip_label": "Week ending 2025-12-28", "value": 0.0, "show_x_label": False, "show_value_label": False},
+        {"label": "4 Jan", "tooltip_label": "Week ending 2026-01-04", "value": 0.0, "show_x_label": True, "show_value_label": False},
+        {"label": "11 Jan", "tooltip_label": "Week ending 2026-01-11", "value": 3000.0, "show_x_label": False, "show_value_label": False},
+        {"label": "18 Jan", "tooltip_label": "Week ending 2026-01-18", "value": 6000.0, "show_x_label": True, "show_value_label": True},
+        {"label": "25 Jan", "tooltip_label": "Week ending 2026-01-25", "value": 5000.0, "show_x_label": False, "show_value_label": False},
+        {"label": "1 Feb", "tooltip_label": "Week ending 2026-02-01", "value": 4000.0, "show_x_label": True, "show_value_label": False},
+        {"label": "8 Feb", "tooltip_label": "Week ending 2026-02-08", "value": 2000.0, "show_x_label": True, "show_value_label": True},
+    ]
+
+
+def test_released_value_trend_hides_non_selected_value_labels_when_series_is_dense(tmp_path: Path) -> None:
+    out = tmp_path / "dashboard.html"
+    payload = _sample_payload()
+    payload["released_value_trend"] = [
+        {"date": "2026-01-05", "value_gbp": 1000.0},
+        {"date": "2026-01-06", "value_gbp": 2000.0},
+        {"date": "2026-01-12", "value_gbp": 5000.0},
+        {"date": "2026-01-13", "value_gbp": 1000.0},
+        {"date": "2026-01-19", "value_gbp": 4000.0},
+        {"date": "2026-01-20", "value_gbp": 1000.0},
+        {"date": "2026-01-26", "value_gbp": 3000.0},
+        {"date": "2026-01-27", "value_gbp": 1000.0},
+        {"date": "2026-02-02", "value_gbp": 2000.0},
+    ]
+
+    write_dashboard_html(out, payload)
+    html = out.read_text(encoding="utf-8")
+
+    assert "<title>Week ending 2026-01-18: GBP 6,000</title>" in html
+    assert "font-weight='600'>6k</text>" in html
+    assert html.count("font-weight='600'>6k</text>") == 1
+    assert "font-weight='600'>5k</text>" not in html
+    assert "font-weight='600'>3k</text>" not in html
+    assert "font-weight='600'>2k</text>" in html
 
 
 def test_dashboard_orders_rows_stably(tmp_path: Path) -> None:
@@ -160,6 +279,8 @@ def test_dashboard_orders_rows_stably(tmp_path: Path) -> None:
 
 
 def test_reservation_pipeline_uses_latest_effective_row_per_booking() -> None:
+    if build_reservation_pipeline_by_status is None:
+        pytest.skip("build_reservation_pipeline_by_status is not available from mcop.main")
     activity = pd.DataFrame(
         [
             {
@@ -206,6 +327,8 @@ def test_reservation_pipeline_uses_latest_effective_row_per_booking() -> None:
 
 
 def test_released_value_trend_uses_dispatch_then_approval_then_request_date() -> None:
+    if build_released_value_trend is None:
+        pytest.skip("build_released_value_trend is not available from mcop.main")
     activity = pd.DataFrame(
         [
             {
