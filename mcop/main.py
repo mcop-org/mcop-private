@@ -1,4 +1,5 @@
 from __future__ import annotations
+from datetime import date
 from mcop.layer2_aging import compute_landed_aging
 import argparse
 import json
@@ -53,17 +54,61 @@ def _fmt_gbp(x: float) -> str:
         return f"£{float(x):,.0f}"
     except Exception:
         return "£—"
+
+
+def build_released_value_trend(activity: pd.DataFrame) -> list[dict]:
+    required = {"request_type", "bags", "bag_size_kg", "price_per_kg"}
+    missing = required - set(activity.columns)
+    if missing:
+        return []
+
+    releases = activity.copy()
+    releases["request_type"] = releases["request_type"].astype(str).str.lower().str.strip()
+    releases = releases[releases["request_type"] == "release"].copy()
+    if releases.empty:
+        return []
+
+    for col in ("dispatch_date", "approval_date", "request_date"):
+        if col not in releases.columns:
+            releases[col] = pd.NA
+
+    releases["dispatch_dt"] = pd.to_datetime(releases["dispatch_date"], errors="coerce", format="%Y-%m-%d")
+    releases["approval_dt"] = pd.to_datetime(releases["approval_date"], errors="coerce", format="%Y-%m-%d")
+    releases["request_dt"] = pd.to_datetime(releases["request_date"], errors="coerce", format="%Y-%m-%d")
+    releases["event_date"] = releases["dispatch_dt"].fillna(releases["approval_dt"]).fillna(releases["request_dt"])
+
+    for col in ("bags", "bag_size_kg", "price_per_kg"):
+        releases[col] = pd.to_numeric(releases[col], errors="coerce").fillna(0.0)
+
+    releases["value_gbp"] = releases["bags"] * releases["bag_size_kg"] * releases["price_per_kg"]
+    releases = releases.dropna(subset=["event_date"])
+    releases = releases[releases["value_gbp"] > 0].copy()
+    if releases.empty:
+        return []
+
+    grouped = (
+        releases.assign(event_date=releases["event_date"].dt.normalize())
+        .groupby("event_date", as_index=False)["value_gbp"]
+        .sum()
+        .sort_values("event_date")
+    )
+    return [
+        {"date": row["event_date"].date().isoformat(), "value_gbp": round(float(row["value_gbp"]), 2)}
+        for _, row in grouped.iterrows()
+    ]
     
 ENGINE_VERSION = "v1.0.0-stable"
 
 def main():
     ap = argparse.ArgumentParser(prog="mcop")
     ap.add_argument("cmd", choices=["run"])
+    ap.add_argument("--as-of", type=str, default=None)
     ap.add_argument("--precommit-check", action="store_true")
     ap.add_argument("--commit-cost-gbp", type=float, default=150000.0)
     ap.add_argument("--commit-due-in-days", type=int, default=30)
     args = ap.parse_args()
 
+    snapshot_date = args.as_of or date.today().isoformat()
     paths = get_paths()
     inputs = load_inputs(paths.data_dir)
     
@@ -148,6 +193,7 @@ def main():
     # ---------------------------
     
     payload = {
+        "snapshot_date": snapshot_date,
         "status_flag": status,
         "exposure_flag": container_exposure.get("exposure_flag", "OK"),
         "summary": summary,
@@ -156,6 +202,7 @@ def main():
         "container_exposure": container_exposure,
         "top_payables_60": top_events_within(payables, as_of_ts, 60, product_map),
         "top_receivables_60": top_events_within(receivables, as_of_ts, 60, product_map),
+        "released_value_trend": build_released_value_trend(inputs.activity),
     }
     
     # ---------------------------
