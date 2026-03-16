@@ -3,17 +3,37 @@ name: mcop-ci
 on:
   push:
     branches: ["**"]
-    tags: ["**"]
   pull_request:
 
 jobs:
-  test-and-safety-gate:
+  safety-gate:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Run safety gate
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_REF: ${{ github.sha }}
+        run: |
+          chmod +x ./scripts/validate_safety.sh
+          ./scripts/validate_safety.sh
+
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -27,7 +47,5 @@ jobs:
           if [ -f pyproject.toml ]; then pip install -e .; fi
           pip install pytest pandas
 
-      - name: Run safety gate
-        run: |
-          chmod +x ./scripts/validate_safety.sh
-          ./scripts/validate_safety.sh
+      - name: Run pytest
+        run: pytest -q
