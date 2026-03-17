@@ -532,6 +532,7 @@ def main():
     container_d = payload.get("container_exposure", {}) or {}
 
     snapshot = {
+        "snapshot_date": payload.get("snapshot_date"),
         "as_of": base_d.get("as_of"),
         "total_presell_gap": (container_d.get("dynamic_precommit", {}) or {}).get("value_below_target_gbp"),
         "deployment_ratio": container_d.get("capital_deployment_ratio"),
@@ -793,8 +794,8 @@ def main():
 
     write_json(paths.out_dir / "liquidity_report.json", payload)
 
-    as_of = payload.get("base", {}).get("as_of", "unknown")
-    html_path = paths.out_dir / f"WeeklyBrief_{as_of}.html"
+    report_date = str(payload.get("snapshot_date") or "unknown")
+    html_path = paths.out_dir / f"WeeklyBrief_{report_date}.html"
     
 
     # ============================================
@@ -860,6 +861,7 @@ def main():
     # ---------------------------
     try:
         dp = {
+            "snapshot_date": payload.get("snapshot_date"),
             "as_of": payload.get("base", {}).get("as_of") or payload.get("as_of"),
             "status_flag": payload.get("status_flag"),
             "exposure_flag": payload.get("exposure_flag"),
@@ -989,7 +991,7 @@ def main():
 
         dp["this_week"]["actions"] = dp["this_week"]["actions"][:3]
         dp["engine_version"] = ENGINE_VERSION
-        as_of = dp.get("as_of") or "unknown"
+        report_date = str(dp.get("snapshot_date") or "unknown")
         
         # ---------------------------
         # Minimal patch: attach Top 5 blocks + consistent labels
@@ -1049,7 +1051,7 @@ def main():
         dp["next_actions"] = evaluate_rules(engine_input)
         
 
-        out_path = paths.out_dir / f"DecisionPack_{as_of}.json"
+        out_path = paths.out_dir / f"DecisionPack_{report_date}.json"
         out_path.write_text(json.dumps(dp, indent=2, sort_keys=True, default=str), encoding="utf-8")
         print(f"✅ Wrote Decision Pack: {out_path}")
 

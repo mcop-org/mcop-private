@@ -128,7 +128,7 @@ def write_weekly_brief(path: Path, payload: dict) -> None:
     stress = payload.get("stress", {}) or {}
     container = payload.get("container_exposure", {}) or {}
 
-    as_of = base.get("as_of", "—")
+    report_date = payload.get("snapshot_date") or base.get("as_of", "—")
     status_flag = payload.get("status_flag", "—")
     exposure_flag = payload.get("exposure_flag", payload.get("container_exposure", {}).get("exposure_flag", "—"))
 
@@ -194,8 +194,8 @@ def write_weekly_brief(path: Path, payload: dict) -> None:
             return "var(--red)"
         return "var(--amber)"
 
-    # Deterministic footer timestamp (presentation-only): prefer as_of over system clock
-    now_utc = f"{as_of} (as_of)"
+    # Deterministic footer timestamp (presentation-only): prefer explicit report date over system clock
+    now_utc = f"{report_date} (report_date)"
 
 
     # --- HTML ---
@@ -338,7 +338,7 @@ td.mono{font-family:var(--mono);color:var(--muted);font-size:12px}
     html.append("<div class='header'>")
     html.append("<div>")
     html.append("<h1 class='h1'>MCOP Weekly Brief</h1>")
-    html.append(f"<div class='sub'>As of <strong>{_safe(as_of)}</strong></div>")
+    html.append(f"<div class='sub'>As of <strong>{_safe(report_date)}</strong></div>")
     if health_score is not None:
         label = "Green — healthy" if float(health_score) >= 6.5 else ("Amber — needs attention" if float(health_score) >= 4.0 else "Red — fragile")
         dot = f"<span class='healthdot' style='background:{dot_colour}'></span>" if dot_colour else ""
