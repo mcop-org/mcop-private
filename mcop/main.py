@@ -161,8 +161,8 @@ def main():
 
     base = compute_liquidity_snapshot(inputs.cash_position, payables, receivables)
 
-    as_of_ts, _cash = latest_as_of(inputs.cash_position)
-    receivables_stress = stress_receivables(receivables, as_of_ts, 0.20, 0.15, 0.02)
+    finance_anchor_ts, _cash = latest_as_of(inputs.cash_position)
+    receivables_stress = stress_receivables(receivables, finance_anchor_ts, 0.20, 0.15, 0.02)
     stress = compute_liquidity_snapshot(inputs.cash_position, payables, receivables_stress)
 
     status = governance_flag(base.liquidity_60, base.runway_days)
@@ -172,7 +172,7 @@ def main():
     products=inputs.products,
     costs=inputs.costs,
     activity=inputs.activity,
-    as_of=as_of_ts,
+    as_of=finance_anchor_ts,
     cash_on_hand=float(base.cash_on_hand),
     liquidity_60=float(base.liquidity_60),
 )
@@ -530,10 +530,12 @@ def main():
 
     base_d = payload.get("base", {}) or {}
     container_d = payload.get("container_exposure", {}) or {}
+    # base.as_of remains the internal finance/cash anchor; snapshot_date is the reporting date.
+    finance_anchor_date = base_d.get("as_of")
 
     snapshot = {
         "snapshot_date": payload.get("snapshot_date"),
-        "as_of": base_d.get("as_of"),
+        "as_of": finance_anchor_date,
         "total_presell_gap": (container_d.get("dynamic_precommit", {}) or {}).get("value_below_target_gbp"),
         "deployment_ratio": container_d.get("capital_deployment_ratio"),
         "liquidity_60": base_d.get("liquidity_60"),
@@ -860,9 +862,10 @@ def main():
     # Decision Pack v1 (founder-friendly, minimal JSON)
     # ---------------------------
     try:
+        finance_anchor_date = (payload.get("base", {}) or {}).get("as_of")
         dp = {
             "snapshot_date": payload.get("snapshot_date"),
-            "as_of": payload.get("base", {}).get("as_of") or payload.get("as_of"),
+            "as_of": finance_anchor_date,
             "status_flag": payload.get("status_flag"),
             "exposure_flag": payload.get("exposure_flag"),
             "trading_health_score": payload.get("trading_health_score"),
