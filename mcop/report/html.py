@@ -98,6 +98,57 @@ def _severity_rank(sev: str) -> int:
     order = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
     return order.get(s, 0)
 
+
+def _money_with_currency(amount, currency_code) -> str:
+    try:
+        return f"{str(currency_code or '—').upper()} {float(amount):,.2f}"
+    except Exception:
+        return f"{str(currency_code or '—').upper()} —"
+
+
+def _render_currency_totals(title: str, rows: list[dict]) -> str:
+    out = []
+    out.append("<div class='card wide'>")
+    out.append(f"<p class='section-title'>{_safe(title)}</p>")
+    out.append("<div class='hr'></div>")
+    if not rows:
+        out.append("<p class='muted'>No items.</p>")
+    else:
+        out.append("<table>")
+        out.append("<thead><tr><th>Currency</th><th>Amount</th></tr></thead>")
+        out.append("<tbody>")
+        for row in rows:
+            out.append(
+                f"<tr><td class='mono'>{_safe(row.get('currency_code') or '—')}</td>"
+                f"<td><strong>{_safe(_money_with_currency(row.get('amount'), row.get('currency_code')))}</strong></td></tr>"
+            )
+        out.append("</tbody></table>")
+    out.append("</div>")
+    return "\n".join(out)
+
+
+def _render_xero_open_table(title: str, rows: list[dict]) -> str:
+    out = []
+    out.append("<div class='card full'>")
+    out.append(f"<p class='section-title'>{_safe(title)}</p>")
+    out.append("<div class='hr'></div>")
+    out.append("<table>")
+    out.append("<thead><tr><th>Document</th><th>Counterparty</th><th>Due</th><th>Currency</th><th>Amount Due</th></tr></thead>")
+    out.append("<tbody>")
+    if not rows:
+        out.append("<tr><td colspan='5' class='muted'>No items.</td></tr>")
+    else:
+        for row in rows:
+            out.append(
+                f"<tr><td><strong>{_safe(row.get('source_doc_no') or '—')}</strong> <span class='mono'>({_safe(row.get('source_id') or '—')})</span></td>"
+                f"<td>{_safe(row.get('counterparty_name') or '—')}</td>"
+                f"<td class='mono'>{_safe(row.get('due_date') or '—')}</td>"
+                f"<td class='mono'>{_safe(row.get('currency_code') or '—')}</td>"
+                f"<td><strong>{_safe(_money_with_currency(row.get('amount_due'), row.get('currency_code')))}</strong></td></tr>"
+            )
+    out.append("</tbody></table></div>")
+    return "\n".join(out)
+
 def _health_colour(score):
     if score is None:
         return None
@@ -159,6 +210,7 @@ def write_weekly_brief(path: Path, payload: dict) -> None:
 
     top_payables = payload.get("top_payables_60", []) or []
     top_receivables = payload.get("top_receivables_60", []) or []
+    xero_import = payload.get("xero_import") or {}
 
 
     # --- Visual bar metrics (derived from existing payload) ---
@@ -515,6 +567,27 @@ td.mono{font-family:var(--mono);color:var(--muted);font-size:12px}
 
     html.append(_render_table("Top payables (next 60d)", top_payables))
     html.append(_render_table("Top receivables (next 60d)", top_receivables))
+
+    if xero_import.get("available"):
+        html.append("<div class='card full'>")
+        html.append("<p class='section-title'>Xero Sidecar Import</p>")
+        html.append("<div class='hr'></div>")
+        html.append("<ul>")
+        html.append(f"<li>Snapshot date: <strong>{_safe(xero_import.get('snapshot_date') or '—')}</strong></li>")
+        html.append(f"<li>Organisation: <strong>{_safe(xero_import.get('organisation_name') or '—')}</strong></li>")
+        html.append(f"<li>Base currency: <strong>{_safe(xero_import.get('base_currency') or '—')}</strong></li>")
+        if xero_import.get("currency_warning"):
+            html.append(f"<li>{_safe(xero_import.get('currency_warning'))}</li>")
+        for line in xero_import.get("comparison_lines") or []:
+            html.append(f"<li>{_safe(line)}</li>")
+        html.append("</ul>")
+        html.append("</div>")
+
+        html.append(_render_currency_totals("Xero bank balances by currency", xero_import.get("bank_totals_by_currency") or []))
+        html.append(_render_currency_totals("Xero open receivables by currency", xero_import.get("receivables_totals_by_currency") or []))
+        html.append(_render_currency_totals("Xero open payables by currency", xero_import.get("payables_totals_by_currency") or []))
+        html.append(_render_xero_open_table("Xero top receivables", xero_import.get("top_receivables") or []))
+        html.append(_render_xero_open_table("Xero top payables", xero_import.get("top_payables") or []))
 
     html.append("</div>")  # grid
 

@@ -5,6 +5,8 @@ import re
 
 import pandas as pd
 
+from mcop.ingest.xero_v1 import XeroSidecar, load_xero_snapshot
+
 
 DATE_COLUMNS_BY_INPUT = {
     "products": ("landing_date",),
@@ -129,13 +131,17 @@ class Inputs:
     costs: pd.DataFrame
     cash_position: pd.DataFrame
     activity: pd.DataFrame
+    xero_sidecar: XeroSidecar | None
 
 
-def load_inputs(data_dir: Path) -> Inputs:
+def load_inputs(data_dir: Path, xero_snapshot_path: Path | None = None) -> Inputs:
     products_df, products_source = _read_input(data_dir, "products")
     costs_df, costs_source = _read_input(data_dir, "product_costs_protected")
     cash_df, cash_source = _read_input(data_dir, "cash_position")
     activity_df, activity_source = _read_input(data_dir, "activity")
+    xero_sidecar = None
+    if xero_snapshot_path is not None and xero_snapshot_path.exists():
+        xero_sidecar = load_xero_snapshot(xero_snapshot_path)
 
     return Inputs(
         products=_normalise_dates(
@@ -158,4 +164,5 @@ def load_inputs(data_dir: Path) -> Inputs:
             DATE_COLUMNS_BY_INPUT["activity"],
             activity_source,
         ),
+        xero_sidecar=xero_sidecar,
     )

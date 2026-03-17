@@ -14,6 +14,7 @@ from mcop.engine.rules import evaluate_rules
 
 from mcop.config import get_paths
 from mcop.ingest.loaders import load_inputs
+from mcop.ingest.xero_v1 import build_xero_reporting_payload
 from mcop.liquidity.engine import (
     latest_as_of,
     build_payables_from_costs,
@@ -136,7 +137,11 @@ def main():
     snapshot_date = args.as_of or date.today().isoformat()
     snapshot_ts = _parse_snapshot_ts(snapshot_date)
     paths = get_paths()
-    inputs = load_inputs(paths.data_dir)
+    xero_snapshot_path = getattr(paths, "xero_snapshot_path", None)
+    if xero_snapshot_path is None:
+        inputs = load_inputs(paths.data_dir)
+    else:
+        inputs = load_inputs(paths.data_dir, xero_snapshot_path)
     
         # --- Dynamic schema snapshot (read-only, non-blocking) ---
     try:
@@ -230,6 +235,15 @@ def main():
         "top_receivables_60": top_events_within(receivables, snapshot_ts, 60, product_map),
         "released_value_trend": build_released_value_trend(inputs.activity),
     }
+
+    xero_sidecar = getattr(inputs, "xero_sidecar", None)
+    if xero_sidecar is not None:
+        payload["xero_import"] = build_xero_reporting_payload(
+            xero_sidecar,
+            legacy_cash_on_hand=base.cash_on_hand,
+            legacy_receivables_60=base.receivables_60,
+            legacy_payables_60=base.payables_60,
+        )
 
     container_exposure = dict(container_exposure)
     container_exposure["top_at_risk_incoming"] = _apply_snapshot_days_to_landing(

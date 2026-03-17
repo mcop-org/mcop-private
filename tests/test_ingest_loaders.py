@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 import pandas as pd
 import pytest
@@ -258,6 +259,77 @@ def test_load_inputs_normalises_known_date_columns_to_iso(tmp_path: Path) -> Non
     assert inputs.activity.loc[0, "amendment_date"] == "2026-03-04"
     assert inputs.activity.loc[0, "dispatch_date"] == "2026-03-05"
     assert inputs.activity.loc[0, "landing_date"] == "2025-01-15"
+
+
+def test_load_inputs_optionally_loads_xero_snapshot_sidecar(tmp_path: Path) -> None:
+    (tmp_path / "products.csv").write_text(
+        "product_id,product_reference\n1,product_1\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "product_costs_protected.csv").write_text(
+        "product_id\n1\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "cash_position.csv").write_text(
+        "date,cash_on_hand\n2026-01-12,1500.0\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "activity.csv").write_text(
+        "product_id\n1\n",
+        encoding="utf-8",
+    )
+
+    snapshot_path = tmp_path / "xero_snapshot_v1.json"
+    snapshot_path.write_text(
+        json.dumps(
+            {
+                "schema_version": "xero_snapshot_v1",
+                "snapshot_date": "2026-03-17",
+                "source_system": "xero",
+                "organisation": {
+                    "tenant_id": "tenant-1",
+                    "organisation_name": "Example Ltd",
+                    "base_currency": "GBP",
+                },
+                "receivables": [
+                    {
+                        "invoice_id": "inv-1",
+                        "invoice_number": "INV-1",
+                        "contact_id": "contact-1",
+                        "contact_name": "Customer A",
+                        "status": "AUTHORISED",
+                        "currency_code": "GBP",
+                        "invoice_date": "2026-03-01",
+                        "due_date": "2026-03-31",
+                        "amount_total": 1000.0,
+                        "amount_paid": 200.0,
+                        "amount_credited": 0.0,
+                        "amount_due": 800.0,
+                        "updated_date": "2026-03-17",
+                    }
+                ],
+                "payables": [],
+                "bank_balances": [
+                    {
+                        "account_id": "bank-1",
+                        "account_code": "090",
+                        "account_name": "Main Bank",
+                        "account_type": "BANK",
+                        "currency_code": "GBP",
+                        "balance": 25000.0,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    inputs = load_inputs(tmp_path, snapshot_path)
+
+    assert inputs.xero_sidecar is not None
+    assert inputs.xero_sidecar.organisation["organisation_name"] == "Example Ltd"
+    assert list(inputs.xero_sidecar.finance_receivable_events["amount"]) == [800.0]
+    assert list(inputs.xero_sidecar.finance_cash_position_snapshot["cash_on_hand"]) == [25000.0]
 
 
 def test_load_inputs_normalises_excel_serial_dates_from_xlsx(tmp_path: Path) -> None:
