@@ -37,7 +37,7 @@ def _clamp(x: float, lo: float = 0.0, hi: float = 100.0) -> float:
 def _safe_float(x: Any) -> float | None:
     try:
         v = float(x)
-        if math.isnan(v):
+        if not math.isfinite(v):
             return None
         return v
     except Exception:

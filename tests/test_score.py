@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import math
+
 from mcop.engine.score import compute_cash_risk_score
 
 
@@ -49,3 +51,39 @@ def test_monotonic_pinch14_true_not_reduce_risk() -> None:
     s0 = compute_cash_risk_score({**base, "pinch_14d": False})["cash_risk_score"]
     s1 = compute_cash_risk_score({**base, "pinch_14d": True})["cash_risk_score"]
     assert s1 >= s0
+
+
+def test_stress_component_falls_back_for_infinite_runway_inputs() -> None:
+    out = compute_cash_risk_score(
+        {
+            "runway_days": 45,
+            "pinch_14d": False,
+            "pinch_30d": False,
+            "exposure_flag": "OK",
+            "trading_health_score": 8,
+            "runway_days_base": math.inf,
+            "runway_days_stress": math.inf,
+        }
+    )
+    stress = out["score_breakdown"]["components"]["stress"]
+    assert out["cash_risk_score"] == 25
+    assert stress["value"] == 40
+    assert stress["notes"] == "missing stress runway"
+
+
+def test_non_finite_trading_health_uses_existing_fallback() -> None:
+    out = compute_cash_risk_score(
+        {
+            "runway_days": 45,
+            "pinch_14d": False,
+            "pinch_30d": False,
+            "exposure_flag": "OK",
+            "trading_health_score": math.inf,
+            "runway_days_base": 60,
+            "runway_days_stress": 45,
+        }
+    )
+    trading_health = out["score_breakdown"]["components"]["trading_health"]
+    assert isinstance(out["cash_risk_score"], int)
+    assert trading_health["value"] == 50
+    assert trading_health["notes"] == "missing trading health"
