@@ -82,6 +82,82 @@ def _fmt_gbp(x: float) -> str:
         return "£—"
 
 
+def _select_finance_inputs(
+    inputs,
+    *,
+    legacy_cash_position: pd.DataFrame,
+    legacy_payables: pd.DataFrame,
+    legacy_receivables: pd.DataFrame,
+    xero_snapshot_present: bool,
+    xero_load_error: str | None,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict, list[str]]:
+    xero_sidecar = getattr(inputs, "xero_sidecar", None)
+    summary_notes: list[str] = []
+
+    if xero_load_error:
+        return (
+            legacy_cash_position,
+            legacy_payables,
+            legacy_receivables,
+            {
+                "selected": "legacy",
+                "xero_snapshot_present": xero_snapshot_present,
+                "reason": f"xero_snapshot_invalid: {xero_load_error}",
+            },
+            summary_notes,
+        )
+
+    if xero_sidecar is not None:
+        if xero_sidecar.currency_warning is None and not xero_sidecar.finance_cash_position_snapshot.empty:
+            return (
+                xero_sidecar.finance_cash_position_snapshot,
+                xero_sidecar.finance_payable_events,
+                xero_sidecar.finance_receivable_events,
+                {
+                    "selected": "xero",
+                    "xero_snapshot_present": True,
+                    "snapshot_date": xero_sidecar.organisation.get("snapshot_date"),
+                    "organisation_name": xero_sidecar.organisation.get("organisation_name"),
+                    "reason": "valid_xero_snapshot",
+                },
+                summary_notes,
+            )
+
+        finance_source = {
+            "selected": "legacy",
+            "xero_snapshot_present": True,
+            "snapshot_date": xero_sidecar.organisation.get("snapshot_date"),
+            "organisation_name": xero_sidecar.organisation.get("organisation_name"),
+            "reason": "xero_snapshot_not_usable_for_gbp_liquidity",
+        }
+        if xero_sidecar.currency_warning:
+            finance_source["currency_warning"] = xero_sidecar.currency_warning
+            summary_notes.append(
+                "Xero snapshot includes non-GBP bank balances; those balances are excluded from the current GBP-only analysis."
+            )
+        elif xero_sidecar.finance_cash_position_snapshot.empty:
+            finance_source["reason"] = "xero_snapshot_missing_cash_position"
+        return (
+            legacy_cash_position,
+            legacy_payables,
+            legacy_receivables,
+            finance_source,
+            summary_notes,
+        )
+
+    return (
+        legacy_cash_position,
+        legacy_payables,
+        legacy_receivables,
+        {
+            "selected": "legacy",
+            "xero_snapshot_present": xero_snapshot_present,
+            "reason": "legacy_finance_inputs",
+        },
+        summary_notes,
+    )
+
+
 def build_released_value_trend(activity: pd.DataFrame) -> list[dict]:
     required = {"request_type", "bags", "bag_size_kg", "price_per_kg"}
     missing = required - set(activity.columns)
@@ -138,10 +214,16 @@ def main():
     snapshot_ts = _parse_snapshot_ts(snapshot_date)
     paths = get_paths()
     xero_snapshot_path = getattr(paths, "xero_snapshot_path", None)
+    xero_snapshot_present = bool(xero_snapshot_path is not None and xero_snapshot_path.exists())
+    xero_load_error: str | None = None
     if xero_snapshot_path is None:
         inputs = load_inputs(paths.data_dir)
     else:
-        inputs = load_inputs(paths.data_dir, xero_snapshot_path)
+        try:
+            inputs = load_inputs(paths.data_dir, xero_snapshot_path)
+        except Exception as exc:
+            xero_load_error = str(exc)
+            inputs = load_inputs(paths.data_dir)
     
         # --- Dynamic schema snapshot (read-only, non-blocking) ---
     try:
@@ -161,14 +243,23 @@ def main():
         # Never break main pipeline due to schema logging
         pass
 
-    payables = build_payables_from_costs(inputs.costs)
-    receivables = build_receivables_from_activity(inputs.activity, delay_buffer_days=7)
+    legacy_cash_position = inputs.cash_position
+    legacy_payables = build_payables_from_costs(inputs.costs)
+    legacy_receivables = build_receivables_from_activity(inputs.activity, delay_buffer_days=7)
+    cash_position, payables, receivables, finance_source, finance_summary_notes = _select_finance_inputs(
+        inputs,
+        legacy_cash_position=legacy_cash_position,
+        legacy_payables=legacy_payables,
+        legacy_receivables=legacy_receivables,
+        xero_snapshot_present=xero_snapshot_present,
+        xero_load_error=xero_load_error,
+    )
 
-    base = compute_liquidity_snapshot(inputs.cash_position, payables, receivables)
+    base = compute_liquidity_snapshot(cash_position, payables, receivables)
 
-    finance_anchor_ts, _cash = latest_as_of(inputs.cash_position)
+    finance_anchor_ts, _cash = latest_as_of(cash_position)
     receivables_stress = stress_receivables(receivables, finance_anchor_ts, 0.20, 0.15, 0.02)
-    stress = compute_liquidity_snapshot(inputs.cash_position, payables, receivables_stress)
+    stress = compute_liquidity_snapshot(cash_position, payables, receivables_stress)
 
     status = governance_flag(base.liquidity_60, base.runway_days)
     product_map = build_product_reference_map(inputs.products)
@@ -189,6 +280,21 @@ def main():
         base.payables_60,
         base.runway_days,
     )
+    if finance_source["selected"] == "xero":
+        finance_label = "Finance source: Xero snapshot"
+        snapshot_label = finance_source.get("snapshot_date")
+        if snapshot_label:
+            finance_label += f" ({snapshot_label})."
+        else:
+            finance_label += "."
+    elif xero_load_error:
+        finance_label = "Finance source: legacy finance inputs (Xero snapshot invalid)."
+    elif finance_source.get("xero_snapshot_present"):
+        finance_label = "Finance source: legacy finance inputs (Xero snapshot not used for GBP liquidity)."
+    else:
+        finance_label = "Finance source: legacy finance inputs."
+    summary.append(finance_label)
+    summary.extend(finance_summary_notes)
 
     if container_exposure.get("exposure_flag") != "OK":
         pct_below = float(container_exposure["dynamic_precommit"]["pct_incoming_value_below_target"]) * 100.0
@@ -225,6 +331,7 @@ def main():
     
     payload = {
         "snapshot_date": snapshot_date,
+        "finance_source": finance_source,
         "status_flag": status,
         "exposure_flag": container_exposure.get("exposure_flag", "OK"),
         "summary": summary,
@@ -238,11 +345,12 @@ def main():
 
     xero_sidecar = getattr(inputs, "xero_sidecar", None)
     if xero_sidecar is not None:
+        legacy_base = compute_liquidity_snapshot(legacy_cash_position, legacy_payables, legacy_receivables)
         payload["xero_import"] = build_xero_reporting_payload(
             xero_sidecar,
-            legacy_cash_on_hand=base.cash_on_hand,
-            legacy_receivables_60=base.receivables_60,
-            legacy_payables_60=base.payables_60,
+            legacy_cash_on_hand=legacy_base.cash_on_hand,
+            legacy_receivables_60=legacy_base.receivables_60,
+            legacy_payables_60=legacy_base.payables_60,
         )
 
     container_exposure = dict(container_exposure)
