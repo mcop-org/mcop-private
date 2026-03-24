@@ -455,13 +455,16 @@ td.mono{font-family:var(--mono);color:var(--muted);font-size:12px}
         html.append("<p class='k'>Top drivers</p>")
         html.append("<ul>")
         for d in top_drivers[:3]:
-            comp = _safe(str((d or {}).get("component") or "—"))
-            contrib = (d or {}).get("contribution")
-            try:
-                contrib_s = f"{float(contrib):.2f}"
-            except Exception:
-                contrib_s = "—"
-            html.append(f"<li><span class='muted'>{comp}</span> — {contrib_s}</li>")
+            if isinstance(d, dict):
+                comp = _safe(str((d or {}).get("component") or "—"))
+                contrib = (d or {}).get("contribution")
+                try:
+                    contrib_s = f"{float(contrib):.2f}"
+                except Exception:
+                    contrib_s = "—"
+                html.append(f"<li><span class='muted'>{comp}</span> — {contrib_s}</li>")
+            else:
+                html.append(f"<li>{_safe(d)}</li>")
         html.append("</ul>")
     html.append("</div>")  # end card wide
 

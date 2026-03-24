@@ -109,6 +109,25 @@ def test_weekly_brief_renders_infinite_runway_and_cash_risk_score(tmp_path: Path
     assert ">AMBER<" in html
 
 
+def test_weekly_brief_top_drivers_accepts_mixed_item_types(tmp_path: Path) -> None:
+    out = tmp_path / "weekly.html"
+    payload = _base_payload()
+    payload["score_breakdown"] = {
+        "top_drivers": [
+            {"component": "stress", "contribution": 12.5},
+            "pinch pressure elevated",
+            {"component": "runway", "contribution": 8.0},
+        ]
+    }
+
+    write_weekly_brief(out, payload)
+    html = out.read_text(encoding="utf-8")
+
+    assert "stress</span> — 12.50" in html
+    assert "<li>pinch pressure elevated</li>" in html
+    assert "runway</span> — 8.00" in html
+
+
 def test_run_uses_snapshot_date_for_external_artifacts(monkeypatch, tmp_path: Path) -> None:
     from mcop import main as main_mod
 
