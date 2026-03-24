@@ -82,6 +82,55 @@ def _fmt_gbp(x: float) -> str:
         return "£—"
 
 
+def _filter_xero_events_to_gbp(events: pd.DataFrame) -> pd.DataFrame:
+    if events is None or events.empty or "currency_code" not in events.columns:
+        return events
+    mask = events["currency_code"].astype(str).str.strip().str.upper() == "GBP"
+    return events.loc[mask].reset_index(drop=True)
+
+
+def _build_xero_currency_notes(xero_sidecar) -> list[str]:
+    notes: list[str] = []
+
+    bank_balances = getattr(xero_sidecar, "xero_bank_balances", None)
+    if bank_balances is not None and not bank_balances.empty and "currency_code" in bank_balances.columns:
+        non_gbp_bank = bank_balances[
+            bank_balances["currency_code"].astype(str).str.strip().str.upper() != "GBP"
+        ].copy()
+        if not non_gbp_bank.empty:
+            currencies = ", ".join(sorted(non_gbp_bank["currency_code"].astype(str).str.strip().str.upper().unique()))
+            notes.append(f"Xero non-GBP bank balances are excluded from GBP cash analysis and shown separately: {currencies}.")
+
+    frames = [
+        ("receivables", getattr(xero_sidecar, "xero_receivables_open", None)),
+        ("payables", getattr(xero_sidecar, "xero_payables_open", None)),
+    ]
+    non_gbp_docs: list[str] = []
+    for label, frame in frames:
+        if frame is None or frame.empty or "currency_code" not in frame.columns:
+            continue
+        currencies = sorted(
+            frame.loc[
+                frame["currency_code"].astype(str).str.strip().str.upper() != "GBP",
+                "currency_code",
+            ]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .unique()
+        )
+        if currencies:
+            non_gbp_docs.append(f"{label}: {', '.join(currencies)}")
+    if non_gbp_docs:
+        notes.append(
+            "Xero non-GBP receivables/payables are excluded from GBP liquidity analysis and shown separately: "
+            + "; ".join(non_gbp_docs)
+            + "."
+        )
+
+    return notes
+
+
 def _select_finance_inputs(
     inputs,
     *,
@@ -108,11 +157,15 @@ def _select_finance_inputs(
         )
 
     if xero_sidecar is not None:
-        if xero_sidecar.currency_warning is None and not xero_sidecar.finance_cash_position_snapshot.empty:
+        xero_payables_gbp = _filter_xero_events_to_gbp(xero_sidecar.finance_payable_events)
+        xero_receivables_gbp = _filter_xero_events_to_gbp(xero_sidecar.finance_receivable_events)
+        summary_notes.extend(_build_xero_currency_notes(xero_sidecar))
+
+        if not xero_sidecar.finance_cash_position_snapshot.empty:
             return (
                 xero_sidecar.finance_cash_position_snapshot,
-                xero_sidecar.finance_payable_events,
-                xero_sidecar.finance_receivable_events,
+                xero_payables_gbp,
+                xero_receivables_gbp,
                 {
                     "selected": "xero",
                     "xero_snapshot_present": True,
@@ -128,15 +181,10 @@ def _select_finance_inputs(
             "xero_snapshot_present": True,
             "snapshot_date": xero_sidecar.organisation.get("snapshot_date"),
             "organisation_name": xero_sidecar.organisation.get("organisation_name"),
-            "reason": "xero_snapshot_not_usable_for_gbp_liquidity",
+            "reason": "xero_snapshot_missing_gbp_cash_position",
         }
         if xero_sidecar.currency_warning:
             finance_source["currency_warning"] = xero_sidecar.currency_warning
-            summary_notes.append(
-                "Xero snapshot includes non-GBP bank balances; those balances are excluded from the current GBP-only analysis."
-            )
-        elif xero_sidecar.finance_cash_position_snapshot.empty:
-            finance_source["reason"] = "xero_snapshot_missing_cash_position"
         return (
             legacy_cash_position,
             legacy_payables,

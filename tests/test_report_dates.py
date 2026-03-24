@@ -51,6 +51,49 @@ def test_weekly_brief_visible_date_falls_back_to_base_as_of(tmp_path: Path) -> N
     assert "As of <strong>2026-03-10</strong>" in html
 
 
+def test_weekly_brief_xero_tables_hide_internal_source_ids(tmp_path: Path) -> None:
+    out = tmp_path / "weekly.html"
+    payload = _base_payload()
+    payload["xero_import"] = {
+        "available": True,
+        "snapshot_date": "2026-03-14",
+        "organisation_name": "Example Ltd",
+        "base_currency": "GBP",
+        "bank_totals_by_currency": [],
+        "receivables_totals_by_currency": [],
+        "payables_totals_by_currency": [],
+        "comparison_lines": [],
+        "top_receivables": [
+            {
+                "source_doc_no": "INV-0300",
+                "source_id": "1e74f6f0-078d-4064-8abc-648688bed3f2",
+                "counterparty_name": "Sipsisters",
+                "due_date": "2026-03-28",
+                "currency_code": "GBP",
+                "amount_due": 1002.4,
+            }
+        ],
+        "top_payables": [
+            {
+                "source_doc_no": "BILL-0100",
+                "source_id": "6a0daff8-1634-46de-b791-2a67ea41971e",
+                "counterparty_name": "Supplier A",
+                "due_date": "2026-03-27",
+                "currency_code": "GBP",
+                "amount_due": 500.0,
+            }
+        ],
+    }
+
+    write_weekly_brief(out, payload)
+    html = out.read_text(encoding="utf-8")
+
+    assert "INV-0300" in html
+    assert "BILL-0100" in html
+    assert "1e74f6f0-078d-4064-8abc-648688bed3f2" not in html
+    assert "6a0daff8-1634-46de-b791-2a67ea41971e" not in html
+
+
 def test_run_uses_snapshot_date_for_external_artifacts(monkeypatch, tmp_path: Path) -> None:
     from mcop import main as main_mod
 

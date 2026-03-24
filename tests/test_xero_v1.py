@@ -157,7 +157,7 @@ def test_load_xero_snapshot_surfaces_mixed_currency_ambiguity(tmp_path: Path) ->
 
     sidecar = load_xero_snapshot(_write_snapshot(tmp_path / "xero_snapshot_v1.json", snapshot))
 
-    assert sidecar.finance_cash_position_snapshot.empty
+    assert list(sidecar.finance_cash_position_snapshot["cash_on_hand"]) == [25000.0]
     assert sidecar.currency_warning is not None
 
     report = build_xero_reporting_payload(
@@ -167,8 +167,116 @@ def test_load_xero_snapshot_surfaces_mixed_currency_ambiguity(tmp_path: Path) ->
         legacy_payables_60=0.0,
     )
 
-    assert report["comparison_lines"] == []
+    assert len(report["comparison_lines"]) == 3
     assert report["bank_totals_by_currency"] == [
         {"currency_code": "GBP", "amount": 25000.0},
         {"currency_code": "USD", "amount": 1000.0},
     ]
+    assert "GBP bank total" in report["comparison_lines"][0]
+
+
+def test_load_xero_snapshot_mixed_currency_docs_keep_native_totals_but_gbp_comparisons(tmp_path: Path) -> None:
+    snapshot = {
+        "schema_version": "xero_snapshot_v1",
+        "snapshot_date": "2026-03-17",
+        "source_system": "xero",
+        "organisation": {
+            "tenant_id": "tenant-1",
+            "organisation_name": "Example Ltd",
+            "base_currency": "GBP",
+        },
+        "receivables": [
+            {
+                "invoice_id": "inv-gbp",
+                "invoice_number": "INV-GBP",
+                "contact_id": "contact-1",
+                "contact_name": "Customer A",
+                "status": "AUTHORISED",
+                "currency_code": "GBP",
+                "invoice_date": "2026-03-01",
+                "due_date": "2026-03-31",
+                "amount_total": 1000.0,
+                "amount_paid": 0.0,
+                "amount_credited": 0.0,
+                "amount_due": 1000.0,
+                "updated_date": "2026-03-17",
+            },
+            {
+                "invoice_id": "inv-usd",
+                "invoice_number": "INV-USD",
+                "contact_id": "contact-2",
+                "contact_name": "Customer B",
+                "status": "AUTHORISED",
+                "currency_code": "USD",
+                "invoice_date": "2026-03-01",
+                "due_date": "2026-04-01",
+                "amount_total": 300.0,
+                "amount_paid": 0.0,
+                "amount_credited": 0.0,
+                "amount_due": 300.0,
+                "updated_date": "2026-03-17",
+            },
+        ],
+        "payables": [
+            {
+                "bill_id": "bill-gbp",
+                "bill_number": "BILL-GBP",
+                "contact_id": "supplier-1",
+                "contact_name": "Supplier A",
+                "status": "AUTHORISED",
+                "currency_code": "GBP",
+                "invoice_date": "2026-03-03",
+                "due_date": "2026-03-25",
+                "amount_total": 500.0,
+                "amount_paid": 0.0,
+                "amount_credited": 0.0,
+                "amount_due": 500.0,
+                "updated_date": "2026-03-17",
+            },
+            {
+                "bill_id": "bill-usd",
+                "bill_number": "BILL-USD",
+                "contact_id": "supplier-2",
+                "contact_name": "Supplier B",
+                "status": "AUTHORISED",
+                "currency_code": "USD",
+                "invoice_date": "2026-03-03",
+                "due_date": "2026-03-26",
+                "amount_total": 700.0,
+                "amount_paid": 0.0,
+                "amount_credited": 0.0,
+                "amount_due": 700.0,
+                "updated_date": "2026-03-17",
+            },
+        ],
+        "bank_balances": [
+            {
+                "account_id": "bank-1",
+                "account_code": "090",
+                "account_name": "Main Bank",
+                "account_type": "BANK",
+                "currency_code": "GBP",
+                "balance": 25000.0,
+            }
+        ],
+    }
+
+    sidecar = load_xero_snapshot(_write_snapshot(tmp_path / "xero_snapshot_v1.json", snapshot))
+
+    report = build_xero_reporting_payload(
+        sidecar,
+        legacy_cash_on_hand=1500.0,
+        legacy_receivables_60=800.0,
+        legacy_payables_60=500.0,
+    )
+
+    assert report["receivables_totals_by_currency"] == [
+        {"currency_code": "GBP", "amount": 1000.0},
+        {"currency_code": "USD", "amount": 300.0},
+    ]
+    assert report["payables_totals_by_currency"] == [
+        {"currency_code": "GBP", "amount": 500.0},
+        {"currency_code": "USD", "amount": 700.0},
+    ]
+    assert report["comparison_lines"][1].endswith("Xero GBP open receivables: £1,000.00")
+    assert report["comparison_lines"][2].endswith("Xero GBP open payables: £500.00")

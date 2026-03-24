@@ -188,14 +188,77 @@ def test_main_uses_xero_finance_inputs_when_snapshot_is_usable(monkeypatch, tmp_
 
 
 def test_main_falls_back_to_legacy_when_xero_snapshot_has_mixed_currency(monkeypatch, tmp_path: Path) -> None:
+    xero_cash_position = pd.DataFrame([{"date": "2026-03-17", "cash_on_hand": 25000.0, "currency_code": "GBP"}])
     xero_sidecar = type(
         "XeroSidecarStub",
         (),
         {
             "currency_warning": "Mixed/non-GBP Xero values detected.",
-            "finance_cash_position_snapshot": pd.DataFrame(columns=["date", "cash_on_hand"]),
-            "finance_payable_events": pd.DataFrame([{"date": "2026-03-25", "amount": 500.0}]),
-            "finance_receivable_events": pd.DataFrame([{"date": "2026-03-31", "amount": 800.0}]),
+            "finance_cash_position_snapshot": xero_cash_position,
+            "finance_payable_events": pd.DataFrame(
+                [
+                    {"date": "2026-03-25", "amount": 500.0, "currency_code": "GBP"},
+                    {"date": "2026-03-26", "amount": 900.0, "currency_code": "USD"},
+                ]
+            ),
+            "finance_receivable_events": pd.DataFrame(
+                [
+                    {"date": "2026-03-31", "amount": 800.0, "currency_code": "GBP"},
+                    {"date": "2026-04-01", "amount": 1200.0, "currency_code": "USD"},
+                ]
+            ),
+            "xero_bank_balances": pd.DataFrame(
+                [
+                    {"currency_code": "GBP", "balance": 25000.0},
+                    {"currency_code": "USD", "balance": 1000.0},
+                ]
+            ),
+            "xero_receivables_open": pd.DataFrame([{"currency_code": "GBP"}, {"currency_code": "USD"}]),
+            "xero_payables_open": pd.DataFrame([{"currency_code": "GBP"}, {"currency_code": "USD"}]),
+            "organisation": {"snapshot_date": "2026-03-17", "organisation_name": "Example Ltd"},
+        },
+    )()
+
+    def _load_inputs(_data_dir, xero_path=None):
+        return _Inputs(
+            cash_position=pd.DataFrame([{"date": "2026-03-10", "cash_on_hand": 1500.0}]),
+            xero_sidecar=xero_sidecar,
+        )
+
+    _, paths, _legacy_cash_position = _common_monkeypatches(monkeypatch, tmp_path, _load_inputs)
+
+    main()
+
+    payload = json.loads((paths.out_dir / "liquidity_report.json").read_text(encoding="utf-8"))
+    assert payload["finance_source"]["selected"] == "xero"
+    assert payload["finance_source"]["reason"] == "valid_xero_snapshot"
+    assert payload["base"]["cash_on_hand"] == 25000.0
+    assert payload["base"]["receivables_60"] == 22000.0
+    assert payload["base"]["payables_60"] == 12000.0
+    assert any(
+        "Xero non-GBP bank balances are excluded from GBP cash analysis and shown separately: USD."
+        in line
+        for line in payload["summary"]
+    )
+    assert any(
+        "Xero non-GBP receivables/payables are excluded from GBP liquidity analysis and shown separately: receivables: USD; payables: USD."
+        in line
+        for line in payload["summary"]
+    )
+
+
+def test_main_falls_back_to_legacy_when_xero_snapshot_has_no_gbp_cash(monkeypatch, tmp_path: Path) -> None:
+    xero_sidecar = type(
+        "XeroSidecarStub",
+        (),
+        {
+            "currency_warning": "No GBP Xero bank balances detected; native-currency totals are shown for information only.",
+            "finance_cash_position_snapshot": pd.DataFrame(columns=["date", "cash_on_hand", "currency_code"]),
+            "finance_payable_events": pd.DataFrame([{"date": "2026-03-25", "amount": 500.0, "currency_code": "USD"}]),
+            "finance_receivable_events": pd.DataFrame([{"date": "2026-03-31", "amount": 800.0, "currency_code": "USD"}]),
+            "xero_bank_balances": pd.DataFrame([{"currency_code": "USD", "balance": 1000.0}]),
+            "xero_receivables_open": pd.DataFrame([{"currency_code": "USD"}]),
+            "xero_payables_open": pd.DataFrame([{"currency_code": "USD"}]),
             "organisation": {"snapshot_date": "2026-03-17", "organisation_name": "Example Ltd"},
         },
     )()
@@ -212,13 +275,8 @@ def test_main_falls_back_to_legacy_when_xero_snapshot_has_mixed_currency(monkeyp
 
     payload = json.loads((paths.out_dir / "liquidity_report.json").read_text(encoding="utf-8"))
     assert payload["finance_source"]["selected"] == "legacy"
-    assert payload["finance_source"]["reason"] == "xero_snapshot_not_usable_for_gbp_liquidity"
+    assert payload["finance_source"]["reason"] == "xero_snapshot_missing_gbp_cash_position"
     assert payload["base"]["cash_on_hand"] == 1500.0
-    assert any(
-        "Xero snapshot includes non-GBP bank balances; those balances are excluded from the current GBP-only analysis."
-        in line
-        for line in payload["summary"]
-    )
 
 
 def test_main_falls_back_to_legacy_when_xero_snapshot_is_invalid(monkeypatch, tmp_path: Path) -> None:

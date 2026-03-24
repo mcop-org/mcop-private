@@ -140,7 +140,7 @@ def _render_xero_open_table(title: str, rows: list[dict]) -> str:
     else:
         for row in rows:
             out.append(
-                f"<tr><td><strong>{_safe(row.get('source_doc_no') or '—')}</strong> <span class='mono'>({_safe(row.get('source_id') or '—')})</span></td>"
+                f"<tr><td><strong>{_safe(row.get('source_doc_no') or '—')}</strong></td>"
                 f"<td>{_safe(row.get('counterparty_name') or '—')}</td>"
                 f"<td class='mono'>{_safe(row.get('due_date') or '—')}</td>"
                 f"<td class='mono'>{_safe(row.get('currency_code') or '—')}</td>"

@@ -219,9 +219,18 @@ def _build_cash_snapshot(bank_balances: pd.DataFrame, snapshot_date: str) -> tup
     if bank_balances.empty:
         return pd.DataFrame(columns=["date", "cash_on_hand", "source_system", "currency_code"]), None
 
-    currencies = sorted({str(v).strip().upper() for v in bank_balances["currency_code"].tolist()})
-    if currencies == ["GBP"]:
-        total_cash = round(float(bank_balances["balance"].sum()), 2)
+    gbp_balances = bank_balances[
+        bank_balances["currency_code"].astype(str).str.strip().str.upper() == "GBP"
+    ].copy()
+    if not gbp_balances.empty:
+        total_cash = round(float(gbp_balances["balance"].sum()), 2)
+        non_gbp_present = len(gbp_balances) != len(bank_balances)
+        warning = None
+        if non_gbp_present:
+            warning = (
+                "Non-GBP Xero bank balances detected; GBP cash analysis uses GBP bank balances only. "
+                "Other currency balances are shown separately for information."
+            )
         return (
             pd.DataFrame(
                 [
@@ -233,12 +242,11 @@ def _build_cash_snapshot(bank_balances: pd.DataFrame, snapshot_date: str) -> tup
                     }
                 ]
             ),
-            None,
+            warning,
         )
 
     warning = (
-        "Mixed/non-GBP Xero values detected; totals shown by native currency only and not "
-        "comparable to legacy GBP liquidity figures."
+        "No GBP Xero bank balances detected; native-currency totals are shown for information only."
     )
     return pd.DataFrame(columns=["date", "cash_on_hand", "source_system", "currency_code"]), warning
 
@@ -330,17 +338,20 @@ def load_xero_snapshot(path: Path) -> XeroSidecar:
     )
     finance_cash_position_snapshot, currency_warning = _build_cash_snapshot(bank_frame, snapshot_date)
 
-    if currency_warning is None:
-        doc_currencies = {
-            str(v).strip().upper()
-            for frame in (receivables_frame, payables_frame)
-            for v in (frame["currency_code"].tolist() if not frame.empty else [])
-        }
-        if any(currency != "GBP" for currency in sorted(doc_currencies)):
-            currency_warning = (
-                "Mixed/non-GBP Xero values detected; totals shown by native currency only and not "
-                "comparable to legacy GBP liquidity figures."
-            )
+    doc_currencies = {
+        str(v).strip().upper()
+        for frame in (receivables_frame, payables_frame)
+        for v in (frame["currency_code"].tolist() if not frame.empty else [])
+    }
+    if any(currency != "GBP" for currency in sorted(doc_currencies)):
+        doc_warning = (
+            "Non-GBP Xero receivables/payables detected; GBP liquidity analysis uses GBP documents only. "
+            "Other currency documents are shown separately for information."
+        )
+        if currency_warning:
+            currency_warning = f"{currency_warning} {doc_warning}"
+        else:
+            currency_warning = doc_warning
 
     return XeroSidecar(
         organisation=organisation_out,
@@ -384,14 +395,16 @@ def build_xero_reporting_payload(
         return out
 
     comparisons: list[str] = []
-    if sidecar.currency_warning is None and not sidecar.finance_cash_position_snapshot.empty:
+    gbp_receivables = receivables[receivables["currency_code"].astype(str).str.strip().str.upper() == "GBP"].copy()
+    gbp_payables = payables[payables["currency_code"].astype(str).str.strip().str.upper() == "GBP"].copy()
+    if not sidecar.finance_cash_position_snapshot.empty:
         xero_cash = float(sidecar.finance_cash_position_snapshot.iloc[0]["cash_on_hand"])
-        comparisons.append(f"Legacy cash on hand: £{float(legacy_cash_on_hand or 0.0):,.2f} vs Xero bank total: £{xero_cash:,.2f}")
+        comparisons.append(f"Legacy cash on hand: £{float(legacy_cash_on_hand or 0.0):,.2f} vs Xero GBP bank total: £{xero_cash:,.2f}")
         comparisons.append(
-            f"Legacy receivables (60d): £{float(legacy_receivables_60 or 0.0):,.2f} vs Xero open receivables: £{float(receivables['amount_due'].sum() if not receivables.empty else 0.0):,.2f}"
+            f"Legacy receivables (60d): £{float(legacy_receivables_60 or 0.0):,.2f} vs Xero GBP open receivables: £{float(gbp_receivables['amount_due'].sum() if not gbp_receivables.empty else 0.0):,.2f}"
         )
         comparisons.append(
-            f"Legacy payables (60d): £{float(legacy_payables_60 or 0.0):,.2f} vs Xero open payables: £{float(payables['amount_due'].sum() if not payables.empty else 0.0):,.2f}"
+            f"Legacy payables (60d): £{float(legacy_payables_60 or 0.0):,.2f} vs Xero GBP open payables: £{float(gbp_payables['amount_due'].sum() if not gbp_payables.empty else 0.0):,.2f}"
         )
 
     return {
