@@ -566,10 +566,22 @@ td.mono{font-family:var(--mono);color:var(--muted);font-size:12px}
             out.append("<tr><td colspan='3' class='muted'>No items.</td></tr>")
         else:
             for r in rows[:5]:
-                prod = r.get("product_reference") or r.get("product_id") or "—"
+                product_reference = r.get("product_reference")
+                product_id = r.get("product_id")
+                if product_reference or product_id:
+                    prod = product_reference or product_id or "—"
+                    suffix = f" <span class='mono'>({_safe(product_id or '—')})</span>"
+                else:
+                    prod = (
+                        r.get("label")
+                        or r.get("source_doc_no")
+                        or r.get("counterparty_name")
+                        or "—"
+                    )
+                    suffix = ""
                 date = r.get("date") or "—"
                 amt = r.get("amount")
-                out.append(f"<tr><td><strong>{_safe(prod)}</strong> <span class='mono'>({_safe(r.get('product_id','—'))})</span></td>"
+                out.append(f"<tr><td><strong>{_safe(prod)}</strong>{suffix}</td>"
                            f"<td class='mono'>{_safe(date)}</td>"
                            f"<td><strong>{_safe(_gbp2(amt))}</strong></td></tr>")
         out.append("</tbody></table></div>")

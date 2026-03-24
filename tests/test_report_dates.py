@@ -128,6 +128,48 @@ def test_weekly_brief_top_drivers_accepts_mixed_item_types(tmp_path: Path) -> No
     assert "runway</span> — 8.00" in html
 
 
+def test_weekly_brief_main_table_uses_xero_doc_label_when_product_reference_missing(tmp_path: Path) -> None:
+    out = tmp_path / "weekly.html"
+    payload = _base_payload()
+    payload["top_payables_60"] = [
+        {
+            "date": "2026-03-28",
+            "amount": 1002.4,
+            "label": "BILL-0100 (Supplier A)",
+            "source_doc_no": "BILL-0100",
+            "counterparty_name": "Supplier A",
+        }
+    ]
+
+    write_weekly_brief(out, payload)
+    html = out.read_text(encoding="utf-8")
+
+    assert "BILL-0100 (Supplier A)" in html
+    assert "BILL-0100</strong> <span class='mono'>(—)</span>" not in html
+
+
+def test_weekly_brief_main_table_keeps_legacy_product_rendering_unchanged(tmp_path: Path) -> None:
+    out = tmp_path / "weekly.html"
+    payload = _base_payload()
+    payload["top_receivables_60"] = [
+        {
+            "date": "2026-03-29",
+            "amount": 750.0,
+            "product_reference": "ALPHA-1",
+            "product_id": "p-1",
+            "label": "SHOULD-NOT-BE-USED",
+            "source_doc_no": "INV-9999",
+            "counterparty_name": "Customer A",
+        }
+    ]
+
+    write_weekly_brief(out, payload)
+    html = out.read_text(encoding="utf-8")
+
+    assert "ALPHA-1</strong> <span class='mono'>(p-1)</span>" in html
+    assert "SHOULD-NOT-BE-USED" not in html
+
+
 def test_run_uses_snapshot_date_for_external_artifacts(monkeypatch, tmp_path: Path) -> None:
     from mcop import main as main_mod
 
