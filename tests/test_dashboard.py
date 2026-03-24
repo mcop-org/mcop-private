@@ -170,6 +170,36 @@ def test_dashboard_snapshot_date_does_not_fall_back_to_base_as_of(tmp_path: Path
     assert "Snapshot date 2026-03-10" not in html
 
 
+def test_dashboard_renders_infinite_runway_explicitly(tmp_path: Path) -> None:
+    out = tmp_path / "dashboard.html"
+    payload = _sample_payload()
+    payload["base"]["runway_days"] = float("inf")
+
+    write_dashboard_html(out, payload)
+    html = out.read_text(encoding="utf-8")
+
+    assert "∞ days" in html
+
+
+def test_dashboard_uses_xero_doc_label_when_reference_missing(tmp_path: Path) -> None:
+    out = tmp_path / "dashboard.html"
+    payload = _sample_payload()
+    payload["top_payables_60"] = [
+        {
+            "date": "2026-03-20",
+            "amount": 5000.0,
+            "source_doc_no": "BILL-200",
+            "counterparty_name": "Supplier A",
+            "label": "BILL-200 (Supplier A)",
+        }
+    ]
+
+    write_dashboard_html(out, payload)
+    html = out.read_text(encoding="utf-8")
+
+    assert "BILL-200 (Supplier A)" in html
+
+
 def test_snapshot_day_rewrite_uses_snapshot_date_for_visible_days_to_landing() -> None:
     if _apply_snapshot_days_to_landing is None:
         pytest.skip("mcop.main helpers unavailable")

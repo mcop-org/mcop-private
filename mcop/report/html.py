@@ -1,4 +1,5 @@
 from __future__ import annotations
+import math
 import re
 
 from pathlib import Path
@@ -68,6 +69,16 @@ def _pct(x) -> str:
         return f"{float(x)*100:.0f}%"
     except Exception:
         return "—"
+
+
+def _runway_days_text(value) -> str:
+    try:
+        numeric = float(value)
+    except Exception:
+        return "—"
+    if math.isinf(numeric):
+        return "∞"
+    return str(int(round(numeric)))
 
 
 def _safe(s) -> str:
@@ -418,11 +429,7 @@ td.mono{font-family:var(--mono);color:var(--muted);font-size:12px}
 
     html.append("<div class='card small'>")
     html.append("<p class='k'>Runway</p>")
-    try:
-        rd = int(round(float(runway)))
-    except Exception:
-        rd = None
-    html.append(f"<p class='v'>{rd if rd is not None else '—'} days</p>")
+    html.append(f"<p class='v'>{_runway_days_text(runway)} days</p>")
     html.append("</div>")
 
     html.append("<div class='card small'>")

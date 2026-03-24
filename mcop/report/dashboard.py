@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -42,6 +43,16 @@ def _intish(value: object) -> str:
         return f"{int(round(float(value)))}"
     except Exception:
         return "-"
+
+
+def _runway_text(value: object) -> str:
+    try:
+        numeric = float(value)
+    except Exception:
+        return "- days"
+    if math.isinf(numeric):
+        return "∞ days"
+    return f"{int(round(numeric))} days"
 
 
 def _kg(value: object) -> str:
@@ -412,7 +423,14 @@ def _line_chart_svg(rows: list[dict], label: str) -> str:
 def _render_event_table(title: str, rows: list[dict]) -> str:
     body = []
     for row in rows[:5]:
-        label = row.get("label") or row.get("product_reference") or row.get("product_id") or "-"
+        label = (
+            row.get("label")
+            or row.get("product_reference")
+            or row.get("product_id")
+            or row.get("source_doc_no")
+            or row.get("counterparty_name")
+            or "-"
+        )
         body.append(
             "<tr>"
             f"<td>{_safe(row.get('date') or '-')}</td>"
@@ -598,7 +616,7 @@ def write_dashboard_html(path: Path, payload: dict) -> None:
     kpi_cards = [
         ("Cash on Hand", _money(base.get("cash_on_hand")), "Current cash position", "tone-neutral"),
         ("Liquidity 60d", _money(base.get("liquidity_60")), "60-day liquidity view", "tone-neutral"),
-        ("Runway", f"{_intish(base.get('runway_days'))} days", "Days of runway", "tone-neutral"),
+        ("Runway", _runway_text(base.get("runway_days")), "Days of runway", "tone-neutral"),
         ("Trading Health", f"{_number(payload.get('trading_health_score'))}/10", "Operating score", "tone-neutral"),
         ("Incoming Reserved Balance", _percent(incoming_reserved_pct), f"{_money(incoming_reserved_value)} reserved", "tone-good"),
         ("Incoming Open Value", _money(incoming_unreserved_value), "Still open on incoming lots", "tone-warn"),

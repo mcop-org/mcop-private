@@ -959,6 +959,33 @@ def main():
         ref = bi.get("product_reference") or bi.get("product_id") or "unknown"
         payload["summary"].append(f"Biggest expected payment in next 14 days: £{bi['amount']:,.0f} ({ref}).")
 
+    def _pinch_bool(p: object) -> bool:
+        if isinstance(p, bool):
+            return p
+        if isinstance(p, dict):
+            ca = str(p.get("cash_alert") or "").strip().upper()
+            return ca in ("AMBER", "RED")
+        s = str(p or "").strip().upper()
+        return s in ("TRUE", "T", "YES", "Y", "1", "AMBER", "RED")
+
+    score_engine_input = {
+        "runway_days": (payload.get("base") or {}).get("runway_days"),
+        "runway_days_base": (payload.get("base") or {}).get("runway_days"),
+        "runway_days_stress": (payload.get("stress") or {}).get("runway_days"),
+        "pinch_14d": _pinch_bool(payload.get("pinch_14d")),
+        "pinch_30d": _pinch_bool(payload.get("pinch_30d")),
+        "exposure_flag": payload.get("exposure_flag"),
+        "trading_health_score": payload.get("trading_health_score"),
+    }
+    score_out = compute_cash_risk_score(score_engine_input)
+    payload["cash_risk_score"] = score_out["cash_risk_score"]
+    payload["score_band"] = score_out["score_band"]
+    payload["score_breakdown"] = score_out["score_breakdown"]
+
+    rules_engine_input = dict(score_engine_input)
+    rules_engine_input["score_band"] = payload["score_band"]
+    payload["next_actions"] = evaluate_rules(rules_engine_input)
+
     reg_issues = run_regression_guard(paths.out_dir, payload)
     if reg_issues:
         payload["regression_flags"] = reg_issues
@@ -1039,6 +1066,9 @@ def main():
             "status_flag": payload.get("status_flag"),
             "exposure_flag": payload.get("exposure_flag"),
             "trading_health_score": payload.get("trading_health_score"),
+            "cash_risk_score": payload.get("cash_risk_score"),
+            "score_band": payload.get("score_band"),
+            "score_breakdown": payload.get("score_breakdown") or {},
             "drift_signals": payload.get("drift_signals") or [],
             "cash": {
                 "cash_today_gbp": (payload.get("base") or {}).get("cash_on_hand"),
@@ -1048,23 +1078,12 @@ def main():
             "pinch_14d": payload.get("pinch_14d"),
             "pinch_30d": payload.get("pinch_30d"),
             "commit": {},
+            "next_actions": payload.get("next_actions") or [],
             "this_week": {
                 "standout_risks": [],
                 "actions": []
             }
         }
-        def _pinch_bool(p: object) -> bool:
-            # Deterministic conversion:
-            # - if dict with cash_alert: AMBER/RED => True else False
-            # - if bool: return as-is
-            if isinstance(p, bool):
-                return p
-            if isinstance(p, dict):
-                ca = str(p.get("cash_alert") or "").strip().upper()
-                return ca in ("AMBER", "RED")
-            # fallback for string-like
-            s = str(p or "").strip().upper()
-            return s in ("TRUE", "T", "YES", "Y", "1", "AMBER", "RED")
         
                 # --- Week 3: Next Actions context ---
         pinch_14d_flag = _pinch_bool(dp.get("pinch_14d"))
@@ -1175,12 +1194,21 @@ def main():
                 rr = dict(r)
                 pid = str(rr.get("product_id") or "").strip()
                 ref = str(rr.get("product_reference") or "").strip()
+                source_doc_no = str(rr.get("source_doc_no") or "").strip()
+                counterparty_name = str(rr.get("counterparty_name") or "").strip()
 
                 if (not ref) and pid:
                     ref = (product_map.get(pid) or "").strip()
                     rr["product_reference"] = ref
 
-                rr["label"] = f"{ref} ({pid})" if ref else pid
+                if ref:
+                    rr["label"] = f"{ref} ({pid})" if pid else ref
+                elif pid:
+                    rr["label"] = pid
+                elif source_doc_no and counterparty_name:
+                    rr["label"] = f"{source_doc_no} ({counterparty_name})"
+                else:
+                    rr["label"] = source_doc_no or counterparty_name or str(rr.get("label") or "").strip()
                 out.append(rr)
             return out
 

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from mcop.liquidity.reporting import top_events_within
 from mcop.main import main
 
 
@@ -301,3 +302,50 @@ def test_main_falls_back_to_legacy_when_xero_snapshot_is_invalid(monkeypatch, tm
     assert payload["finance_source"]["reason"] == "xero_snapshot_invalid: Unsupported schema_version: wrong_version"
     assert payload["base"]["cash_on_hand"] == 1500.0
     assert any("Finance source: legacy finance inputs (Xero snapshot invalid)." in line for line in payload["summary"])
+
+
+def test_top_events_within_keeps_xero_open_docs_and_usable_labels() -> None:
+    events = pd.DataFrame(
+        [
+                {
+                    "date": pd.Timestamp("2026-03-01"),
+                    "amount": 400.0,
+                    "event_type": "xero_payable_due",
+                    "source_system": "xero",
+                    "source_doc_no": "BILL-OLD",
+                    "counterparty_name": "Supplier A",
+                },
+                {
+                    "date": pd.Timestamp("2026-04-01"),
+                    "amount": 600.0,
+                    "event_type": "xero_payable_due",
+                    "source_system": "xero",
+                    "source_doc_no": "BILL-NEW",
+                    "counterparty_name": "Supplier B",
+                },
+                {
+                    "date": pd.Timestamp("2026-06-01"),
+                    "amount": 900.0,
+                    "event_type": "xero_payable_due",
+                    "source_system": "xero",
+                    "source_doc_no": "BILL-LATE",
+                    "counterparty_name": "Supplier C",
+                },
+                {
+                    "date": pd.Timestamp("2026-03-05"),
+                    "amount": 700.0,
+                    "event_type": "payable",
+                    "source_system": "legacy",
+                    "product_id": "p-1",
+            },
+        ]
+    )
+
+    result = top_events_within(events, pd.Timestamp("2026-03-14"), 60, {"p-1": "LEGACY-1"})
+
+    assert [row["source_doc_no"] for row in result if row.get("source_doc_no")] == ["BILL-NEW", "BILL-OLD"]
+    assert result[0]["label"] == "BILL-NEW (Supplier B)"
+    assert result[0]["counterparty_name"] == "Supplier B"
+    assert result[1]["label"] == "BILL-OLD (Supplier A)"
+    assert all(row["source_doc_no"] != "BILL-LATE" for row in result)
+    assert all(row.get("product_reference") != "LEGACY-1" for row in result)

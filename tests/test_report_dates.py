@@ -94,6 +94,21 @@ def test_weekly_brief_xero_tables_hide_internal_source_ids(tmp_path: Path) -> No
     assert "6a0daff8-1634-46de-b791-2a67ea41971e" not in html
 
 
+def test_weekly_brief_renders_infinite_runway_and_cash_risk_score(tmp_path: Path) -> None:
+    out = tmp_path / "weekly.html"
+    payload = _base_payload()
+    payload["base"]["runway_days"] = float("inf")
+    payload["cash_risk_score"] = 42
+    payload["score_band"] = "AMBER"
+
+    write_weekly_brief(out, payload)
+    html = out.read_text(encoding="utf-8")
+
+    assert "∞ days" in html
+    assert ">42<" in html
+    assert ">AMBER<" in html
+
+
 def test_run_uses_snapshot_date_for_external_artifacts(monkeypatch, tmp_path: Path) -> None:
     from mcop import main as main_mod
 
@@ -210,10 +225,19 @@ def test_run_uses_snapshot_date_for_external_artifacts(monkeypatch, tmp_path: Pa
     assert weekly_path.name == "WeeklyBrief_2026-03-14.html"
     assert weekly_payload["snapshot_date"] == "2026-03-14"
     assert weekly_payload["base"]["as_of"] == "2026-03-10"
+    assert weekly_payload["cash_risk_score"] == 3
+    assert weekly_payload["score_band"] == "WATCH"
 
     decision_pack = json.loads((paths.out_dir / "DecisionPack_2026-03-14.json").read_text(encoding="utf-8"))
     assert decision_pack["snapshot_date"] == "2026-03-14"
     assert decision_pack["as_of"] == "2026-03-10"
+    assert decision_pack["cash_risk_score"] == 3
+    assert decision_pack["score_band"] == "WATCH"
+
+    assert written_dashboard
+    _dashboard_path, dashboard_payload = written_dashboard[0]
+    assert dashboard_payload["cash_risk_score"] == 3
+    assert dashboard_payload["score_band"] == "WATCH"
 
     history = json.loads((paths.out_dir / "history.json").read_text(encoding="utf-8"))
     assert history[-1]["snapshot_date"] == "2026-03-14"
