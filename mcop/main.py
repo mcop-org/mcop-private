@@ -390,6 +390,75 @@ def build_released_value_trend(activity: pd.DataFrame) -> list[dict]:
         {"date": row["event_date"].date().isoformat(), "value_gbp": round(float(row["value_gbp"]), 2)}
         for _, row in grouped.iterrows()
     ]
+
+
+def build_reservation_pipeline_by_status(activity: pd.DataFrame) -> list[dict]:
+    required = {"request_type", "request_status", "bags", "bag_size_kg", "price_per_kg"}
+    missing = required - set(activity.columns)
+    if missing:
+        return []
+
+    reservations = activity.copy()
+    reservations["request_type"] = reservations["request_type"].astype(str).str.lower().str.strip()
+    reservations["request_status"] = reservations["request_status"].astype(str).str.lower().str.strip()
+    reservations = reservations[
+        (reservations["request_type"] == "reservation")
+        & (reservations["request_status"] != "rejected")
+    ].copy()
+    if reservations.empty:
+        return []
+
+    for col in ("id_booking", "id_request", "amendment_date", "approval_date", "request_date", "bags_remaining"):
+        if col not in reservations.columns:
+            reservations[col] = pd.NA
+
+    reservations["reservation_key"] = reservations["id_booking"].where(
+        reservations["id_booking"].notna() & (reservations["id_booking"].astype(str).str.strip() != ""),
+        reservations["id_request"],
+    )
+    reservations = reservations.dropna(subset=["reservation_key"]).copy()
+    if reservations.empty:
+        return []
+
+    reservations["reservation_key"] = reservations["reservation_key"].astype(str).str.strip()
+    reservations = reservations[reservations["reservation_key"] != ""].copy()
+    if reservations.empty:
+        return []
+
+    reservations["amendment_dt"] = pd.to_datetime(reservations["amendment_date"], errors="coerce", format="%Y-%m-%d")
+    reservations["approval_dt"] = pd.to_datetime(reservations["approval_date"], errors="coerce", format="%Y-%m-%d")
+    reservations["request_dt"] = pd.to_datetime(reservations["request_date"], errors="coerce", format="%Y-%m-%d")
+    reservations["effective_dt"] = reservations["amendment_dt"].fillna(reservations["approval_dt"]).fillna(reservations["request_dt"])
+
+    for col in ("bags", "bags_remaining", "bag_size_kg", "price_per_kg"):
+        reservations[col] = pd.to_numeric(reservations[col], errors="coerce").fillna(0.0)
+
+    reservations = reservations.sort_values(
+        ["reservation_key", "effective_dt", "id_request"],
+        kind="stable",
+        na_position="last",
+    )
+    latest = reservations.groupby("reservation_key", dropna=False, as_index=False).tail(1).copy()
+    if latest.empty:
+        return []
+
+    latest["effective_bags"] = latest["bags_remaining"].where(latest["bags_remaining"] > 0, latest["bags"])
+    latest["value_gbp"] = latest["effective_bags"] * latest["bag_size_kg"] * latest["price_per_kg"]
+    latest = latest[latest["value_gbp"] > 0].copy()
+    if latest.empty:
+        return []
+
+    grouped = latest.groupby("request_status", as_index=False)["value_gbp"].sum()
+    status_order = {"created": 0, "approved": 1, "completed": 2}
+    grouped["status_order"] = grouped["request_status"].map(lambda value: status_order.get(str(value), 99))
+    grouped = grouped.sort_values(["status_order", "request_status"], kind="stable")
+    return [
+        {
+            "status": str(row["request_status"]).strip().title(),
+            "value_gbp": round(float(row["value_gbp"]), 2),
+        }
+        for _, row in grouped.iterrows()
+    ]
     
 ENGINE_VERSION = "v1.0.0-stable"
 
@@ -535,6 +604,7 @@ def main():
         "container_exposure": container_exposure,
         "top_payables_60": top_events_within(payables, snapshot_ts, 60, product_map),
         "top_receivables_60": top_events_within(receivables, snapshot_ts, 60, product_map),
+        "reservation_pipeline_by_status": build_reservation_pipeline_by_status(inputs.activity),
         "released_value_trend": build_released_value_trend(inputs.activity),
     }
 

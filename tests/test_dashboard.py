@@ -356,6 +356,65 @@ def test_reservation_pipeline_uses_latest_effective_row_per_booking() -> None:
     ]
 
 
+def test_reservation_pipeline_falls_back_to_id_request_when_id_booking_missing() -> None:
+    if build_reservation_pipeline_by_status is None:
+        pytest.skip("build_reservation_pipeline_by_status is not available from mcop.main")
+
+    activity = pd.DataFrame(
+        [
+            {
+                "id_request": "r1",
+                "id_booking": pd.NA,
+                "request_type": "reservation",
+                "request_status": "created",
+                "request_date": "2026-03-01",
+                "bags": 10,
+                "bags_remaining": 10,
+                "bag_size_kg": 24,
+                "price_per_kg": 10.0,
+            },
+            {
+                "id_request": "r1",
+                "id_booking": pd.NA,
+                "request_type": "reservation",
+                "request_status": "approved",
+                "approval_date": "2026-03-03",
+                "bags": 10,
+                "bags_remaining": 6,
+                "bag_size_kg": 24,
+                "price_per_kg": 10.0,
+            },
+            {
+                "id_request": "r2",
+                "id_booking": pd.NA,
+                "request_type": "reservation",
+                "request_status": "created",
+                "request_date": "2026-03-02",
+                "bags": 5,
+                "bag_size_kg": 24,
+                "price_per_kg": 11.0,
+            },
+            {
+                "id_request": "r3",
+                "id_booking": pd.NA,
+                "request_type": "reservation",
+                "request_status": "rejected",
+                "request_date": "2026-03-02",
+                "bags": 8,
+                "bag_size_kg": 24,
+                "price_per_kg": 12.0,
+            },
+        ]
+    )
+
+    result = build_reservation_pipeline_by_status(activity)
+
+    assert result == [
+        {"status": "Created", "value_gbp": 1320.0},
+        {"status": "Approved", "value_gbp": 1440.0},
+    ]
+
+
 def test_released_value_trend_uses_dispatch_then_approval_then_request_date() -> None:
     if build_released_value_trend is None:
         pytest.skip("build_released_value_trend is not available from mcop.main")
