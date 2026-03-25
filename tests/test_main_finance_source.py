@@ -249,6 +249,62 @@ def test_main_uses_manual_fx_for_non_gbp_xero_finance_inputs(monkeypatch, tmp_pa
     )
 
 
+def test_main_preserves_cash_history_when_xero_cash_is_selected(monkeypatch, tmp_path: Path) -> None:
+    xero_cash_position = pd.DataFrame([{"date": "2026-03-17", "cash_on_hand": 25790.0, "currency_code": "GBP"}])
+    xero_sidecar = type(
+        "XeroSidecarStub",
+        (),
+        {
+            "currency_warning": None,
+            "finance_cash_position_snapshot": xero_cash_position,
+            "finance_payable_events": pd.DataFrame([{"date": "2026-03-25", "amount": 500.0, "currency_code": "GBP"}]),
+            "finance_receivable_events": pd.DataFrame([{"date": "2026-03-31", "amount": 800.0, "currency_code": "GBP"}]),
+            "xero_bank_balances": pd.DataFrame([{"currency_code": "GBP", "balance": 25790.0}]),
+            "xero_receivables_open": pd.DataFrame([{"currency_code": "GBP"}]),
+            "xero_payables_open": pd.DataFrame([{"currency_code": "GBP"}]),
+            "organisation": {"snapshot_date": "2026-03-17", "organisation_name": "Example Ltd"},
+        },
+    )()
+
+    def _load_inputs(_data_dir, xero_path=None):
+        return _Inputs(
+            cash_position=pd.DataFrame(
+                [
+                    {"date": "2026-02-01", "cash_on_hand": 30000.0},
+                    {"date": "2026-03-10", "cash_on_hand": 1500.0},
+                ]
+            ),
+            xero_sidecar=xero_sidecar,
+        )
+
+    from mcop import main as main_mod
+
+    captured_cash_positions: list[pd.DataFrame] = []
+
+    _, paths, _legacy_cash_position = _common_monkeypatches(monkeypatch, tmp_path, _load_inputs)
+
+    def _capture_snapshot(cash_position, _payables, _receivables):
+        captured_cash_positions.append(cash_position.copy())
+        return _Snapshot(
+            str(cash_position.iloc[-1]["date"]),
+            float(cash_position.iloc[-1]["cash_on_hand"]),
+            float(cash_position.iloc[-1]["cash_on_hand"]) + 1000.0,
+            48.0,
+        )
+
+    monkeypatch.setattr(main_mod, "compute_liquidity_snapshot", _capture_snapshot)
+
+    main()
+
+    payload = json.loads((paths.out_dir / "liquidity_report.json").read_text(encoding="utf-8"))
+    assert payload["finance_source"]["selected"] == "xero"
+    assert payload["base"]["runway_days"] == 48.0
+    assert len(captured_cash_positions) >= 1
+    base_cash_history = captured_cash_positions[0]
+    assert list(base_cash_history["cash_on_hand"]) == [30000.0, 25790.0]
+    assert str(pd.to_datetime(base_cash_history.iloc[-1]["date"]).date()) == "2026-03-17"
+
+
 def test_main_fails_clearly_when_non_gbp_xero_currency_has_no_manual_fx_rate(monkeypatch, tmp_path: Path) -> None:
     xero_sidecar = type(
         "XeroSidecarStub",

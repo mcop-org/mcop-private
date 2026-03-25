@@ -404,14 +404,34 @@ def build_xero_reporting_payload(
     comparisons: list[str] = []
     gbp_receivables = receivables[receivables["currency_code"].astype(str).str.strip().str.upper() == "GBP"].copy()
     gbp_payables = payables[payables["currency_code"].astype(str).str.strip().str.upper() == "GBP"].copy()
-    if not sidecar.finance_cash_position_snapshot.empty:
-        xero_cash = float(sidecar.finance_cash_position_snapshot.iloc[0]["cash_on_hand"])
-        comparisons.append(f"Legacy cash on hand: £{float(legacy_cash_on_hand or 0.0):,.2f} vs Xero GBP bank total: £{xero_cash:,.2f}")
+    effective_cash_total = (
+        float(converted_cash_on_hand_gbp)
+        if converted_cash_on_hand_gbp is not None
+        else (
+            float(sidecar.finance_cash_position_snapshot.iloc[0]["cash_on_hand"])
+            if not sidecar.finance_cash_position_snapshot.empty
+            else 0.0
+        )
+    )
+    effective_receivables_total = (
+        float(converted_receivables_total_gbp)
+        if converted_receivables_total_gbp is not None
+        else float(gbp_receivables["amount_due"].sum() if not gbp_receivables.empty else 0.0)
+    )
+    effective_payables_total = (
+        float(converted_payables_total_gbp)
+        if converted_payables_total_gbp is not None
+        else float(gbp_payables["amount_due"].sum() if not gbp_payables.empty else 0.0)
+    )
+    if converted_cash_on_hand_gbp is not None or not sidecar.finance_cash_position_snapshot.empty:
         comparisons.append(
-            f"Legacy receivables (60d): £{float(legacy_receivables_60 or 0.0):,.2f} vs Xero GBP open receivables: £{float(gbp_receivables['amount_due'].sum() if not gbp_receivables.empty else 0.0):,.2f}"
+            f"Legacy cash on hand: £{float(legacy_cash_on_hand or 0.0):,.2f} vs Xero GBP bank total: £{effective_cash_total:,.2f}"
         )
         comparisons.append(
-            f"Legacy payables (60d): £{float(legacy_payables_60 or 0.0):,.2f} vs Xero GBP open payables: £{float(gbp_payables['amount_due'].sum() if not gbp_payables.empty else 0.0):,.2f}"
+            f"Legacy receivables (60d): £{float(legacy_receivables_60 or 0.0):,.2f} vs Xero GBP open receivables: £{effective_receivables_total:,.2f}"
+        )
+        comparisons.append(
+            f"Legacy payables (60d): £{float(legacy_payables_60 or 0.0):,.2f} vs Xero GBP open payables: £{effective_payables_total:,.2f}"
         )
     if detected_currencies:
         comparisons.append(

@@ -291,6 +291,7 @@ def test_load_xero_snapshot_mixed_currency_docs_keep_native_totals_but_gbp_compa
     assert report["converted_cash_on_hand_gbp"] == 25790.0
     assert report["converted_receivables_total_gbp"] == 1237.0
     assert report["converted_payables_total_gbp"] == 1053.0
-    assert report["comparison_lines"][1].endswith("Xero GBP open receivables: £1,000.00")
-    assert report["comparison_lines"][2].endswith("Xero GBP open payables: £500.00")
+    assert report["comparison_lines"][0].endswith("Xero GBP bank total: £25,790.00")
+    assert report["comparison_lines"][1].endswith("Xero GBP open receivables: £1,237.00")
+    assert report["comparison_lines"][2].endswith("Xero GBP open payables: £1,053.00")
     assert report["comparison_lines"][3] == "Manual FX rates used for non-GBP Xero currencies: USD=0.790000"

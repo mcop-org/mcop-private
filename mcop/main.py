@@ -144,6 +144,36 @@ def _convert_xero_bank_balances_to_gbp(xero_sidecar, fx_rates_gbp: dict[str, flo
     )
 
 
+def _overlay_latest_cash_point(cash_history: pd.DataFrame, *, snapshot_date: object, cash_on_hand: float) -> pd.DataFrame:
+    history = cash_history.copy()
+    if history.empty:
+        return pd.DataFrame(
+            [
+                {
+                    "date": snapshot_date,
+                    "cash_on_hand": round(float(cash_on_hand), 2),
+                }
+            ]
+        )
+
+    history["date"] = pd.to_datetime(history["date"], errors="coerce")
+    history["cash_on_hand"] = pd.to_numeric(history["cash_on_hand"], errors="coerce")
+    history = history.dropna(subset=["date", "cash_on_hand"]).sort_values("date", kind="stable").reset_index(drop=True)
+    if history.empty:
+        return pd.DataFrame(
+            [
+                {
+                    "date": snapshot_date,
+                    "cash_on_hand": round(float(cash_on_hand), 2),
+                }
+            ]
+        )
+
+    history.loc[history.index[-1], "date"] = pd.to_datetime(snapshot_date, errors="coerce")
+    history.loc[history.index[-1], "cash_on_hand"] = round(float(cash_on_hand), 2)
+    return history
+
+
 def _convert_xero_events_to_gbp(events: pd.DataFrame, fx_rates_gbp: dict[str, float]) -> pd.DataFrame:
     if events is None or events.empty:
         return events
@@ -245,7 +275,7 @@ def _select_finance_inputs(
             )
 
         if detected_non_gbp_currencies:
-            xero_cash_position = _convert_xero_bank_balances_to_gbp(xero_sidecar, fx_rates_gbp)
+            converted_cash_position = _convert_xero_bank_balances_to_gbp(xero_sidecar, fx_rates_gbp)
             xero_payables_gbp = _convert_xero_events_to_gbp(xero_sidecar.finance_payable_events, fx_rates_gbp)
             xero_receivables_gbp = _convert_xero_events_to_gbp(xero_sidecar.finance_receivable_events, fx_rates_gbp)
             summary_notes.append(
@@ -254,12 +284,17 @@ def _select_finance_inputs(
                 + "."
             )
         else:
-            xero_cash_position = xero_sidecar.finance_cash_position_snapshot
+            converted_cash_position = xero_sidecar.finance_cash_position_snapshot
             xero_payables_gbp = _filter_xero_events_to_gbp(xero_sidecar.finance_payable_events)
             xero_receivables_gbp = _filter_xero_events_to_gbp(xero_sidecar.finance_receivable_events)
             summary_notes.extend(_build_xero_currency_notes(xero_sidecar))
 
-        if not xero_cash_position.empty:
+        if not converted_cash_position.empty:
+            xero_cash_position = _overlay_latest_cash_point(
+                legacy_cash_position,
+                snapshot_date=converted_cash_position.iloc[0]["date"],
+                cash_on_hand=float(converted_cash_position.iloc[0]["cash_on_hand"]),
+            )
             return (
                 xero_cash_position,
                 xero_payables_gbp,
