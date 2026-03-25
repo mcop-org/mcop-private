@@ -21,6 +21,14 @@ def _f(x, default=0.0):
     except Exception:
         return default
 
+def _s(x):
+    if x is None:
+        return ""
+    text = str(x).strip()
+    if text.lower() in {"", "nan", "none", "<na>"}:
+        return ""
+    return text.lower()
+
 def compute_landed_aging(products, as_of_date, stress_liquidity_60d):
     """
     Computes landed unsold stock aging by value.
@@ -36,8 +44,10 @@ def compute_landed_aging(products, as_of_date, stress_liquidity_60d):
     top_traps = []
 
     for row in products or []:
-        landing_status = str(row.get("landing_status", row.get("Landing Status", ""))).strip().lower()
-        if landing_status != "landed":
+        landing_status = _s(row.get("landing_status", row.get("Landing Status", "")))
+        status = _s(row.get("status", row.get("Status", "")))
+        is_landed = landing_status == "landed" if landing_status else status == "available"
+        if not is_landed:
             continue
 
         landing_date = _parse_date(row.get("landing_date", row.get("Landing Date")))

@@ -136,6 +136,50 @@ def test_load_inputs_aliases_products_bags_available_to_bags_remaining(tmp_path:
     assert landed_aging["total_unsold_value"] > 0
 
 
+def test_landed_aging_falls_back_to_available_status_when_landing_status_blank(tmp_path: Path) -> None:
+    (tmp_path / "products.csv").write_text(
+        "\n".join(
+            [
+                "product_id,product_reference,bag_size_kg,bags,bags_available,price_per_kg,landing_status,landing_date,status",
+                "p1,product_1,24,10,4,12.5,,2025-01-15,available",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "product_costs_protected.csv").write_text(
+        "\n".join(
+            [
+                "product_id,bag_size_kg,bags,cost_of_green_coffee_gbp_kg,cost_farm_to_port_gbp_kg,freight_cost_gbp_kg,cost_uk_port_to_warehouse_gbp_kg,initial_payment_pct,initial_payment_date,remaining_payment_pct,remaining_payment_date,harvest_date,landing_date",
+                "p1,24,10,5.0,1.0,0.5,0.25,20,2024-12-01,80,2025-02-01,2024-10-01,2025-01-15",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "cash_position.csv").write_text(
+        "date,cash_on_hand\n2025-01-20,1000.0\n",
+        encoding="utf-8",
+    )
+    (tmp_path / "activity.csv").write_text(
+        "product_id,request_type,request_status,bags,bags_remaining,bag_size_kg,price_per_kg,reservation_days,payment_days,landing_date\np1,Reservation,Created,2,2,24,12.5,30,14,2025-01-15\n",
+        encoding="utf-8",
+    )
+
+    inputs = load_inputs(tmp_path)
+    as_of, _cash_on_hand = latest_as_of(inputs.cash_position)
+
+    landed_aging = compute_landed_aging(
+        inputs.products.to_dict(orient="records"),
+        as_of.date(),
+        1000.0,
+    )
+
+    assert landed_aging["total_unsold_value"] > 0
+    assert landed_aging["top_cash_traps"]
+    assert landed_aging["flag"] in {"OK", "WATCH", "BLOCK"}
+
+
 def test_load_inputs_normalises_product_id_to_string_for_runtime_merges(tmp_path: Path) -> None:
     (tmp_path / "products.csv").write_text(
         "\n".join(
