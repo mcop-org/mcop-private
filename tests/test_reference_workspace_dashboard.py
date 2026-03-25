@@ -71,4 +71,7 @@ def test_reference_workspace_html_is_deterministic_and_contains_core_ui(tmp_path
     assert "Reservation completed means all products within the reservation have been released." in first
     assert '"default_reference":"REF-1"' in first
     assert '"product_reference":"REF-2"' in first
+    assert 'const landingStatus = row.landing_status || "Unknown";' in first
+    assert 'const reservationState = row.has_reservations ? "reservations" : "no reservations";' in first
+    assert 'const label = row.product_reference + " - " + landingStatus + " - " + reservationState;' in first
     assert "Latest effective reservation date from the current activity dataset." in first

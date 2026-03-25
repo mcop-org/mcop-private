@@ -440,7 +440,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 
     function renderOptions() {{
       const options = (data.reference_options || []).map((row) => {{
-        const label = row.has_reservations ? row.product_reference : row.product_reference + " (no reservations)";
+        const landingStatus = row.landing_status || "Unknown";
+        const reservationState = row.has_reservations ? "reservations" : "no reservations";
+        const label = row.product_reference + " - " + landingStatus + " - " + reservationState;
         return '<option value="' + escapeHtml(row.product_reference) + '" label="' + escapeHtml(label) + '"></option>';
       }});
       optionList.innerHTML = options.join("");

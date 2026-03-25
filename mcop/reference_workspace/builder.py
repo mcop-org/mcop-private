@@ -54,6 +54,16 @@ def _product_reference_fallbacks(products: pd.DataFrame) -> tuple[dict[str, str]
     return product_lookup, reference_lookup
 
 
+def _latest_rows_per_reservation_product(reservations: pd.DataFrame) -> pd.DataFrame:
+    keyed = reservations.copy()
+    keyed["product_key"] = keyed["product_id"].map(_clean_text)
+    keyed.loc[keyed["product_key"] == "", "product_key"] = keyed.loc[
+        keyed["product_key"] == "", "product_reference"
+    ].map(_clean_text)
+    keyed["reservation_product_key"] = keyed["reservation_key"] + "||" + keyed["product_key"]
+    return keyed.groupby("reservation_product_key", dropna=False, as_index=False).tail(1).copy()
+
+
 def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataFrame) -> dict:
     product_ref_by_id, landing_status_by_reference = _product_reference_fallbacks(products)
 
@@ -159,7 +169,16 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         kind="stable",
         na_position="last",
     )
-    latest = reservations.groupby("reservation_key", dropna=False, as_index=False).tail(1).copy()
+    latest = _latest_rows_per_reservation_product(reservations)
+    latest = latest.sort_values(
+        ["reservation_key", "effective_dt", "id_request"],
+        kind="stable",
+        na_position="last",
+    )
+    if "reservation_product_key" in latest.columns:
+        latest = latest.drop(columns=["reservation_product_key"])
+    if "product_key" in latest.columns:
+        latest = latest.drop(columns=["product_key"])
 
     latest["product_id"] = latest["product_id"].map(_clean_text)
     latest["product_reference"] = latest["product_reference"].map(_clean_text)
