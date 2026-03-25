@@ -371,10 +371,17 @@ def build_xero_reporting_payload(
     legacy_cash_on_hand: float | None,
     legacy_receivables_60: float | None,
     legacy_payables_60: float | None,
+    fx_rates_gbp: dict[str, float] | None = None,
+    converted_cash_on_hand_gbp: float | None = None,
+    converted_receivables_total_gbp: float | None = None,
+    converted_payables_total_gbp: float | None = None,
+    detected_non_gbp_currencies: list[str] | None = None,
 ) -> dict:
     receivables = sidecar.xero_receivables_open
     payables = sidecar.xero_payables_open
     bank_balances = sidecar.xero_bank_balances
+    fx_rates_sorted = dict(sorted((fx_rates_gbp or {}).items()))
+    detected_currencies = sorted(str(currency).strip().upper() for currency in (detected_non_gbp_currencies or []) if str(currency).strip())
 
     def _top_rows(rows: pd.DataFrame, id_field: str, number_field: str) -> list[dict]:
         if rows.empty:
@@ -406,6 +413,11 @@ def build_xero_reporting_payload(
         comparisons.append(
             f"Legacy payables (60d): £{float(legacy_payables_60 or 0.0):,.2f} vs Xero GBP open payables: £{float(gbp_payables['amount_due'].sum() if not gbp_payables.empty else 0.0):,.2f}"
         )
+    if detected_currencies:
+        comparisons.append(
+            "Manual FX rates used for non-GBP Xero currencies: "
+            + ", ".join(f"{currency}={fx_rates_sorted[currency]:.6f}" for currency in detected_currencies if currency in fx_rates_sorted)
+        )
 
     return {
         "available": True,
@@ -414,6 +426,11 @@ def build_xero_reporting_payload(
         "tenant_id": sidecar.organisation["tenant_id"],
         "base_currency": sidecar.organisation["base_currency"],
         "currency_warning": sidecar.currency_warning,
+        "fx_rates_gbp": fx_rates_sorted,
+        "detected_non_gbp_currencies": detected_currencies,
+        "converted_cash_on_hand_gbp": round(float(converted_cash_on_hand_gbp), 2) if converted_cash_on_hand_gbp is not None else None,
+        "converted_receivables_total_gbp": round(float(converted_receivables_total_gbp), 2) if converted_receivables_total_gbp is not None else None,
+        "converted_payables_total_gbp": round(float(converted_payables_total_gbp), 2) if converted_payables_total_gbp is not None else None,
         "bank_totals_by_currency": _sum_by_currency(bank_balances, "balance"),
         "receivables_totals_by_currency": _sum_by_currency(receivables, "amount_due"),
         "payables_totals_by_currency": _sum_by_currency(payables, "amount_due"),

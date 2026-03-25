@@ -59,6 +59,11 @@ def test_weekly_brief_xero_tables_hide_internal_source_ids(tmp_path: Path) -> No
         "snapshot_date": "2026-03-14",
         "organisation_name": "Example Ltd",
         "base_currency": "GBP",
+        "fx_rates_gbp": {},
+        "detected_non_gbp_currencies": [],
+        "converted_cash_on_hand_gbp": None,
+        "converted_receivables_total_gbp": None,
+        "converted_payables_total_gbp": None,
         "bank_totals_by_currency": [],
         "receivables_totals_by_currency": [],
         "payables_totals_by_currency": [],
@@ -92,6 +97,37 @@ def test_weekly_brief_xero_tables_hide_internal_source_ids(tmp_path: Path) -> No
     assert "BILL-0100" in html
     assert "1e74f6f0-078d-4064-8abc-648688bed3f2" not in html
     assert "6a0daff8-1634-46de-b791-2a67ea41971e" not in html
+
+
+def test_weekly_brief_renders_xero_fx_metadata(tmp_path: Path) -> None:
+    out = tmp_path / "weekly.html"
+    payload = _base_payload()
+    payload["xero_import"] = {
+        "available": True,
+        "snapshot_date": "2026-03-14",
+        "organisation_name": "Example Ltd",
+        "base_currency": "GBP",
+        "fx_rates_gbp": {"USD": 0.79},
+        "detected_non_gbp_currencies": ["USD"],
+        "converted_cash_on_hand_gbp": 25790.0,
+        "converted_receivables_total_gbp": 1748.0,
+        "converted_payables_total_gbp": 1211.0,
+        "bank_totals_by_currency": [],
+        "receivables_totals_by_currency": [],
+        "payables_totals_by_currency": [],
+        "comparison_lines": [],
+        "top_receivables": [],
+        "top_payables": [],
+    }
+
+    write_weekly_brief(out, payload)
+    html = out.read_text(encoding="utf-8")
+
+    assert "Detected non-GBP currencies: <strong>USD</strong>" in html
+    assert "Manual FX rates used: <strong>USD=0.790000</strong>" in html
+    assert "Converted Xero cash used in GBP analysis: <strong>£25,790.00</strong>" in html
+    assert "Converted Xero receivables used in GBP analysis: <strong>£1,748.00</strong>" in html
+    assert "Converted Xero payables used in GBP analysis: <strong>£1,211.00</strong>" in html
 
 
 def test_weekly_brief_renders_infinite_runway_and_cash_risk_score(tmp_path: Path) -> None:

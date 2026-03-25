@@ -82,6 +82,83 @@ def _fmt_gbp(x: float) -> str:
         return "£—"
 
 
+def _parse_fx_rates(rate_args: list[str] | None) -> dict[str, float]:
+    rates: dict[str, float] = {}
+    for raw in rate_args or []:
+        text = str(raw or "").strip()
+        if not text or "=" not in text:
+            raise ValueError(f"Invalid --fx-rate value: {raw}. Expected CODE=RATE, for example USD=0.79")
+        currency_code, rate_text = text.split("=", 1)
+        currency = currency_code.strip().upper()
+        if not currency or currency == "GBP":
+            raise ValueError(f"Invalid --fx-rate currency: {raw}")
+        try:
+            rate = float(rate_text.strip())
+        except Exception as exc:
+            raise ValueError(f"Invalid --fx-rate value: {raw}. Expected numeric GBP rate.") from exc
+        if rate <= 0:
+            raise ValueError(f"Invalid --fx-rate value: {raw}. Rate must be greater than zero.")
+        rates[currency] = rate
+    return dict(sorted(rates.items()))
+
+
+def _collect_non_gbp_xero_currencies(xero_sidecar) -> list[str]:
+    currencies: set[str] = set()
+    for frame_name in ("xero_bank_balances", "xero_receivables_open", "xero_payables_open"):
+        frame = getattr(xero_sidecar, frame_name, None)
+        if frame is None or frame.empty or "currency_code" not in frame.columns:
+            continue
+        values = (
+            frame["currency_code"]
+            .astype(str)
+            .str.strip()
+            .str.upper()
+            .tolist()
+        )
+        currencies.update(currency for currency in values if currency and currency != "GBP")
+    return sorted(currencies)
+
+
+def _convert_xero_bank_balances_to_gbp(xero_sidecar, fx_rates_gbp: dict[str, float]) -> pd.DataFrame:
+    bank_balances = getattr(xero_sidecar, "xero_bank_balances", None)
+    if bank_balances is None or bank_balances.empty:
+        return pd.DataFrame(columns=["date", "cash_on_hand", "source_system", "currency_code"])
+
+    balances = bank_balances.copy()
+    balances["currency_code"] = balances["currency_code"].astype(str).str.strip().str.upper()
+    balances["gbp_balance"] = balances.apply(
+        lambda row: round(float(row["balance"]) * float(fx_rates_gbp.get(row["currency_code"], 1.0)), 2),
+        axis=1,
+    )
+    total_cash = round(float(balances["gbp_balance"].sum()), 2)
+    snapshot_date = xero_sidecar.organisation.get("snapshot_date")
+    return pd.DataFrame(
+        [
+            {
+                "date": snapshot_date,
+                "cash_on_hand": total_cash,
+                "source_system": "xero",
+                "currency_code": "GBP",
+            }
+        ]
+    )
+
+
+def _convert_xero_events_to_gbp(events: pd.DataFrame, fx_rates_gbp: dict[str, float]) -> pd.DataFrame:
+    if events is None or events.empty:
+        return events
+    converted = events.copy()
+    if "currency_code" not in converted.columns:
+        return converted.reset_index(drop=True)
+    converted["currency_code"] = converted["currency_code"].astype(str).str.strip().str.upper()
+    converted["amount"] = converted.apply(
+        lambda row: round(float(row["amount"]) * float(fx_rates_gbp.get(row["currency_code"], 1.0)), 2),
+        axis=1,
+    )
+    converted["currency_code"] = "GBP"
+    return converted.reset_index(drop=True)
+
+
 def _filter_xero_events_to_gbp(events: pd.DataFrame) -> pd.DataFrame:
     if events is None or events.empty or "currency_code" not in events.columns:
         return events
@@ -139,6 +216,7 @@ def _select_finance_inputs(
     legacy_receivables: pd.DataFrame,
     xero_snapshot_present: bool,
     xero_load_error: str | None,
+    fx_rates_gbp: dict[str, float],
 ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, dict, list[str]]:
     xero_sidecar = getattr(inputs, "xero_sidecar", None)
     summary_notes: list[str] = []
@@ -157,13 +235,33 @@ def _select_finance_inputs(
         )
 
     if xero_sidecar is not None:
-        xero_payables_gbp = _filter_xero_events_to_gbp(xero_sidecar.finance_payable_events)
-        xero_receivables_gbp = _filter_xero_events_to_gbp(xero_sidecar.finance_receivable_events)
-        summary_notes.extend(_build_xero_currency_notes(xero_sidecar))
+        detected_non_gbp_currencies = _collect_non_gbp_xero_currencies(xero_sidecar)
+        missing_rates = [currency for currency in detected_non_gbp_currencies if currency not in fx_rates_gbp]
+        if missing_rates:
+            raise ValueError(
+                "Missing manual FX rates for Xero currencies: "
+                + ", ".join(missing_rates)
+                + ". Supply --fx-rate CODE=RATE, for example --fx-rate USD=0.79"
+            )
 
-        if not xero_sidecar.finance_cash_position_snapshot.empty:
+        if detected_non_gbp_currencies:
+            xero_cash_position = _convert_xero_bank_balances_to_gbp(xero_sidecar, fx_rates_gbp)
+            xero_payables_gbp = _convert_xero_events_to_gbp(xero_sidecar.finance_payable_events, fx_rates_gbp)
+            xero_receivables_gbp = _convert_xero_events_to_gbp(xero_sidecar.finance_receivable_events, fx_rates_gbp)
+            summary_notes.append(
+                "Manual FX conversion applied to Xero non-GBP balances/documents for GBP liquidity analysis: "
+                + ", ".join(f"{currency}={fx_rates_gbp[currency]:.6f}" for currency in detected_non_gbp_currencies)
+                + "."
+            )
+        else:
+            xero_cash_position = xero_sidecar.finance_cash_position_snapshot
+            xero_payables_gbp = _filter_xero_events_to_gbp(xero_sidecar.finance_payable_events)
+            xero_receivables_gbp = _filter_xero_events_to_gbp(xero_sidecar.finance_receivable_events)
+            summary_notes.extend(_build_xero_currency_notes(xero_sidecar))
+
+        if not xero_cash_position.empty:
             return (
-                xero_sidecar.finance_cash_position_snapshot,
+                xero_cash_position,
                 xero_payables_gbp,
                 xero_receivables_gbp,
                 {
@@ -172,6 +270,8 @@ def _select_finance_inputs(
                     "snapshot_date": xero_sidecar.organisation.get("snapshot_date"),
                     "organisation_name": xero_sidecar.organisation.get("organisation_name"),
                     "reason": "valid_xero_snapshot",
+                    "fx_rates_gbp": fx_rates_gbp,
+                    "detected_non_gbp_currencies": detected_non_gbp_currencies,
                 },
                 summary_notes,
             )
@@ -182,6 +282,8 @@ def _select_finance_inputs(
             "snapshot_date": xero_sidecar.organisation.get("snapshot_date"),
             "organisation_name": xero_sidecar.organisation.get("organisation_name"),
             "reason": "xero_snapshot_missing_gbp_cash_position",
+            "fx_rates_gbp": fx_rates_gbp,
+            "detected_non_gbp_currencies": detected_non_gbp_currencies,
         }
         if xero_sidecar.currency_warning:
             finance_source["currency_warning"] = xero_sidecar.currency_warning
@@ -256,7 +358,9 @@ def main():
     ap.add_argument("--precommit-check", action="store_true")
     ap.add_argument("--commit-cost-gbp", type=float, default=150000.0)
     ap.add_argument("--commit-due-in-days", type=int, default=30)
+    ap.add_argument("--fx-rate", action="append", default=[], dest="fx_rates")
     args = ap.parse_args()
+    fx_rates_gbp = _parse_fx_rates(args.fx_rates)
 
     snapshot_date = args.as_of or date.today().isoformat()
     snapshot_ts = _parse_snapshot_ts(snapshot_date)
@@ -301,6 +405,7 @@ def main():
         legacy_receivables=legacy_receivables,
         xero_snapshot_present=xero_snapshot_present,
         xero_load_error=xero_load_error,
+        fx_rates_gbp=fx_rates_gbp,
     )
 
     base = compute_liquidity_snapshot(cash_position, payables, receivables)
@@ -399,6 +504,11 @@ def main():
             legacy_cash_on_hand=legacy_base.cash_on_hand,
             legacy_receivables_60=legacy_base.receivables_60,
             legacy_payables_60=legacy_base.payables_60,
+            fx_rates_gbp=fx_rates_gbp,
+            converted_cash_on_hand_gbp=(float(cash_position.iloc[0]["cash_on_hand"]) if finance_source["selected"] == "xero" and not cash_position.empty else None),
+            converted_receivables_total_gbp=(round(float(receivables["amount"].sum()), 2) if finance_source["selected"] == "xero" and receivables is not None and not receivables.empty else 0.0 if finance_source["selected"] == "xero" else None),
+            converted_payables_total_gbp=(round(float(payables["amount"].sum()), 2) if finance_source["selected"] == "xero" and payables is not None and not payables.empty else 0.0 if finance_source["selected"] == "xero" else None),
+            detected_non_gbp_currencies=finance_source.get("detected_non_gbp_currencies") or [],
         )
 
     container_exposure = dict(container_exposure)

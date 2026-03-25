@@ -598,6 +598,22 @@ td.mono{font-family:var(--mono);color:var(--muted);font-size:12px}
         html.append(f"<li>Snapshot date: <strong>{_safe(xero_import.get('snapshot_date') or '—')}</strong></li>")
         html.append(f"<li>Organisation: <strong>{_safe(xero_import.get('organisation_name') or '—')}</strong></li>")
         html.append(f"<li>Base currency: <strong>{_safe(xero_import.get('base_currency') or '—')}</strong></li>")
+        detected_non_gbp = xero_import.get("detected_non_gbp_currencies") or []
+        if detected_non_gbp:
+            html.append(f"<li>Detected non-GBP currencies: <strong>{_safe(', '.join(detected_non_gbp))}</strong></li>")
+        fx_rates = xero_import.get("fx_rates_gbp") or {}
+        if fx_rates:
+            fx_text = ", ".join(
+                f"{_safe(str(currency).upper())}={_safe(f'{float(rate):.6f}')}"
+                for currency, rate in sorted(fx_rates.items())
+            )
+            html.append(f"<li>Manual FX rates used: <strong>{fx_text}</strong></li>")
+        if xero_import.get("converted_cash_on_hand_gbp") is not None:
+            html.append(f"<li>Converted Xero cash used in GBP analysis: <strong>{_safe(_gbp2(xero_import.get('converted_cash_on_hand_gbp')))}</strong></li>")
+        if xero_import.get("converted_receivables_total_gbp") is not None:
+            html.append(f"<li>Converted Xero receivables used in GBP analysis: <strong>{_safe(_gbp2(xero_import.get('converted_receivables_total_gbp')))}</strong></li>")
+        if xero_import.get("converted_payables_total_gbp") is not None:
+            html.append(f"<li>Converted Xero payables used in GBP analysis: <strong>{_safe(_gbp2(xero_import.get('converted_payables_total_gbp')))}</strong></li>")
         if xero_import.get("currency_warning"):
             html.append(f"<li>{_safe(xero_import.get('currency_warning'))}</li>")
         for line in xero_import.get("comparison_lines") or []:

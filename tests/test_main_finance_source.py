@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
 from mcop.liquidity.reporting import top_events_within
 from mcop.main import main
@@ -185,10 +186,12 @@ def test_main_uses_xero_finance_inputs_when_snapshot_is_usable(monkeypatch, tmp_
     assert payload["finance_source"]["selected"] == "xero"
     assert payload["finance_source"]["reason"] == "valid_xero_snapshot"
     assert payload["base"]["cash_on_hand"] == 25000.0
+    assert payload["finance_source"]["fx_rates_gbp"] == {}
+    assert payload["finance_source"]["detected_non_gbp_currencies"] == []
     assert any("Finance source: Xero snapshot (2026-03-17)." in line for line in payload["summary"])
 
 
-def test_main_falls_back_to_legacy_when_xero_snapshot_has_mixed_currency(monkeypatch, tmp_path: Path) -> None:
+def test_main_uses_manual_fx_for_non_gbp_xero_finance_inputs(monkeypatch, tmp_path: Path) -> None:
     xero_cash_position = pd.DataFrame([{"date": "2026-03-17", "cash_on_hand": 25000.0, "currency_code": "GBP"}])
     xero_sidecar = type(
         "XeroSidecarStub",
@@ -227,28 +230,54 @@ def test_main_falls_back_to_legacy_when_xero_snapshot_has_mixed_currency(monkeyp
         )
 
     _, paths, _legacy_cash_position = _common_monkeypatches(monkeypatch, tmp_path, _load_inputs)
+    monkeypatch.setattr("sys.argv", ["mcop", "run", "--as-of", "2026-03-14", "--fx-rate", "USD=0.79"])
 
     main()
 
     payload = json.loads((paths.out_dir / "liquidity_report.json").read_text(encoding="utf-8"))
     assert payload["finance_source"]["selected"] == "xero"
     assert payload["finance_source"]["reason"] == "valid_xero_snapshot"
-    assert payload["base"]["cash_on_hand"] == 25000.0
+    assert payload["base"]["cash_on_hand"] == 25790.0
     assert payload["base"]["receivables_60"] == 22000.0
     assert payload["base"]["payables_60"] == 12000.0
+    assert payload["finance_source"]["fx_rates_gbp"] == {"USD": 0.79}
+    assert payload["finance_source"]["detected_non_gbp_currencies"] == ["USD"]
     assert any(
-        "Xero non-GBP bank balances are excluded from GBP cash analysis and shown separately: USD."
-        in line
-        for line in payload["summary"]
-    )
-    assert any(
-        "Xero non-GBP receivables/payables are excluded from GBP liquidity analysis and shown separately: receivables: USD; payables: USD."
+        "Manual FX conversion applied to Xero non-GBP balances/documents for GBP liquidity analysis: USD=0.790000."
         in line
         for line in payload["summary"]
     )
 
 
-def test_main_falls_back_to_legacy_when_xero_snapshot_has_no_gbp_cash(monkeypatch, tmp_path: Path) -> None:
+def test_main_fails_clearly_when_non_gbp_xero_currency_has_no_manual_fx_rate(monkeypatch, tmp_path: Path) -> None:
+    xero_sidecar = type(
+        "XeroSidecarStub",
+        (),
+        {
+            "currency_warning": "Mixed/non-GBP Xero values detected.",
+            "finance_cash_position_snapshot": pd.DataFrame([{"date": "2026-03-17", "cash_on_hand": 25000.0, "currency_code": "GBP"}]),
+            "finance_payable_events": pd.DataFrame([{"date": "2026-03-25", "amount": 900.0, "currency_code": "USD"}]),
+            "finance_receivable_events": pd.DataFrame([{"date": "2026-03-31", "amount": 1200.0, "currency_code": "USD"}]),
+            "xero_bank_balances": pd.DataFrame([{"currency_code": "USD", "balance": 1000.0}]),
+            "xero_receivables_open": pd.DataFrame([{"currency_code": "USD"}]),
+            "xero_payables_open": pd.DataFrame([{"currency_code": "USD"}]),
+            "organisation": {"snapshot_date": "2026-03-17", "organisation_name": "Example Ltd"},
+        },
+    )()
+
+    def _load_inputs(_data_dir, xero_path=None):
+        return _Inputs(
+            cash_position=pd.DataFrame([{"date": "2026-03-10", "cash_on_hand": 1500.0}]),
+            xero_sidecar=xero_sidecar,
+        )
+
+    _common_monkeypatches(monkeypatch, tmp_path, _load_inputs)
+
+    with pytest.raises(ValueError, match="Missing manual FX rates for Xero currencies: USD"):
+        main()
+
+
+def test_main_uses_manual_fx_when_xero_snapshot_has_no_gbp_cash(monkeypatch, tmp_path: Path) -> None:
     xero_sidecar = type(
         "XeroSidecarStub",
         (),
@@ -271,13 +300,16 @@ def test_main_falls_back_to_legacy_when_xero_snapshot_has_no_gbp_cash(monkeypatc
         )
 
     _, paths, _legacy_cash_position = _common_monkeypatches(monkeypatch, tmp_path, _load_inputs)
+    monkeypatch.setattr("sys.argv", ["mcop", "run", "--as-of", "2026-03-14", "--fx-rate", "USD=0.79"])
 
     main()
 
     payload = json.loads((paths.out_dir / "liquidity_report.json").read_text(encoding="utf-8"))
-    assert payload["finance_source"]["selected"] == "legacy"
-    assert payload["finance_source"]["reason"] == "xero_snapshot_missing_gbp_cash_position"
-    assert payload["base"]["cash_on_hand"] == 1500.0
+    assert payload["finance_source"]["selected"] == "xero"
+    assert payload["finance_source"]["reason"] == "valid_xero_snapshot"
+    assert payload["base"]["cash_on_hand"] == 790.0
+    assert payload["finance_source"]["fx_rates_gbp"] == {"USD": 0.79}
+    assert payload["finance_source"]["detected_non_gbp_currencies"] == ["USD"]
 
 
 def test_main_falls_back_to_legacy_when_xero_snapshot_is_invalid(monkeypatch, tmp_path: Path) -> None:

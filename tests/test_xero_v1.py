@@ -101,6 +101,9 @@ def test_load_xero_snapshot_normalises_open_documents_and_events(tmp_path: Path)
     assert report["bank_totals_by_currency"] == [{"currency_code": "GBP", "amount": 25000.0}]
     assert report["receivables_totals_by_currency"] == [{"currency_code": "GBP", "amount": 1200.0}]
     assert report["payables_totals_by_currency"] == [{"currency_code": "GBP", "amount": 500.0}]
+    assert report["fx_rates_gbp"] == {}
+    assert report["detected_non_gbp_currencies"] == []
+    assert report["converted_cash_on_hand_gbp"] is None
     assert len(report["comparison_lines"]) == 3
 
 
@@ -268,6 +271,11 @@ def test_load_xero_snapshot_mixed_currency_docs_keep_native_totals_but_gbp_compa
         legacy_cash_on_hand=1500.0,
         legacy_receivables_60=800.0,
         legacy_payables_60=500.0,
+        fx_rates_gbp={"USD": 0.79},
+        converted_cash_on_hand_gbp=25790.0,
+        converted_receivables_total_gbp=1237.0,
+        converted_payables_total_gbp=1053.0,
+        detected_non_gbp_currencies=["USD"],
     )
 
     assert report["receivables_totals_by_currency"] == [
@@ -278,5 +286,11 @@ def test_load_xero_snapshot_mixed_currency_docs_keep_native_totals_but_gbp_compa
         {"currency_code": "GBP", "amount": 500.0},
         {"currency_code": "USD", "amount": 700.0},
     ]
+    assert report["fx_rates_gbp"] == {"USD": 0.79}
+    assert report["detected_non_gbp_currencies"] == ["USD"]
+    assert report["converted_cash_on_hand_gbp"] == 25790.0
+    assert report["converted_receivables_total_gbp"] == 1237.0
+    assert report["converted_payables_total_gbp"] == 1053.0
     assert report["comparison_lines"][1].endswith("Xero GBP open receivables: £1,000.00")
     assert report["comparison_lines"][2].endswith("Xero GBP open payables: £500.00")
+    assert report["comparison_lines"][3] == "Manual FX rates used for non-GBP Xero currencies: USD=0.790000"
