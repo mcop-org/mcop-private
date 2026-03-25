@@ -107,7 +107,12 @@ def bucket_sum(events: pd.DataFrame, as_of: pd.Timestamp, days: int) -> float:
     e = e.dropna(subset=["date"])
     e["amount"] = pd.to_numeric(e["amount"], errors="coerce").fillna(0.0)
     end = as_of + pd.Timedelta(days=days)
-    return float(e[(e["date"] >= as_of) & (e["date"] <= end)]["amount"].sum())
+    is_xero = (
+        e.get("source_system", pd.Series("", index=e.index)).astype(str).str.strip().str.lower().eq("xero")
+        | e.get("event_type", pd.Series("", index=e.index)).astype(str).str.strip().str.lower().str.startswith("xero_")
+    )
+    window = e[((e["date"] >= as_of) & (e["date"] <= end)) | (is_xero & (e["date"] <= end))]
+    return float(window["amount"].sum())
 
 def conservative_daily_burn_from_cash_position(cash_position: pd.DataFrame, lookback_days: int = 90) -> float:
     """

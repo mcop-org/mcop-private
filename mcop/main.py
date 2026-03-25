@@ -174,6 +174,13 @@ def _overlay_latest_cash_point(cash_history: pd.DataFrame, *, snapshot_date: obj
     return history
 
 
+def _latest_cash_on_hand(cash_position: pd.DataFrame) -> float | None:
+    if cash_position is None or cash_position.empty:
+        return None
+    _as_of, cash = latest_as_of(cash_position)
+    return round(float(cash), 2)
+
+
 def _convert_xero_events_to_gbp(events: pd.DataFrame, fx_rates_gbp: dict[str, float]) -> pd.DataFrame:
     if events is None or events.empty:
         return events
@@ -540,7 +547,7 @@ def main():
             legacy_receivables_60=legacy_base.receivables_60,
             legacy_payables_60=legacy_base.payables_60,
             fx_rates_gbp=fx_rates_gbp,
-            converted_cash_on_hand_gbp=(float(cash_position.iloc[0]["cash_on_hand"]) if finance_source["selected"] == "xero" and not cash_position.empty else None),
+            converted_cash_on_hand_gbp=(_latest_cash_on_hand(cash_position) if finance_source["selected"] == "xero" else None),
             converted_receivables_total_gbp=(round(float(receivables["amount"].sum()), 2) if finance_source["selected"] == "xero" and receivables is not None and not receivables.empty else 0.0 if finance_source["selected"] == "xero" else None),
             converted_payables_total_gbp=(round(float(payables["amount"].sum()), 2) if finance_source["selected"] == "xero" and payables is not None and not payables.empty else 0.0 if finance_source["selected"] == "xero" else None),
             detected_non_gbp_currencies=finance_source.get("detected_non_gbp_currencies") or [],

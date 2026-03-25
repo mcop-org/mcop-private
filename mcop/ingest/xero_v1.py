@@ -425,13 +425,13 @@ def build_xero_reporting_payload(
     )
     if converted_cash_on_hand_gbp is not None or not sidecar.finance_cash_position_snapshot.empty:
         comparisons.append(
-            f"Legacy cash on hand: £{float(legacy_cash_on_hand or 0.0):,.2f} vs Xero GBP bank total: £{effective_cash_total:,.2f}"
+            f"Legacy cash on hand: £{float(legacy_cash_on_hand or 0.0):,.2f} vs Xero converted cash used in GBP analysis: £{effective_cash_total:,.2f}"
         )
         comparisons.append(
-            f"Legacy receivables (60d): £{float(legacy_receivables_60 or 0.0):,.2f} vs Xero GBP open receivables: £{effective_receivables_total:,.2f}"
+            f"Legacy receivables (60d): £{float(legacy_receivables_60 or 0.0):,.2f} vs Xero converted open receivables used in GBP analysis: £{effective_receivables_total:,.2f}"
         )
         comparisons.append(
-            f"Legacy payables (60d): £{float(legacy_payables_60 or 0.0):,.2f} vs Xero GBP open payables: £{effective_payables_total:,.2f}"
+            f"Legacy payables (60d): £{float(legacy_payables_60 or 0.0):,.2f} vs Xero converted open payables used in GBP analysis: £{effective_payables_total:,.2f}"
         )
     if detected_currencies:
         comparisons.append(

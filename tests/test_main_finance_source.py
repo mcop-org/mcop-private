@@ -249,6 +249,60 @@ def test_main_uses_manual_fx_for_non_gbp_xero_finance_inputs(monkeypatch, tmp_pa
     )
 
 
+def test_main_reports_latest_selected_xero_cash_in_reporting_payload(monkeypatch, tmp_path: Path) -> None:
+    xero_cash_position = pd.DataFrame([{"date": "2026-03-17", "cash_on_hand": 25790.0, "currency_code": "GBP"}])
+    xero_sidecar = type(
+        "XeroSidecarStub",
+        (),
+        {
+            "currency_warning": None,
+            "finance_cash_position_snapshot": xero_cash_position,
+            "finance_payable_events": pd.DataFrame([{"date": "2026-03-25", "amount": 500.0, "currency_code": "GBP"}]),
+            "finance_receivable_events": pd.DataFrame([{"date": "2026-03-31", "amount": 800.0, "currency_code": "GBP"}]),
+            "xero_bank_balances": pd.DataFrame([{"currency_code": "GBP", "balance": 25790.0}]),
+            "xero_receivables_open": pd.DataFrame([{"currency_code": "GBP"}]),
+            "xero_payables_open": pd.DataFrame([{"currency_code": "GBP"}]),
+            "organisation": {"snapshot_date": "2026-03-17", "organisation_name": "Example Ltd"},
+        },
+    )()
+
+    captured_kwargs: dict[str, object] = {}
+
+    def _load_inputs(_data_dir, xero_path=None):
+        return _Inputs(
+            cash_position=pd.DataFrame(
+                [
+                    {"date": "2026-02-01", "cash_on_hand": 30000.0},
+                    {"date": "2026-03-10", "cash_on_hand": 1500.0},
+                ]
+            ),
+            xero_sidecar=xero_sidecar,
+        )
+
+    from mcop import main as main_mod
+
+    _, paths, _legacy_cash_position = _common_monkeypatches(monkeypatch, tmp_path, _load_inputs)
+    monkeypatch.setattr(
+        main_mod,
+        "latest_as_of",
+        lambda cash_position: (
+            main_mod.pd.Timestamp(str(cash_position.iloc[-1]["date"])),
+            float(cash_position.iloc[-1]["cash_on_hand"]),
+        ),
+    )
+
+    def _capture_reporting_payload(*args, **kwargs):
+        captured_kwargs.update(kwargs)
+        return {"available": True}
+
+    monkeypatch.setattr(main_mod, "build_xero_reporting_payload", _capture_reporting_payload)
+
+    main()
+
+    assert (paths.out_dir / "liquidity_report.json").exists()
+    assert captured_kwargs["converted_cash_on_hand_gbp"] == 25790.0
+
+
 def test_main_preserves_cash_history_when_xero_cash_is_selected(monkeypatch, tmp_path: Path) -> None:
     xero_cash_position = pd.DataFrame([{"date": "2026-03-17", "cash_on_hand": 25790.0, "currency_code": "GBP"}])
     xero_sidecar = type(
@@ -437,3 +491,19 @@ def test_top_events_within_keeps_xero_open_docs_and_usable_labels() -> None:
     assert result[1]["label"] == "BILL-OLD (Supplier A)"
     assert all(row["source_doc_no"] != "BILL-LATE" for row in result)
     assert all(row.get("product_reference") != "LEGACY-1" for row in result)
+
+
+def test_bucket_sum_counts_overdue_xero_open_docs_within_forward_window() -> None:
+    from mcop.liquidity.engine import bucket_sum
+
+    as_of = pd.Timestamp("2026-03-14")
+    events = pd.DataFrame(
+        [
+            {"date": "2026-03-01", "amount": 400.0, "event_type": "xero_payable_due", "source_system": "xero"},
+            {"date": "2026-03-25", "amount": 600.0, "event_type": "xero_payable_due", "source_system": "xero"},
+            {"date": "2026-04-20", "amount": 900.0, "event_type": "xero_payable_due", "source_system": "xero"},
+            {"date": "2026-03-01", "amount": 300.0, "event_type": "payable", "source_system": "legacy"},
+        ]
+    )
+
+    assert bucket_sum(events, as_of, 30) == 1000.0
