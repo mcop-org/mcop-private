@@ -568,7 +568,7 @@ def main():
     # LAYER 2: LANDED STOCK AGEING (unsold capital already in UK)
     # ---------------------------
     try:
-        as_of_date = as_of_ts.date() if hasattr(as_of_ts, "date") else as_of_ts
+        as_of_date = snapshot_ts.date() if hasattr(snapshot_ts, "date") else snapshot_ts
 
         # stress may be LiquiditySnapshot or dict; support both
         stress_liq60 = float(stress.liquidity_60) if hasattr(stress, "liquidity_60") else float(stress.get("liquidity_60", 0.0))
