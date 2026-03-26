@@ -122,9 +122,9 @@ def test_builder_uses_latest_non_rejected_reservation_row_per_key_and_keeps_comp
     )
     products = pd.DataFrame(
         [
-            {"product_id": "p-1", "product_reference": "REF-1", "landing_status": "incoming"},
-            {"product_id": "p-2", "product_reference": "REF-1", "landing_status": "landed"},
-            {"product_id": "p-3", "product_reference": "REF-2", "landing_status": "incoming"},
+            {"product_id": "p-1", "product_reference": "REF-1", "landing_status": "incoming", "bags_available": 2},
+            {"product_id": "p-2", "product_reference": "REF-1", "landing_status": "landed", "bags_available": 1},
+            {"product_id": "p-3", "product_reference": "REF-2", "landing_status": "incoming", "bags_available": 5},
         ]
     )
 
@@ -134,20 +134,36 @@ def test_builder_uses_latest_non_rejected_reservation_row_per_key_and_keeps_comp
     assert dataset["default_reference"] == "REF-1"
     assert dataset["notes"] == [RESERVATION_NOTE]
     assert dataset["reference_options"] == [
-        {"product_reference": "REF-1", "has_reservations": True, "landing_status": "Mixed"},
+        {"product_reference": "REF-1", "has_reservations": True, "landing_status": "Incoming"},
         {"product_reference": "REF-2", "has_reservations": False, "landing_status": "Incoming"},
     ]
     assert dataset["reference_summary"] == [
         {
             "product_reference": "REF-1",
-            "landing_status": "Mixed",
+            "landing_status": "Incoming",
+            "landing_date": "multiple",
             "is_landed": False,
             "reservation_row_count": 2,
             "client_count": 2,
             "reserved_bags": 4.0,
+            "bags_available": 3.0,
+            "reserved_pct": 0.5714,
             "reserved_kg": 110.0,
             "reserved_value_gbp": 1150.0,
-        }
+        },
+        {
+            "product_reference": "REF-2",
+            "landing_status": "Incoming",
+            "landing_date": "",
+            "is_landed": False,
+            "reservation_row_count": 0,
+            "client_count": 0,
+            "reserved_bags": 0.0,
+            "bags_available": 5.0,
+            "reserved_pct": 0.0,
+            "reserved_kg": 0.0,
+            "reserved_value_gbp": 0.0,
+        },
     ]
     assert dataset["reservation_details"] == [
         {
@@ -156,8 +172,6 @@ def test_builder_uses_latest_non_rejected_reservation_row_per_key_and_keeps_comp
             "id_request": "r-1",
             "client_id": "c-1",
             "company_name": "Alpha Roasters",
-            "contact_first_name": "Ava",
-            "contact_last_name": "Stone",
             "request_status": "Approved",
             "request_date": "2026-03-01",
             "approval_date": "2026-03-03",
@@ -179,8 +193,6 @@ def test_builder_uses_latest_non_rejected_reservation_row_per_key_and_keeps_comp
             "id_request": "replacement-row",
             "client_id": "c-2",
             "company_name": "Bravo Coffee",
-            "contact_first_name": "Ben",
-            "contact_last_name": "Hart",
             "request_status": "Completed",
             "request_date": "2026-03-04",
             "approval_date": "2026-03-05",
@@ -294,9 +306,9 @@ def test_builder_keeps_latest_row_per_reservation_product_combination() -> None:
     )
     products = pd.DataFrame(
         [
-            {"product_id": "130", "product_reference": "product_134", "landing_status": "incoming"},
-            {"product_id": "78", "product_reference": "product_11", "landing_status": "landed"},
-            {"product_id": "127", "product_reference": "product_128", "landing_status": "incoming"},
+            {"product_id": "130", "product_reference": "product_134", "landing_status": "incoming", "bags_available": 2},
+            {"product_id": "78", "product_reference": "product_11", "landing_status": "landed", "bags_available": 3},
+            {"product_id": "127", "product_reference": "product_128", "landing_status": "incoming", "bags_available": 4},
         ]
     )
 
@@ -313,10 +325,13 @@ def test_builder_keeps_latest_row_per_reservation_product_combination() -> None:
         {
             "product_reference": "product_134",
             "landing_status": "Incoming",
+            "landing_date": "2026-03-31",
             "is_landed": False,
             "reservation_row_count": 2,
             "client_count": 2,
             "reserved_bags": 8.0,
+            "bags_available": 2.0,
+            "reserved_pct": 0.8,
             "reserved_kg": 240.0,
             "reserved_value_gbp": 2400.0,
         }
@@ -378,8 +393,8 @@ def test_builder_uses_product_landing_status_only_when_activity_row_blank() -> N
     )
     products = pd.DataFrame(
         [
-            {"product_id": "p-1", "product_reference": "REF-1", "landing_status": "incoming"},
-            {"product_id": "p-2", "product_reference": "REF-2", "landing_status": "incoming"},
+            {"product_id": "p-1", "product_reference": "REF-1", "landing_status": "incoming", "bags_available": 5},
+            {"product_id": "p-2", "product_reference": "REF-2", "landing_status": "incoming", "bags_available": 2},
         ]
     )
 
@@ -389,10 +404,13 @@ def test_builder_uses_product_landing_status_only_when_activity_row_blank() -> N
         {
             "product_reference": "REF-1",
             "landing_status": "Incoming",
+            "landing_date": "2026-03-20",
             "is_landed": False,
             "reservation_row_count": 1,
             "client_count": 1,
             "reserved_bags": 3.0,
+            "bags_available": 5.0,
+            "reserved_pct": 0.375,
             "reserved_kg": 90.0,
             "reserved_value_gbp": 900.0,
         }
@@ -401,11 +419,125 @@ def test_builder_uses_product_landing_status_only_when_activity_row_blank() -> N
         {
             "product_reference": "REF-2",
             "landing_status": "Landed",
+            "landing_date": "2026-03-18",
             "is_landed": True,
             "reservation_row_count": 1,
             "client_count": 1,
             "reserved_bags": 1.0,
+            "bags_available": 2.0,
+            "reserved_pct": 0.3333,
             "reserved_kg": 20.0,
             "reserved_value_gbp": 250.0,
+        }
+    ]
+
+
+def test_builder_uses_products_bags_available_only_for_reference_availability_kpi() -> None:
+    activity = pd.DataFrame(
+        [
+            {
+                "id_request": "r-1",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-01",
+                "approval_date": "2026-03-03",
+                "amendment_date": "",
+                "client_id": "c-1",
+                "company_name": "Alpha Roasters",
+                "product_id": "p-1",
+                "product_reference": "REF-1",
+                "bags": 4,
+                "bags_remaining": 3,
+                "bag_size_kg": 30,
+                "price_per_kg": 10.0,
+            }
+        ]
+    )
+    products = pd.DataFrame(
+        [
+            {
+                "product_id": "p-1",
+                "product_reference": "REF-1",
+                "landing_status": "incoming",
+                "bags_remaining": 9,
+            }
+        ]
+    )
+
+    dataset = build_reference_workspace_dataset(activity, products)
+
+    assert dataset["reference_summary"] == [
+        {
+            "product_reference": "REF-1",
+            "landing_status": "Incoming",
+            "landing_date": "",
+            "is_landed": False,
+            "reservation_row_count": 1,
+            "client_count": 1,
+            "reserved_bags": 3.0,
+            "bags_available": 0.0,
+            "reserved_pct": 1.0,
+            "reserved_kg": 90.0,
+            "reserved_value_gbp": 900.0,
+        }
+    ]
+
+
+def test_builder_adds_product_only_reference_summary_with_available_bags() -> None:
+    activity = pd.DataFrame(
+        [
+            {
+                "id_request": "r-1",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-01",
+                "approval_date": "2026-03-03",
+                "product_id": "p-1",
+                "product_reference": "product_109",
+                "client_id": "c-1",
+                "company_name": "Alpha Roasters",
+                "bags": 2,
+                "bags_remaining": 2,
+                "bag_size_kg": 30,
+                "price_per_kg": 10.0,
+                "landing_status": "landed",
+            }
+        ]
+    )
+    products = pd.DataFrame(
+        [
+            {
+                "product_id": "p-1",
+                "product_reference": "product_109",
+                "landing_status": "landed",
+                "bags_available": 1,
+            },
+            {
+                "product_id": "p-2",
+                "product_reference": "product_110",
+                "landing_status": "",
+                "landing_date": "",
+                "bags_available": 4,
+            },
+        ]
+    )
+
+    dataset = build_reference_workspace_dataset(activity, products)
+
+    assert [row for row in dataset["reference_summary"] if row["product_reference"] == "product_110"] == [
+        {
+            "product_reference": "product_110",
+            "landing_status": "Unknown",
+            "landing_date": "",
+            "is_landed": False,
+            "reservation_row_count": 0,
+            "client_count": 0,
+            "reserved_bags": 0.0,
+            "bags_available": 4.0,
+            "reserved_pct": 0.0,
+            "reserved_kg": 0.0,
+            "reserved_value_gbp": 0.0,
         }
     ]

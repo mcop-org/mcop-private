@@ -20,10 +20,13 @@ def test_reference_workspace_html_is_deterministic_and_contains_core_ui(tmp_path
             {
                 "product_reference": "REF-1",
                 "landing_status": "Incoming",
+                "landing_date": "2026-03-18",
                 "is_landed": False,
                 "reservation_row_count": 2,
                 "client_count": 2,
                 "reserved_bags": 4.0,
+                "bags_available": 3.0,
+                "reserved_pct": 0.5714,
                 "reserved_kg": 110.0,
                 "reserved_value_gbp": 1150.0,
             }
@@ -35,8 +38,6 @@ def test_reference_workspace_html_is_deterministic_and_contains_core_ui(tmp_path
                 "id_request": "r-1",
                 "client_id": "c-1",
                 "company_name": "Alpha Roasters",
-                "contact_first_name": "Ava",
-                "contact_last_name": "Stone",
                 "request_status": "Completed",
                 "request_date": "2026-03-04",
                 "approval_date": "2026-03-05",
@@ -74,4 +75,15 @@ def test_reference_workspace_html_is_deterministic_and_contains_core_ui(tmp_path
     assert 'const landingStatus = row.landing_status || "Unknown";' in first
     assert 'const reservationState = row.has_reservations ? "reservations" : "no reservations";' in first
     assert 'const label = row.product_reference + " - " + landingStatus + " - " + reservationState;' in first
-    assert "Latest effective reservation date from the current activity dataset." in first
+    assert "Reservation Snapshot" in first
+    assert "Based on the latest reservation activity included in this view." in first
+    assert 'id="kpi-reserved-pct"' in first
+    assert 'id="kpi-available-bags"' in first
+    assert "Landing Status" in first
+    assert 'id="kpi-landing-status"' in first
+    assert 'id="kpi-landing-meta"' in first
+    assert 'grid-template-columns: repeat(5, minmax(0, 1fr));' in first
+    assert 'function buildLandingMeta(summary)' in first
+    assert 'landingStatus.textContent = summary.landing_status || "Unknown";' in first
+    assert "contact_first_name" not in first
+    assert "contact_last_name" not in first

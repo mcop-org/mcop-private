@@ -79,7 +79,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }}
     .toolbar {{
       display: grid;
-      grid-template-columns: minmax(0, 1.5fr) minmax(220px, 0.75fr);
+      grid-template-columns: minmax(0, 1.75fr) minmax(220px, 0.55fr);
       gap: 16px;
       margin-top: 24px;
     }}
@@ -111,7 +111,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       font: inherit;
     }}
     .snapshot-card {{
-      padding: 20px;
+      padding: 16px 18px;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
@@ -123,19 +123,19 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       color: var(--muted);
     }}
     .snapshot-date {{
-      margin-top: 10px;
-      font-size: 30px;
+      margin-top: 8px;
+      font-size: 24px;
       font-weight: 700;
     }}
     .grid {{
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(5, minmax(0, 1fr));
       gap: 16px;
       margin-top: 18px;
     }}
     .kpi {{
-      padding: 20px;
-      min-height: 146px;
+      padding: 18px;
+      min-height: 132px;
     }}
     .kpi-label {{
       color: var(--muted);
@@ -154,6 +154,12 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       color: var(--muted);
       font-size: 14px;
       line-height: 1.45;
+    }}
+    .kpi-submeta {{
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
     }}
     .note {{
       margin-top: 18px;
@@ -241,6 +247,11 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       font-size: 14px;
       color: var(--muted);
     }}
+    @media (max-width: 1120px) {{
+      .grid {{
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }}
+    }}
     @media (max-width: 980px) {{
       .toolbar, .grid {{
         grid-template-columns: 1fr;
@@ -276,9 +287,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
           <div class="selected-reference" id="selected-reference">Reference: -</div>
         </section>
         <section class="panel snapshot-card">
-          <div class="snapshot-label">Dataset snapshot</div>
+          <div class="snapshot-label">Reservation Snapshot</div>
           <div class="snapshot-date">{snapshot_date}</div>
-          <div class="muted">Latest effective reservation date from the current activity dataset.</div>
+          <div class="muted">Based on the latest reservation activity included in this view.</div>
         </section>
       </div>
     </section>
@@ -295,14 +306,19 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         <div class="kpi-meta" id="kpi-rows">-</div>
       </article>
       <article class="panel kpi">
+        <div class="kpi-label">Reserved %</div>
+        <div class="kpi-value" id="kpi-reserved-pct">-</div>
+        <div class="kpi-submeta" id="kpi-available-bags">-</div>
+      </article>
+      <article class="panel kpi">
         <div class="kpi-label">Clients</div>
         <div class="kpi-value" id="kpi-clients">-</div>
         <div class="kpi-meta">Distinct clients attached to the selected reservation reference.</div>
       </article>
       <article class="panel kpi">
-        <div class="kpi-label">Reservation Status</div>
-        <div class="kpi-value" id="kpi-landed">-</div>
-        <div class="kpi-meta">Landing status carried on the reservation reference rows.</div>
+        <div class="kpi-label">Landing Status</div>
+        <div class="kpi-value" id="kpi-landing-status">-</div>
+        <div class="kpi-meta" id="kpi-landing-meta">-</div>
       </article>
     </section>
 
@@ -394,6 +410,14 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       }}) : "GBP -";
     }}
 
+    function formatPercent(value) {{
+      const number = Number(value || 0);
+      return Number.isFinite(number) ? (number * 100).toLocaleString("en-GB", {{
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 1,
+      }}) + "%" : "-";
+    }}
+
     function formatKilos(value) {{
       const number = Number(value || 0);
       return Number.isFinite(number) ? number.toLocaleString("en-GB", {{
@@ -409,6 +433,80 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         return leftNumber - rightNumber;
       }}
       return String(left ?? "").localeCompare(String(right ?? ""), "en", {{ sensitivity: "base" }});
+    }}
+
+    function parseIsoDate(value) {{
+      if (!/^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(String(value || ""))) {{
+        return null;
+      }}
+      const parsed = new Date(String(value) + "T00:00:00Z");
+      return Number.isNaN(parsed.getTime()) ? null : parsed;
+    }}
+
+    function formatLongDate(value) {{
+      const parsed = parseIsoDate(value);
+      if (!parsed) {{
+        return "";
+      }}
+      return parsed.toLocaleDateString("en-GB", {{
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      }});
+    }}
+
+    function dayDiff(fromValue, toValue) {{
+      const fromDate = parseIsoDate(fromValue);
+      const toDate = parseIsoDate(toValue);
+      if (!fromDate || !toDate) {{
+        return null;
+      }}
+      const msPerDay = 24 * 60 * 60 * 1000;
+      return Math.round((toDate.getTime() - fromDate.getTime()) / msPerDay);
+    }}
+
+    function buildLandingMeta(summary) {{
+      const status = summary?.landing_status || "Unknown";
+      const landingDate = summary?.landing_date || "";
+      if (!landingDate) {{
+        return status === "Unknown" ? "Landing date not available." : "Landing date not available for this reference.";
+      }}
+      if (landingDate === "multiple") {{
+        return "Landing dates vary across this reference.";
+      }}
+
+      const formattedDate = formatLongDate(landingDate);
+      if (!formattedDate) {{
+        return "Landing date available but not in a displayable format.";
+      }}
+
+      const diff = dayDiff(data.snapshot_date, landingDate);
+      if (status === "Incoming") {{
+        if (diff === null) {{
+          return "Expected to land on " + formattedDate + ".";
+        }}
+        if (diff > 0) {{
+          return "Expected to land on " + formattedDate + ", in " + formatNumber(diff, 0) + " days.";
+        }}
+        if (diff === 0) {{
+          return "Expected to land today, " + formattedDate + ".";
+        }}
+        return "Expected landing date was " + formattedDate + ".";
+      }}
+      if (status === "Landed") {{
+        if (diff === null) {{
+          return "Landed on " + formattedDate + ".";
+        }}
+        if (diff > 0) {{
+          return "Landed on " + formattedDate + ", " + formatNumber(diff, 0) + " days ago.";
+        }}
+        if (diff === 0) {{
+          return "Landed today, " + formattedDate + ".";
+        }}
+        return "Recorded as landed on " + formattedDate + ".";
+      }}
+      return "Landing date " + formattedDate + ".";
     }}
 
     function currentDetails() {{
@@ -454,16 +552,22 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       const bags = document.getElementById("kpi-bags");
       const value = document.getElementById("kpi-value");
       const rows = document.getElementById("kpi-rows");
+      const reservedPct = document.getElementById("kpi-reserved-pct");
+      const availableBags = document.getElementById("kpi-available-bags");
       const clients = document.getElementById("kpi-clients");
-      const landed = document.getElementById("kpi-landed");
+      const landingStatus = document.getElementById("kpi-landing-status");
+      const landingMeta = document.getElementById("kpi-landing-meta");
 
       if (!summary) {{
         kg.textContent = "0 kg";
         bags.textContent = "0 reserved bags";
         value.textContent = "GBP 0";
         rows.textContent = "0 reservation rows";
+        reservedPct.textContent = "0%";
+        availableBags.textContent = "0 bags still available";
         clients.textContent = "0";
-        landed.textContent = "No reservations";
+        landingStatus.textContent = "Unknown";
+        landingMeta.textContent = "Landing date not available.";
         return;
       }}
 
@@ -471,17 +575,19 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       bags.textContent = formatNumber(summary.reserved_bags, 0) + " reserved bags";
       value.textContent = formatMoney(summary.reserved_value_gbp);
       rows.textContent = formatNumber(summary.reservation_row_count, 0) + " reservation rows";
+      reservedPct.textContent = formatPercent(summary.reserved_pct);
+      availableBags.textContent = formatNumber(summary.bags_available, 0) + " bags still available";
       clients.textContent = formatNumber(summary.client_count, 0);
-      landed.textContent = summary.landing_status || "-";
+      landingStatus.textContent = summary.landing_status || "Unknown";
+      landingMeta.textContent = buildLandingMeta(summary);
     }}
 
     function renderTable() {{
       const rows = currentDetails();
       emptyState.hidden = rows.length > 0;
       tableBody.innerHTML = rows.map((row) => {{
-        const contact = [row.contact_first_name, row.contact_last_name].filter(Boolean).join(" ");
         return "<tr>" +
-          "<td><strong>" + escapeHtml(row.company_name || "-") + "</strong><div class='muted'>" + escapeHtml(contact || row.client_id || "-") + "</div></td>" +
+          "<td><strong>" + escapeHtml(row.company_name || "-") + "</strong></td>" +
           "<td><span class='pill'>" + escapeHtml(row.request_status || "-") + "</span></td>" +
           "<td>" + escapeHtml(formatNumber(row.effective_bags, 0)) + "</td>" +
           "<td>" + escapeHtml(formatKilos(row.reserved_kg)) + "</td>" +

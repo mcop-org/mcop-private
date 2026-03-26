@@ -37,21 +37,76 @@ def _first_text(values: Iterable[object]) -> str:
     return "mixed"
 
 
-def _product_reference_fallbacks(products: pd.DataFrame) -> tuple[dict[str, str], dict[str, str]]:
+def _summarise_landing_status(values: Iterable[object]) -> str:
+    statuses = {_clean_text(value).lower() for value in values if _clean_text(value)}
+    if not statuses:
+        return ""
+    if "incoming" in statuses:
+        return "incoming"
+    if statuses == {"landed"}:
+        return "landed"
+    return ""
+
+
+def _summarise_landing_date(values: Iterable[object]) -> str:
+    dates = sorted({_clean_text(value) for value in values if _clean_text(value)})
+    if not dates:
+        return ""
+    if len(dates) == 1:
+        return dates[0]
+    return "multiple"
+
+
+def _product_reference_fallbacks(products: pd.DataFrame) -> tuple[dict[str, str], dict[str, str], dict[str, str]]:
     if products.empty:
-        return {}, {}
+        return {}, {}, {}
 
     product_lookup: dict[str, str] = {}
-    reference_lookup: dict[str, str] = {}
+    status_groups: dict[str, list[str]] = {}
+    date_groups: dict[str, list[str]] = {}
     for _, row in products.iterrows():
         product_id = _clean_text(row.get("product_id"))
         reference = _clean_text(row.get("product_reference"))
         landing_status = _clean_text(row.get("landing_status")).lower()
+        landing_date = _clean_text(row.get("landing_date"))
         if product_id and reference:
             product_lookup[product_id] = reference
-        if reference and landing_status and reference not in reference_lookup:
-            reference_lookup[reference] = landing_status
-    return product_lookup, reference_lookup
+        if reference:
+            status_groups.setdefault(reference, []).append(landing_status)
+            date_groups.setdefault(reference, []).append(landing_date)
+
+    reference_status_lookup = {
+        reference: _summarise_landing_status(values)
+        for reference, values in status_groups.items()
+        if _summarise_landing_status(values)
+    }
+    reference_date_lookup = {
+        reference: _summarise_landing_date(values)
+        for reference, values in date_groups.items()
+        if _summarise_landing_date(values)
+    }
+    return product_lookup, reference_status_lookup, reference_date_lookup
+
+
+def _available_bags_by_reference(products: pd.DataFrame) -> dict[str, float]:
+    if products.empty or "bags_available" not in products.columns:
+        return {}
+
+    available = products.copy()
+    if "product_reference" not in available.columns:
+        available["product_reference"] = ""
+    available["product_reference"] = available["product_reference"].map(_clean_text)
+    available = available[available["product_reference"] != ""].copy()
+    if available.empty:
+        return {}
+
+    available["bags_available"] = _to_float_series(available, "bags_available")
+    grouped = available.groupby("product_reference", sort=True, as_index=False)["bags_available"].sum()
+    return {
+        _clean_text(row["product_reference"]): round(float(row["bags_available"]), 4)
+        for _, row in grouped.iterrows()
+        if _clean_text(row["product_reference"])
+    }
 
 
 def _latest_rows_per_reservation_product(reservations: pd.DataFrame) -> pd.DataFrame:
@@ -65,17 +120,34 @@ def _latest_rows_per_reservation_product(reservations: pd.DataFrame) -> pd.DataF
 
 
 def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataFrame) -> dict:
-    product_ref_by_id, landing_status_by_reference = _product_reference_fallbacks(products)
+    product_ref_by_id, landing_status_by_reference, landing_date_by_reference = _product_reference_fallbacks(products)
+    available_bags_by_reference = _available_bags_by_reference(products)
+
+    selector_refs = sorted(
+        {
+            _clean_text(row.get("product_reference"))
+            for _, row in products.iterrows()
+            if _clean_text(row.get("product_reference"))
+        }
+    )
+
+    def _empty_summary_row(reference: str) -> dict:
+        return {
+            "product_reference": reference,
+            "landing_status": landing_status_by_reference.get(reference, "").title() or "Unknown",
+            "landing_date": landing_date_by_reference.get(reference, ""),
+            "is_landed": landing_status_by_reference.get(reference, "") == "landed",
+            "reservation_row_count": 0,
+            "client_count": 0,
+            "reserved_bags": 0.0,
+            "bags_available": available_bags_by_reference.get(reference, 0.0),
+            "reserved_pct": 0.0,
+            "reserved_kg": 0.0,
+            "reserved_value_gbp": 0.0,
+        }
 
     reservations = activity.copy()
     if reservations.empty:
-        selector_refs = sorted(
-            {
-                _clean_text(row.get("product_reference"))
-                for _, row in products.iterrows()
-                if _clean_text(row.get("product_reference"))
-            }
-        )
         return {
             "snapshot_date": "",
             "default_reference": selector_refs[0] if selector_refs else "",
@@ -84,11 +156,11 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
                 {
                     "product_reference": reference,
                     "has_reservations": False,
-                    "landing_status": landing_status_by_reference.get(reference, ""),
+                    "landing_status": landing_status_by_reference.get(reference, "").title() or "Unknown",
                 }
                 for reference in selector_refs
             ],
-            "reference_summary": [],
+            "reference_summary": [_empty_summary_row(reference) for reference in selector_refs],
             "reservation_details": [],
         }
 
@@ -119,13 +191,6 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
             reservations[column] = pd.NA
 
     if reservations.empty:
-        selector_refs = sorted(
-            {
-                _clean_text(row.get("product_reference"))
-                for _, row in products.iterrows()
-                if _clean_text(row.get("product_reference"))
-            }
-        )
         return {
             "snapshot_date": "",
             "default_reference": selector_refs[0] if selector_refs else "",
@@ -134,11 +199,11 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
                 {
                     "product_reference": reference,
                     "has_reservations": False,
-                    "landing_status": landing_status_by_reference.get(reference, ""),
+                    "landing_status": landing_status_by_reference.get(reference, "").title() or "Unknown",
                 }
                 for reference in selector_refs
             ],
-            "reference_summary": [],
+            "reference_summary": [_empty_summary_row(reference) for reference in selector_refs],
             "reservation_details": [],
         }
 
@@ -201,8 +266,6 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
     detail_rows["warehouse"] = detail_rows["warehouse"].map(_clean_text)
     detail_rows["company_name"] = detail_rows["company_name"].map(_clean_text)
     detail_rows["client_id"] = detail_rows["client_id"].map(_clean_text)
-    detail_rows["contact_first_name"] = detail_rows["contact_first_name"].map(_clean_text)
-    detail_rows["contact_last_name"] = detail_rows["contact_last_name"].map(_clean_text)
     detail_rows["id_request"] = detail_rows["id_request"].map(_clean_text)
     detail_rows["reservation_key"] = detail_rows["reservation_key"].map(_clean_text)
     detail_rows["request_date"] = detail_rows["request_date"].map(_clean_text)
@@ -222,8 +285,6 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
             "id_request": _clean_text(row["id_request"]),
             "client_id": _clean_text(row["client_id"]),
             "company_name": _clean_text(row["company_name"]),
-            "contact_first_name": _clean_text(row["contact_first_name"]),
-            "contact_last_name": _clean_text(row["contact_last_name"]),
             "request_status": _clean_text(row["request_status"]).title(),
             "request_date": _clean_text(row["request_date"]),
             "approval_date": _clean_text(row["approval_date"]),
@@ -257,32 +318,35 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
             )
             if key
         }
-        landing_status = _first_text(group["landing_status"])
+        landing_status = _summarise_landing_status(group["landing_status"])
+        landing_date = _summarise_landing_date(group["landing_date"])
         summary_rows.append(
             {
                 "product_reference": reference_text,
-                "landing_status": landing_status.title() if landing_status else "",
+                "landing_status": landing_status.title() if landing_status else "Unknown",
+                "landing_date": landing_date if landing_date else landing_date_by_reference.get(reference_text, ""),
                 "is_landed": landing_status == "landed",
                 "reservation_row_count": int(len(group)),
                 "client_count": int(len(client_keys)),
                 "reserved_bags": round(float(group["effective_bags"].sum()), 4),
+                "bags_available": available_bags_by_reference.get(reference_text, 0.0),
+                "reserved_pct": 0.0,
                 "reserved_kg": round(float(group["reserved_kg"].sum()), 4),
                 "reserved_value_gbp": round(float(group["reserved_value_gbp"].sum()), 2),
             }
         )
 
+    for row in summary_rows:
+        denominator = float(row["reserved_bags"]) + float(row["bags_available"])
+        row["reserved_pct"] = round((float(row["reserved_bags"]) / denominator) if denominator > 0 else 0.0, 4)
+
     summary_rows = sorted(summary_rows, key=lambda row: row["product_reference"])
     summary_refs = {row["product_reference"] for row in summary_rows}
-    selector_refs = sorted(
-        {
-            *summary_refs,
-            *{
-                _clean_text(row.get("product_reference"))
-                for _, row in products.iterrows()
-                if _clean_text(row.get("product_reference"))
-            },
-        }
-    )
+    selector_refs = sorted({*summary_refs, *selector_refs})
+    for reference in selector_refs:
+        if reference not in summary_refs:
+            summary_rows.append(_empty_summary_row(reference))
+    summary_rows = sorted(summary_rows, key=lambda row: row["product_reference"])
 
     reference_options = [
         {
@@ -295,7 +359,7 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
                         for row in summary_rows
                         if row["product_reference"] == reference and row["landing_status"]
                     ),
-                    landing_status_by_reference.get(reference, "").title(),
+                    landing_status_by_reference.get(reference, "").title() or "Unknown",
                 )
             ),
         }
