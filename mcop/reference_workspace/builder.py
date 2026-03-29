@@ -8,6 +8,14 @@ import pandas as pd
 RESERVATION_NOTE = (
     "Reservation completed means all products within the reservation have been released."
 )
+LANDED_AGING_BUCKETS = (
+    ("0-30", 0, 30),
+    ("31-60", 31, 60),
+    ("61-90", 61, 90),
+    ("91-180", 91, 180),
+    ("181-270", 181, 270),
+    ("270+", 271, None),
+)
 
 
 def _clean_text(value: object) -> str:
@@ -41,6 +49,42 @@ def _first_text(values: Iterable[object]) -> str:
     if len(cleaned) == 1:
         return cleaned[0]
     return "mixed"
+
+
+def _normalise_iso_date(value: object) -> str:
+    text = _clean_text(value)
+    if not text:
+        return ""
+    parsed = pd.to_datetime(text, errors="coerce", format="%Y-%m-%d")
+    if pd.isna(parsed):
+        return ""
+    return parsed.date().isoformat()
+
+
+def _pick_latest_snapshot_date(*date_groups: Iterable[object]) -> str:
+    candidates: list[str] = []
+    for values in date_groups:
+        for value in values:
+            normalised = _normalise_iso_date(value)
+            if normalised:
+                candidates.append(normalised)
+    return sorted(candidates)[-1] if candidates else ""
+
+
+def _aging_bucket_for_days(days_since_landing: float | None) -> str:
+    if days_since_landing is None:
+        return "Date unavailable"
+    for label, minimum, maximum in LANDED_AGING_BUCKETS:
+        if days_since_landing < minimum:
+            continue
+        if maximum is None or days_since_landing <= maximum:
+            return label
+    return "Date unavailable"
+
+
+def _status_summary(parts: list[str]) -> str:
+    cleaned = [part for part in parts if part]
+    return "; ".join(cleaned) if cleaned else "Complete"
 
 
 def _available_bags_by_reference(products: pd.DataFrame) -> dict[str, float]:
@@ -251,6 +295,258 @@ def _build_product_reference_intelligence(
     return summary_rows, product_details
 
 
+def _build_landed_stock_intelligence(
+    products: pd.DataFrame,
+    activity_snapshot_date: str,
+) -> tuple[dict, list[dict], list[dict], list[dict], list[dict]]:
+    if products.empty:
+        return (
+            {
+                "as_of_date": activity_snapshot_date,
+                "landed_bags": 0.0,
+                "unsold_landed_bags": 0.0,
+                "unsold_landed_kg": 0.0,
+                "unsold_landed_kg_available": True,
+                "aged_180_plus_bags": 0.0,
+                "warehouses_exposed": 0,
+                "unsold_landed_value_gbp": 0.0,
+                "unsold_landed_value_available": True,
+                "value_completeness_status": "No landed stock rows.",
+            },
+            [
+                {"aging_bucket": label, "unsold_bags": 0.0}
+                for label, _, _ in LANDED_AGING_BUCKETS
+            ],
+            [],
+            [],
+            [],
+        )
+
+    landed_rows = products.copy()
+    for column in (
+        "product_reference",
+        "product_id",
+        "landing_status",
+        "landing_date",
+        "warehouse",
+        "bags",
+        "bags_available",
+        "bag_size_kg",
+        "price_per_kg",
+    ):
+        if column not in landed_rows.columns:
+            landed_rows[column] = pd.NA
+
+    landed_rows["product_reference"] = landed_rows["product_reference"].map(_clean_text)
+    landed_rows["product_id"] = landed_rows["product_id"].map(_clean_text)
+    landed_rows["landing_status"] = landed_rows["landing_status"].map(_clean_text).str.lower()
+    landed_rows["landing_date"] = landed_rows["landing_date"].map(_normalise_iso_date)
+    landed_rows["warehouse"] = landed_rows["warehouse"].map(_clean_text)
+    landed_rows["bags_num"] = _to_numeric_or_nan_series(landed_rows, "bags")
+    landed_rows["bags_available_num"] = _to_numeric_or_nan_series(landed_rows, "bags_available")
+    landed_rows["bag_size_kg_num"] = _to_numeric_or_nan_series(landed_rows, "bag_size_kg")
+    landed_rows["price_per_kg_num"] = _to_numeric_or_nan_series(landed_rows, "price_per_kg")
+    landed_rows = landed_rows[landed_rows["landing_status"] == "landed"].copy()
+
+    as_of_date = _pick_latest_snapshot_date(
+        [activity_snapshot_date],
+        landed_rows["landing_date"].tolist(),
+    )
+
+    landed_bags = round(float(landed_rows["bags_num"].fillna(0.0).sum()), 4)
+    landed_rows["unsold_active"] = landed_rows["bags_available_num"].notna() & (landed_rows["bags_available_num"] > 0)
+    landed_rows["unsold_bags_value"] = landed_rows["bags_available_num"].where(landed_rows["unsold_active"], 0.0)
+    landed_rows["kg_complete"] = landed_rows["unsold_active"] & landed_rows["bag_size_kg_num"].notna()
+    landed_rows["unsold_kg_value"] = (
+        landed_rows["bags_available_num"] * landed_rows["bag_size_kg_num"]
+    ).where(landed_rows["kg_complete"], 0.0)
+    landed_rows["value_complete"] = landed_rows["kg_complete"] & landed_rows["price_per_kg_num"].notna()
+    landed_rows["unsold_value_gbp_value"] = (
+        landed_rows["unsold_kg_value"] * landed_rows["price_per_kg_num"]
+    ).where(landed_rows["value_complete"], 0.0)
+
+    as_of_ts = pd.to_datetime(as_of_date, errors="coerce", format="%Y-%m-%d")
+    landing_ts = pd.to_datetime(landed_rows["landing_date"], errors="coerce", format="%Y-%m-%d")
+    if pd.isna(as_of_ts):
+        landed_rows["days_since_landing_num"] = pd.Series(
+            [float("nan")] * len(landed_rows), index=landed_rows.index, dtype="float64"
+        )
+    else:
+        landed_rows["days_since_landing_num"] = (as_of_ts - landing_ts).dt.days.astype("float64")
+        landed_rows.loc[landed_rows["days_since_landing_num"] < 0, "days_since_landing_num"] = float("nan")
+    landed_rows["aging_bucket"] = landed_rows["days_since_landing_num"].map(
+        lambda value: _aging_bucket_for_days(None if pd.isna(value) else float(value))
+    )
+
+    incomplete_value_rows = landed_rows[landed_rows["unsold_active"] & ~landed_rows["value_complete"]]
+    value_completeness_status = "Complete"
+    if landed_rows["unsold_active"].sum() == 0:
+        value_completeness_status = "No unsold landed rows."
+    elif not incomplete_value_rows.empty:
+        value_completeness_status = (
+            f"Unavailable on {len(incomplete_value_rows)} unsold landed row(s) due to missing kg or price."
+        )
+
+    summary = {
+        "as_of_date": as_of_date,
+        "landed_bags": landed_bags,
+        "unsold_landed_bags": round(float(landed_rows["unsold_bags_value"].sum()), 4),
+        "unsold_landed_kg": round(float(landed_rows["unsold_kg_value"].sum()), 4),
+        "unsold_landed_kg_available": bool(
+            landed_rows[landed_rows["unsold_active"]].empty
+            or landed_rows.loc[landed_rows["unsold_active"], "kg_complete"].all()
+        ),
+        "aged_180_plus_bags": round(
+            float(
+                landed_rows[
+                    landed_rows["unsold_active"]
+                    & landed_rows["days_since_landing_num"].notna()
+                    & (landed_rows["days_since_landing_num"] >= 181)
+                ]["bags_available_num"].sum()
+            ),
+            4,
+        ),
+        "warehouses_exposed": int(
+            landed_rows[landed_rows["unsold_active"]]["warehouse"].map(_clean_text).replace("", pd.NA).dropna().nunique()
+        ),
+        "unsold_landed_value_gbp": round(float(landed_rows["unsold_value_gbp_value"].sum()), 2),
+        "unsold_landed_value_available": bool(
+            landed_rows[landed_rows["unsold_active"]].empty
+            or landed_rows.loc[landed_rows["unsold_active"], "value_complete"].all()
+        ),
+        "value_completeness_status": value_completeness_status,
+    }
+
+    aging_chart: list[dict] = []
+    aging_source = landed_rows[
+        landed_rows["unsold_active"] & landed_rows["days_since_landing_num"].notna()
+    ].copy()
+    for label, _, _ in LANDED_AGING_BUCKETS:
+        bucket_rows = aging_source[aging_source["aging_bucket"] == label]
+        aging_chart.append(
+            {
+                "aging_bucket": label,
+                "unsold_bags": round(float(bucket_rows["bags_available_num"].sum()), 4),
+            }
+        )
+
+    unsold_rows = landed_rows[landed_rows["unsold_active"]].copy()
+    warehouse_groups = (
+        unsold_rows.assign(warehouse_key=unsold_rows["warehouse"].where(unsold_rows["warehouse"] != "", "Unknown"))
+        .groupby("warehouse_key", sort=True, as_index=False)[
+            ["bags_available_num", "unsold_kg_value"]
+        ]
+        .sum()
+        .rename(
+            columns={
+                "warehouse_key": "warehouse",
+                "bags_available_num": "unsold_bags",
+                "unsold_kg_value": "unsold_kg",
+            }
+        )
+    )
+    warehouse_groups = warehouse_groups.sort_values(
+        ["unsold_bags", "warehouse"],
+        ascending=[False, True],
+        kind="stable",
+    )
+    warehouse_exposure = [
+        {
+            "warehouse": _clean_text(row["warehouse"]) or "Unknown",
+            "unsold_bags": round(float(row["unsold_bags"]), 4),
+            "unsold_kg": round(float(row["unsold_kg"]), 4),
+        }
+        for _, row in warehouse_groups.iterrows()
+        if float(row["unsold_bags"]) > 0
+    ]
+
+    reference_groups = (
+        unsold_rows.assign(
+            reference_key=unsold_rows["product_reference"].where(
+                unsold_rows["product_reference"] != "", "Unknown"
+            )
+        )
+        .groupby("reference_key", sort=True, as_index=False)[
+            ["bags_available_num", "unsold_kg_value"]
+        ]
+        .sum()
+        .rename(
+            columns={
+                "reference_key": "product_reference",
+                "bags_available_num": "unsold_bags",
+                "unsold_kg_value": "unsold_kg",
+            }
+        )
+    )
+    reference_groups = reference_groups.sort_values(
+        ["unsold_bags", "product_reference"],
+        ascending=[False, True],
+        kind="stable",
+    )
+    reference_exposure = [
+        {
+            "product_reference": _clean_text(row["product_reference"]) or "Unknown",
+            "unsold_bags": round(float(row["unsold_bags"]), 4),
+            "unsold_kg": round(float(row["unsold_kg"]), 4),
+        }
+        for _, row in reference_groups.iterrows()
+        if float(row["unsold_bags"]) > 0
+    ]
+
+    detail_rows = landed_rows[
+        landed_rows["bags_available_num"].isna() | (landed_rows["bags_available_num"] > 0)
+    ].copy()
+    detail_rows["data_status"] = [
+        _status_summary(
+            [
+                "Unsold bags unavailable" if pd.isna(row["bags_available_num"]) else "",
+                (
+                    "Unsold kg unavailable"
+                    if bool(row["unsold_active"]) and not bool(row["kg_complete"])
+                    else ""
+                ),
+                (
+                    "Unsold value unavailable"
+                    if bool(row["unsold_active"]) and bool(row["kg_complete"]) and not bool(row["value_complete"])
+                    else ""
+                ),
+                "Landing date unavailable" if pd.isna(row["days_since_landing_num"]) else "",
+            ]
+        )
+        for _, row in detail_rows.iterrows()
+    ]
+    detail_rows = detail_rows.sort_values(
+        ["days_since_landing_num", "bags_available_num", "product_reference", "product_id"],
+        ascending=[False, False, True, True],
+        kind="stable",
+        na_position="last",
+    )
+    landed_details = [
+        {
+            "product_reference": _clean_text(row["product_reference"]),
+            "product_id": _clean_text(row["product_id"]),
+            "warehouse": _clean_text(row["warehouse"]),
+            "landing_date": _clean_text(row["landing_date"]),
+            "days_since_landing": (
+                int(row["days_since_landing_num"]) if pd.notna(row["days_since_landing_num"]) else None
+            ),
+            "aging_bucket": _clean_text(row["aging_bucket"]),
+            "landed_bags": round(float(row["bags_num"]), 4) if pd.notna(row["bags_num"]) else None,
+            "unsold_bags": (
+                round(float(row["bags_available_num"]), 4) if pd.notna(row["bags_available_num"]) else None
+            ),
+            "unsold_kg": round(float(row["unsold_kg_value"]), 4) if bool(row["kg_complete"]) else None,
+            "unsold_value_gbp": (
+                round(float(row["unsold_value_gbp_value"]), 2) if bool(row["value_complete"]) else None
+            ),
+            "data_status": _clean_text(row["data_status"]),
+        }
+        for _, row in detail_rows.iterrows()
+    ]
+
+    return summary, aging_chart, warehouse_exposure, reference_exposure, landed_details
+
+
 def _latest_rows_per_reservation_product(reservations: pd.DataFrame) -> pd.DataFrame:
     keyed = reservations.copy()
     keyed["product_key"] = keyed["product_id"].map(_clean_text)
@@ -314,6 +610,25 @@ def _empty_dataset(
             for reference in selector_refs
         ],
         "product_landing_profile": [],
+        "landed_stock_summary": {
+            "as_of_date": "",
+            "landed_bags": 0.0,
+            "unsold_landed_bags": 0.0,
+            "unsold_landed_kg": 0.0,
+            "unsold_landed_kg_available": True,
+            "aged_180_plus_bags": 0.0,
+            "warehouses_exposed": 0,
+            "unsold_landed_value_gbp": 0.0,
+            "unsold_landed_value_available": True,
+            "value_completeness_status": "No landed stock rows.",
+        },
+        "landed_stock_aging": [
+            {"aging_bucket": label, "unsold_bags": 0.0}
+            for label, _, _ in LANDED_AGING_BUCKETS
+        ],
+        "landed_stock_warehouse_exposure": [],
+        "landed_stock_reference_exposure": [],
+        "landed_stock_details": [],
     }
 
 
@@ -336,8 +651,20 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
             products,
             selector_refs,
         )
+        (
+            landed_summary,
+            landed_aging,
+            landed_warehouse,
+            landed_reference,
+            landed_details,
+        ) = _build_landed_stock_intelligence(products, empty_dataset["snapshot_date"])
         empty_dataset["product_reference_summary"] = product_summary
         empty_dataset["product_landing_profile"] = product_details
+        empty_dataset["landed_stock_summary"] = landed_summary
+        empty_dataset["landed_stock_aging"] = landed_aging
+        empty_dataset["landed_stock_warehouse_exposure"] = landed_warehouse
+        empty_dataset["landed_stock_reference_exposure"] = landed_reference
+        empty_dataset["landed_stock_details"] = landed_details
         return empty_dataset
 
     reservations["request_type"] = (
@@ -376,8 +703,20 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
             products,
             selector_refs,
         )
+        (
+            landed_summary,
+            landed_aging,
+            landed_warehouse,
+            landed_reference,
+            landed_details,
+        ) = _build_landed_stock_intelligence(products, empty_dataset["snapshot_date"])
         empty_dataset["product_reference_summary"] = product_summary
         empty_dataset["product_landing_profile"] = product_details
+        empty_dataset["landed_stock_summary"] = landed_summary
+        empty_dataset["landed_stock_aging"] = landed_aging
+        empty_dataset["landed_stock_warehouse_exposure"] = landed_warehouse
+        empty_dataset["landed_stock_reference_exposure"] = landed_reference
+        empty_dataset["landed_stock_details"] = landed_details
         return empty_dataset
 
     reservations["reservation_key"] = reservations["id_booking"].where(
@@ -568,6 +907,13 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         products,
         selector_refs,
     )
+    (
+        landed_summary,
+        landed_aging,
+        landed_warehouse,
+        landed_reference,
+        landed_details,
+    ) = _build_landed_stock_intelligence(products, snapshot_date)
 
     return {
         "snapshot_date": snapshot_date,
@@ -578,4 +924,9 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         "reservation_details": reservation_details,
         "product_reference_summary": product_summary,
         "product_landing_profile": product_details,
+        "landed_stock_summary": landed_summary,
+        "landed_stock_aging": landed_aging,
+        "landed_stock_warehouse_exposure": landed_warehouse,
+        "landed_stock_reference_exposure": landed_reference,
+        "landed_stock_details": landed_details,
     }

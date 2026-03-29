@@ -90,6 +90,62 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
                 "available_kg": 60.0,
             },
         ],
+        "landed_stock_summary": {
+            "as_of_date": "2026-03-07",
+            "landed_bags": 10.0,
+            "unsold_landed_bags": 3.0,
+            "unsold_landed_kg": 80.0,
+            "unsold_landed_kg_available": True,
+            "aged_180_plus_bags": 1.0,
+            "warehouses_exposed": 2,
+            "unsold_landed_value_gbp": 910.0,
+            "unsold_landed_value_available": False,
+            "value_completeness_status": "Unavailable on 1 unsold landed row(s) due to missing kg or price.",
+        },
+        "landed_stock_aging": [
+            {"aging_bucket": "0-30", "unsold_bags": 1.0},
+            {"aging_bucket": "31-60", "unsold_bags": 0.0},
+            {"aging_bucket": "61-90", "unsold_bags": 2.0},
+            {"aging_bucket": "91-180", "unsold_bags": 0.0},
+            {"aging_bucket": "181-270", "unsold_bags": 0.0},
+            {"aging_bucket": "270+", "unsold_bags": 0.0},
+        ],
+        "landed_stock_warehouse_exposure": [
+            {"warehouse": "Bristol", "unsold_bags": 2.0, "unsold_kg": 40.0},
+            {"warehouse": "London", "unsold_bags": 1.0, "unsold_kg": 40.0},
+        ],
+        "landed_stock_reference_exposure": [
+            {"product_reference": "REF-1", "unsold_bags": 2.0, "unsold_kg": 40.0},
+            {"product_reference": "REF-2", "unsold_bags": 1.0, "unsold_kg": 40.0},
+        ],
+        "landed_stock_details": [
+            {
+                "product_reference": "REF-1",
+                "product_id": "p-2",
+                "warehouse": "Bristol",
+                "landing_date": "2025-12-30",
+                "days_since_landing": 67,
+                "aging_bucket": "61-90",
+                "landed_bags": 2.0,
+                "unsold_bags": 2.0,
+                "unsold_kg": 40.0,
+                "unsold_value_gbp": 500.0,
+                "data_status": "Complete",
+            },
+            {
+                "product_reference": "REF-2",
+                "product_id": "p-3",
+                "warehouse": "London",
+                "landing_date": "2026-02-20",
+                "days_since_landing": 15,
+                "aging_bucket": "0-30",
+                "landed_bags": 8.0,
+                "unsold_bags": 1.0,
+                "unsold_kg": 40.0,
+                "unsold_value_gbp": None,
+                "data_status": "Unsold value unavailable",
+            },
+        ],
         "reservation_details": [
             {
                 "product_reference": "REF-1",
@@ -134,13 +190,17 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="selected-reference-value"' in first
     assert 'id="tab-reservation"' in first
     assert 'id="tab-product"' in first
+    assert 'id="tab-landed"' in first
     assert 'data-tab="reservation"' in first
     assert 'data-tab="product"' in first
+    assert 'data-tab="landed"' in first
     assert 'activeTab: "reservation"' in first
     assert 'id="reservation-view"' in first
     assert 'id="product-view" hidden' in first
+    assert 'id="landed-view" hidden' in first
     assert "Reservation Intelligence" in first
     assert "Product Reference Intelligence" in first
+    assert "Landed Stock Intelligence" in first
     assert "Stock-only view of whether the selected reference looks early-stage, balanced, or at risk of landed build-up." in first
     assert 'id="table-filter"' in first
     assert "Search reservation rows" in first
@@ -169,6 +229,19 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="product-kpi-health"' in first
     assert 'id="product-kpi-health-meta"' in first
     assert 'id="product-detail-body"' in first
+    assert 'id="landed-kpi-unsold-bags"' in first
+    assert 'id="landed-kpi-unsold-kg"' in first
+    assert 'id="landed-kpi-aged-bags"' in first
+    assert 'id="landed-kpi-warehouses"' in first
+    assert 'id="landed-kpi-value"' in first
+    assert 'id="landed-aging-chart"' in first
+    assert 'id="landed-warehouse-chart"' in first
+    assert 'id="landed-reference-chart"' in first
+    assert 'id="landed-table-filter"' in first
+    assert 'id="landed-warehouse-filter"' in first
+    assert 'id="landed-aging-filter"' in first
+    assert 'id="landed-status-filter"' in first
+    assert 'id="landed-detail-body"' in first
     assert '"default_reference":"REF-1"' in first
     assert '"product_reference":"REF-2"' in first
     assert '"product_id":"p-1"' in first
@@ -184,7 +257,8 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert '"reservation_key":"580.0"' in first
     assert 'localStorage.getItem("mcop-reference-workspace-theme")' in first
     assert 'reservationView.hidden = !reservationActive;' in first
-    assert 'productView.hidden = reservationActive;' in first
+    assert 'productView.hidden = !productActive;' in first
+    assert 'landedView.hidden = !landedActive;' in first
     assert "grid-template-columns: repeat(5, minmax(0, 1fr));" in first
     assert "@media (max-width: 1280px)" in first
     assert ".pill.status-warm" in first
@@ -197,8 +271,18 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert '"<td>" + renderStatusChip(row.request_status || "-") + "</td>" +' in first
     assert 'function renderProductKpis()' in first
     assert 'function renderProductTable()' in first
+    assert 'function renderLandedKpis()' in first
+    assert 'function renderLandedCharts()' in first
+    assert 'function renderLandedTable()' in first
+    assert 'function currentLandedDetails()' in first
+    assert 'function renderBarChart(containerId, emptyId, rows, labelKey, valueKey, formatter)' in first
     assert 'return "Unavailable";' in first
     assert 'const rows = productDetailsByReference.get(state.selectedReference) || [];' in first
+    assert 'const landedSummary = data.landed_stock_summary || {};' in first
+    assert 'const landedAging = Array.isArray(data.landed_stock_aging) ? data.landed_stock_aging : [];' in first
+    assert 'const landedWarehouseExposure = Array.isArray(data.landed_stock_warehouse_exposure) ? data.landed_stock_warehouse_exposure : [];' in first
+    assert 'const landedReferenceExposure = Array.isArray(data.landed_stock_reference_exposure) ? data.landed_stock_reference_exposure : [];' in first
+    assert 'const landedDetails = Array.isArray(data.landed_stock_details) ? data.landed_stock_details : [];' in first
     assert 'return "Expected on " + landingLabel + ", in " + formatNumber(diff, 0) + " days.";' in first
     assert 'return "Recorded as landed on " + landingLabel + ", " + formatNumber(daysSinceLanding, 0) + " days ago.";' in first
     assert 'return "Landing date not available for this reference.";' in first
@@ -222,8 +306,19 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert "Days Since Landing / Not landed" in first
     assert "Landed Available" in first
     assert "Stock Health" in first
+    assert "Landed Available Exposure" in first
+    assert "Aging Exposure" in first
+    assert "Warehouse Exposure" in first
+    assert "Largest Unsold References" in first
+    assert "Unsold Landed Bags" in first
+    assert "Aged 180+ Bags" in first
+    assert "Unsold Landed Value" in first
     assert 'health.innerHTML = renderStatusChip(summary.stock_health || "Data Incomplete");' in first
     assert 'daysLabel = "Not landed";' in first
+    assert 'renderLandedKpis();' in first
+    assert 'renderLandedCharts();' in first
+    assert 'renderLandedTable();' in first
+    assert '"landed_stock_summary":{"aged_180_plus_bags":1.0,"as_of_date":"2026-03-07"' in first
     assert "Released Bags" not in first
     assert "Open Value GBP" not in first
     assert "Sell-through" not in first

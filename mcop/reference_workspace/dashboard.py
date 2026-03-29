@@ -312,6 +312,80 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     .table-filter {{
       width: min(320px, 100%);
     }}
+    .table-filters {{
+      display: flex;
+      gap: 12px;
+      flex-wrap: wrap;
+      align-items: end;
+    }}
+    .table-filter.compact {{
+      width: min(220px, 100%);
+    }}
+    .chart-grid {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+      margin-top: 18px;
+    }}
+    .chart-card {{
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: color-mix(in srgb, var(--panel-strong) 92%, transparent);
+      box-shadow: var(--shadow-md);
+    }}
+    .chart-title {{
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }}
+    .chart-copy {{
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }}
+    .chart-list {{
+      margin-top: 16px;
+      display: grid;
+      gap: 12px;
+    }}
+    .chart-empty {{
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 14px;
+    }}
+    .bar-row {{
+      display: grid;
+      gap: 6px;
+    }}
+    .bar-head {{
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: baseline;
+      font-size: 13px;
+    }}
+    .bar-label {{
+      font-weight: 700;
+      color: var(--label);
+    }}
+    .bar-value {{
+      color: var(--muted);
+      white-space: nowrap;
+    }}
+    .bar-track {{
+      width: 100%;
+      height: 10px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--line) 64%, transparent);
+      overflow: hidden;
+    }}
+    .bar-fill {{
+      height: 100%;
+      border-radius: 999px;
+      background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--warn) 34%, var(--accent)));
+    }}
     table {{
       width: 100%;
       border-collapse: collapse;
@@ -382,6 +456,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       .kpi-grid {{
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }}
+      .chart-grid {{
+        grid-template-columns: 1fr;
+      }}
     }}
     @media (max-width: 900px) {{
       .shell {{
@@ -444,6 +521,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     <nav class="tab-strip" aria-label="Workspace tabs">
       <button class="tab-button is-active" id="tab-reservation" type="button" data-tab="reservation" aria-pressed="true">Reservation Intelligence</button>
       <button class="tab-button" id="tab-product" type="button" data-tab="product" aria-pressed="false">Product Reference Intelligence</button>
+      <button class="tab-button" id="tab-landed" type="button" data-tab="landed" aria-pressed="false">Landed Stock Intelligence</button>
     </nav>
 
     <section class="workspace-view" id="reservation-view">
@@ -564,6 +642,110 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         </section>
       </div>
     </section>
+
+    <section class="workspace-view" id="landed-view" hidden>
+      <div class="panel view-frame">
+        <h2 class="view-title">Landed Stock Intelligence</h2>
+        <p class="view-copy">Landed-only operational view of unsold stock, aging exposure, and where current warehouse concentration sits.</p>
+
+        <section class="kpi-grid" aria-label="Landed Stock Intelligence KPIs">
+          <article class="kpi-card">
+            <div class="kpi-label">Unsold Landed Bags</div>
+            <div class="kpi-value" id="landed-kpi-unsold-bags">-</div>
+            <div class="kpi-meta" id="landed-kpi-landed-bags">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Unsold Landed KG</div>
+            <div class="kpi-value" id="landed-kpi-unsold-kg">-</div>
+            <div class="kpi-submeta" id="landed-kpi-unsold-kg-meta">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Aged 180+ Bags</div>
+            <div class="kpi-value" id="landed-kpi-aged-bags">-</div>
+            <div class="kpi-submeta" id="landed-kpi-aged-meta">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Warehouses Exposed</div>
+            <div class="kpi-value" id="landed-kpi-warehouses">-</div>
+            <div class="kpi-submeta" id="landed-kpi-as-of">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Unsold Landed Value</div>
+            <div class="kpi-value" id="landed-kpi-value">-</div>
+            <div class="kpi-submeta" id="landed-kpi-value-meta">-</div>
+          </article>
+        </section>
+
+        <section class="chart-grid" aria-label="Landed Stock Intelligence Charts">
+          <article class="chart-card">
+            <h3 class="chart-title">Aging Exposure</h3>
+            <p class="chart-copy">Unsold landed bags by aging bucket. This isolates aging risk without mixing in incoming stock or reservation state.</p>
+            <div class="chart-list" id="landed-aging-chart"></div>
+            <div class="chart-empty" id="landed-aging-empty" hidden>No landed unsold rows with valid landing dates.</div>
+          </article>
+          <article class="chart-card">
+            <h3 class="chart-title">Warehouse Exposure</h3>
+            <p class="chart-copy">Current unsold landed bags by warehouse, so operational follow-up can focus where exposure is sitting now.</p>
+            <div class="chart-list" id="landed-warehouse-chart"></div>
+            <div class="chart-empty" id="landed-warehouse-empty" hidden>No warehouse exposure to show.</div>
+          </article>
+          <article class="chart-card">
+            <h3 class="chart-title">Largest Unsold References</h3>
+            <p class="chart-copy">Shows which references currently hold the largest landed available exposure.</p>
+            <div class="chart-list" id="landed-reference-chart"></div>
+            <div class="chart-empty" id="landed-reference-empty" hidden>No reference exposure to show.</div>
+          </article>
+        </section>
+
+        <section class="table-shell">
+          <div class="table-topbar">
+            <div>
+              <h3 class="table-title">Landed Available Exposure</h3>
+              <p class="table-subtitle">Landed rows with unsold exposure or incomplete availability data. Default order is oldest landed exposure first.</p>
+            </div>
+            <div class="table-filters">
+              <div class="table-filter">
+                <label class="control-label" for="landed-table-filter">Search landed rows</label>
+                <input class="control-input" id="landed-table-filter" type="search" autocomplete="off" placeholder="Filter by reference, product ID, warehouse, or status">
+              </div>
+              <div class="table-filter compact">
+                <label class="control-label" for="landed-warehouse-filter">Warehouse</label>
+                <select class="control-input" id="landed-warehouse-filter"></select>
+              </div>
+              <div class="table-filter compact">
+                <label class="control-label" for="landed-aging-filter">Aging Bucket</label>
+                <select class="control-input" id="landed-aging-filter"></select>
+              </div>
+              <div class="table-filter compact">
+                <label class="control-label" for="landed-status-filter">Data Status</label>
+                <select class="control-input" id="landed-status-filter"></select>
+              </div>
+            </div>
+          </div>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product Reference</th>
+                  <th>Product ID</th>
+                  <th>Warehouse</th>
+                  <th>Landing Date</th>
+                  <th class="num">Days Since Landing</th>
+                  <th>Aging Bucket</th>
+                  <th class="num">Landed Bags</th>
+                  <th class="num">Unsold Bags</th>
+                  <th class="num">Unsold KG</th>
+                  <th class="num">Unsold Value GBP</th>
+                  <th>Data Status</th>
+                </tr>
+              </thead>
+              <tbody id="landed-detail-body"></tbody>
+            </table>
+          </div>
+          <div class="empty" id="landed-detail-empty" hidden>No landed rows match the current filters.</div>
+        </section>
+      </div>
+    </section>
   </main>
 
   <script id="workspace-data" type="application/json">{payload_json}</script>
@@ -580,15 +762,27 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const emptyState = document.getElementById("reservation-empty");
     const productDetailBody = document.getElementById("product-detail-body");
     const productDetailEmpty = document.getElementById("product-detail-empty");
+    const landedDetailBody = document.getElementById("landed-detail-body");
+    const landedDetailEmpty = document.getElementById("landed-detail-empty");
+    const landedTableFilter = document.getElementById("landed-table-filter");
+    const landedWarehouseFilter = document.getElementById("landed-warehouse-filter");
+    const landedAgingFilter = document.getElementById("landed-aging-filter");
+    const landedStatusFilter = document.getElementById("landed-status-filter");
     const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
     const sortButtons = Array.from(document.querySelectorAll("[data-sort]"));
     const reservationView = document.getElementById("reservation-view");
     const productView = document.getElementById("product-view");
+    const landedView = document.getElementById("landed-view");
 
     const summaryByReference = new Map((data.reference_summary || []).map((row) => [row.product_reference, row]));
     const detailsByReference = new Map();
     const productSummaryByReference = new Map((data.product_reference_summary || []).map((row) => [row.product_reference, row]));
     const productDetailsByReference = new Map();
+    const landedSummary = data.landed_stock_summary || {{}};
+    const landedAging = Array.isArray(data.landed_stock_aging) ? data.landed_stock_aging : [];
+    const landedWarehouseExposure = Array.isArray(data.landed_stock_warehouse_exposure) ? data.landed_stock_warehouse_exposure : [];
+    const landedReferenceExposure = Array.isArray(data.landed_stock_reference_exposure) ? data.landed_stock_reference_exposure : [];
+    const landedDetails = Array.isArray(data.landed_stock_details) ? data.landed_stock_details : [];
     for (const row of data.reservation_details || []) {{
       const key = row.product_reference || "";
       if (!detailsByReference.has(key)) {{
@@ -607,6 +801,10 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     let state = {{
       selectedReference: data.default_reference || "",
       filterText: "",
+      landedFilterText: "",
+      landedWarehouse: "all",
+      landedAgingBucket: "all",
+      landedStatus: "all",
       sortKey: "company_name",
       sortDirection: "asc",
       activeTab: "reservation",
@@ -662,6 +860,16 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         return "Unavailable";
       }}
       return formatKilos(value);
+    }}
+
+    function formatCompactMoney(value) {{
+      const number = Number(value || 0);
+      return Number.isFinite(number)
+        ? "GBP " + number.toLocaleString("en-GB", {{
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0,
+          }})
+        : "Unavailable";
     }}
 
     function formatPercent(value) {{
@@ -940,10 +1148,147 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       }}).join("");
     }}
 
+    function currentLandedDetails() {{
+      const text = state.landedFilterText.trim().toLowerCase();
+      return landedDetails.filter((row) => {{
+        if (state.landedWarehouse !== "all" && (row.warehouse || "Unknown") !== state.landedWarehouse) {{
+          return false;
+        }}
+        if (state.landedAgingBucket !== "all" && (row.aging_bucket || "Date unavailable") !== state.landedAgingBucket) {{
+          return false;
+        }}
+        if (state.landedStatus === "incomplete" && String(row.data_status || "").trim().toLowerCase() === "complete") {{
+          return false;
+        }}
+        if (state.landedStatus === "complete" && String(row.data_status || "").trim().toLowerCase() !== "complete") {{
+          return false;
+        }}
+        if (!text) {{
+          return true;
+        }}
+        const haystack = [
+          row.product_reference,
+          row.product_id,
+          row.warehouse,
+          row.aging_bucket,
+          row.data_status,
+        ].join(" ").toLowerCase();
+        return haystack.includes(text);
+      }});
+    }}
+
+    function renderBarChart(containerId, emptyId, rows, labelKey, valueKey, formatter) {{
+      const container = document.getElementById(containerId);
+      const empty = document.getElementById(emptyId);
+      const filteredRows = rows.filter((row) => Number(row[valueKey] || 0) > 0);
+      empty.hidden = filteredRows.length > 0;
+      if (!filteredRows.length) {{
+        container.innerHTML = "";
+        return;
+      }}
+      const maxValue = Math.max(...filteredRows.map((row) => Number(row[valueKey] || 0)), 0);
+      container.innerHTML = filteredRows.map((row) => {{
+        const rawValue = Number(row[valueKey] || 0);
+        const width = maxValue > 0 ? Math.max((rawValue / maxValue) * 100, 2) : 0;
+        return "<div class='bar-row'>" +
+          "<div class='bar-head'>" +
+            "<span class='bar-label'>" + escapeHtml(row[labelKey] || "-") + "</span>" +
+            "<span class='bar-value'>" + escapeHtml(formatter(rawValue)) + "</span>" +
+          "</div>" +
+          "<div class='bar-track'><div class='bar-fill' style='width:" + escapeHtml(formatNumber(width, 2)) + "%'></div></div>" +
+        "</div>";
+      }}).join("");
+    }}
+
+    function renderLandedFilters() {{
+      const warehouses = ["all", ...new Set(landedDetails.map((row) => row.warehouse || "Unknown").filter(Boolean).sort((a, b) => a.localeCompare(b, "en", {{ sensitivity: "base" }})))];
+      landedWarehouseFilter.innerHTML = warehouses.map((value) => {{
+        const label = value === "all" ? "All Warehouses" : value;
+        return '<option value="' + escapeHtml(value) + '">' + escapeHtml(label) + '</option>';
+      }}).join("");
+      landedWarehouseFilter.value = warehouses.includes(state.landedWarehouse) ? state.landedWarehouse : "all";
+
+      const agingOptions = ["all", "0-30", "31-60", "61-90", "91-180", "181-270", "270+", "Date unavailable"];
+      landedAgingFilter.innerHTML = agingOptions.map((value) => {{
+        const label = value === "all" ? "All Aging" : value;
+        return '<option value="' + escapeHtml(value) + '">' + escapeHtml(label) + '</option>';
+      }}).join("");
+      landedAgingFilter.value = agingOptions.includes(state.landedAgingBucket) ? state.landedAgingBucket : "all";
+
+      landedStatusFilter.innerHTML = [
+        ['all', 'All Status'],
+        ['incomplete', 'Incomplete Only'],
+        ['complete', 'Complete Only'],
+      ].map((entry) => '<option value="' + escapeHtml(entry[0]) + '">' + escapeHtml(entry[1]) + '</option>').join("");
+      landedStatusFilter.value = state.landedStatus;
+    }}
+
+    function renderLandedKpis() {{
+      const unsoldBags = document.getElementById("landed-kpi-unsold-bags");
+      const landedBags = document.getElementById("landed-kpi-landed-bags");
+      const unsoldKg = document.getElementById("landed-kpi-unsold-kg");
+      const unsoldKgMeta = document.getElementById("landed-kpi-unsold-kg-meta");
+      const agedBags = document.getElementById("landed-kpi-aged-bags");
+      const agedMeta = document.getElementById("landed-kpi-aged-meta");
+      const warehouses = document.getElementById("landed-kpi-warehouses");
+      const asOf = document.getElementById("landed-kpi-as-of");
+      const value = document.getElementById("landed-kpi-value");
+      const valueMeta = document.getElementById("landed-kpi-value-meta");
+
+      unsoldBags.textContent = formatBags(landedSummary.unsold_landed_bags);
+      landedBags.textContent = formatNumber(landedSummary.landed_bags, 0) + " landed bags recorded";
+      unsoldKg.textContent = landedSummary.unsold_landed_kg_available ? formatKilos(landedSummary.unsold_landed_kg) : "Unavailable";
+      unsoldKgMeta.textContent = landedSummary.unsold_landed_kg_available
+        ? "Complete across all unsold landed rows."
+        : "Missing bag size on one or more unsold landed rows.";
+      agedBags.textContent = formatBags(landedSummary.aged_180_plus_bags);
+      agedMeta.textContent = "Rows in the 181-270 and 270+ buckets.";
+      warehouses.textContent = formatNumber(landedSummary.warehouses_exposed, 0);
+      asOf.textContent = landedSummary.as_of_date ? "As of " + landedSummary.as_of_date : "As-of date unavailable";
+      value.textContent = landedSummary.unsold_landed_value_available
+        ? formatCompactMoney(landedSummary.unsold_landed_value_gbp)
+        : "Unavailable";
+      valueMeta.textContent = landedSummary.value_completeness_status || "Unavailable";
+    }}
+
+    function renderLandedCharts() {{
+      renderBarChart("landed-aging-chart", "landed-aging-empty", landedAging, "aging_bucket", "unsold_bags", (value) => formatNumber(value, 0) + " bags");
+      renderBarChart("landed-warehouse-chart", "landed-warehouse-empty", landedWarehouseExposure, "warehouse", "unsold_bags", (value) => formatNumber(value, 0) + " bags");
+      renderBarChart("landed-reference-chart", "landed-reference-empty", landedReferenceExposure.slice(0, 8), "product_reference", "unsold_bags", (value) => formatNumber(value, 0) + " bags");
+    }}
+
+    function renderLandedTable() {{
+      const rows = currentLandedDetails();
+      landedDetailEmpty.hidden = rows.length > 0;
+      landedDetailBody.innerHTML = rows.map((row) => {{
+        const days = row.days_since_landing === null ? "Unavailable" : formatNumber(row.days_since_landing, 0);
+        const landedBags = row.landed_bags === null ? "Unavailable" : formatNumber(row.landed_bags, 0);
+        const unsoldBags = row.unsold_bags === null ? "Unavailable" : formatNumber(row.unsold_bags, 0);
+        const unsoldKg = row.unsold_kg === null ? "Unavailable" : formatKilos(row.unsold_kg);
+        const unsoldValue = row.unsold_value_gbp === null ? "Unavailable" : formatCompactMoney(row.unsold_value_gbp);
+        return "<tr>" +
+          "<td><strong>" + escapeHtml(row.product_reference || "-") + "</strong></td>" +
+          "<td>" + escapeHtml(row.product_id || "-") + "</td>" +
+          "<td>" + escapeHtml(row.warehouse || "Unknown") + "</td>" +
+          "<td>" + escapeHtml(row.landing_date || "-") + "</td>" +
+          "<td class='num'>" + escapeHtml(days) + "</td>" +
+          "<td>" + escapeHtml(row.aging_bucket || "-") + "</td>" +
+          "<td class='num'>" + escapeHtml(landedBags) + "</td>" +
+          "<td class='num'>" + escapeHtml(unsoldBags) + "</td>" +
+          "<td class='num'>" + escapeHtml(unsoldKg) + "</td>" +
+          "<td class='num'>" + escapeHtml(unsoldValue) + "</td>" +
+          "<td>" + escapeHtml(row.data_status || "-") + "</td>" +
+        "</tr>";
+      }}).join("");
+    }}
+
     function renderTabs() {{
       const reservationActive = state.activeTab === "reservation";
+      const productActive = state.activeTab === "product";
+      const landedActive = state.activeTab === "landed";
       reservationView.hidden = !reservationActive;
-      productView.hidden = reservationActive;
+      productView.hidden = !productActive;
+      landedView.hidden = !landedActive;
       for (const button of tabButtons) {{
         const isActive = button.dataset.tab === state.activeTab;
         button.classList.toggle("is-active", isActive);
@@ -957,6 +1302,10 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       renderReservationTable();
       renderProductKpis();
       renderProductTable();
+      renderLandedFilters();
+      renderLandedKpis();
+      renderLandedCharts();
+      renderLandedTable();
       renderTabs();
     }}
 
@@ -989,6 +1338,22 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     tableFilter.addEventListener("input", () => {{
       state.filterText = tableFilter.value;
       renderReservationTable();
+    }});
+    landedTableFilter.addEventListener("input", () => {{
+      state.landedFilterText = landedTableFilter.value;
+      renderLandedTable();
+    }});
+    landedWarehouseFilter.addEventListener("change", () => {{
+      state.landedWarehouse = landedWarehouseFilter.value;
+      renderLandedTable();
+    }});
+    landedAgingFilter.addEventListener("change", () => {{
+      state.landedAgingBucket = landedAgingFilter.value;
+      renderLandedTable();
+    }});
+    landedStatusFilter.addEventListener("change", () => {{
+      state.landedStatus = landedStatusFilter.value;
+      renderLandedTable();
     }});
     for (const button of sortButtons) {{
       button.addEventListener("click", () => {{

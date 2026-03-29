@@ -520,3 +520,165 @@ def test_builder_product_reference_intelligence_classifies_balanced_and_landed_b
             "stock_health": "Landed Build-Up",
         },
     ]
+
+
+def test_builder_landed_stock_intelligence_builds_aging_exposure_and_incomplete_fallbacks() -> None:
+    activity = pd.DataFrame(
+        [
+            {
+                "id_request": "r-1",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-01",
+                "approval_date": "2026-03-03",
+                "amendment_date": "2026-03-07",
+                "product_reference": "REF-1",
+            }
+        ]
+    )
+    products = pd.DataFrame(
+        [
+            {
+                "product_id": "p-1",
+                "product_reference": "REF-OLD",
+                "landing_status": "landed",
+                "landing_date": "2025-06-01",
+                "warehouse": "Bristol",
+                "bags": 10,
+                "bags_available": 4,
+                "bag_size_kg": 30,
+                "price_per_kg": 11.0,
+            },
+            {
+                "product_id": "p-2",
+                "product_reference": "REF-MID",
+                "landing_status": "landed",
+                "landing_date": "2025-12-15",
+                "warehouse": "London",
+                "bags": 8,
+                "bags_available": 2,
+                "bag_size_kg": 25,
+                "price_per_kg": 12.0,
+            },
+            {
+                "product_id": "p-3",
+                "product_reference": "REF-NEW",
+                "landing_status": "landed",
+                "landing_date": "2026-02-20",
+                "warehouse": "London",
+                "bags": 5,
+                "bags_available": 1,
+                "bag_size_kg": 20,
+                "price_per_kg": "",
+            },
+            {
+                "product_id": "p-4",
+                "product_reference": "REF-NODATE",
+                "landing_status": "landed",
+                "landing_date": "",
+                "warehouse": "Antwerp",
+                "bags": 6,
+                "bags_available": "",
+                "bag_size_kg": 25,
+                "price_per_kg": 13.0,
+            },
+            {
+                "product_id": "p-5",
+                "product_reference": "REF-INCOMING",
+                "landing_status": "incoming",
+                "landing_date": "2026-03-20",
+                "warehouse": "Antwerp",
+                "bags": 3,
+                "bags_available": 3,
+                "bag_size_kg": 30,
+                "price_per_kg": 10.0,
+            },
+        ]
+    )
+
+    dataset = build_reference_workspace_dataset(activity, products)
+
+    assert dataset["landed_stock_summary"] == {
+        "as_of_date": "2026-03-07",
+        "landed_bags": 29.0,
+        "unsold_landed_bags": 7.0,
+        "unsold_landed_kg": 190.0,
+        "unsold_landed_kg_available": True,
+        "aged_180_plus_bags": 4.0,
+        "warehouses_exposed": 2,
+        "unsold_landed_value_gbp": 1920.0,
+        "unsold_landed_value_available": False,
+        "value_completeness_status": "Unavailable on 1 unsold landed row(s) due to missing kg or price.",
+    }
+    assert dataset["landed_stock_aging"] == [
+        {"aging_bucket": "0-30", "unsold_bags": 1.0},
+        {"aging_bucket": "31-60", "unsold_bags": 0.0},
+        {"aging_bucket": "61-90", "unsold_bags": 2.0},
+        {"aging_bucket": "91-180", "unsold_bags": 0.0},
+        {"aging_bucket": "181-270", "unsold_bags": 0.0},
+        {"aging_bucket": "270+", "unsold_bags": 4.0},
+    ]
+    assert dataset["landed_stock_warehouse_exposure"] == [
+        {"warehouse": "Bristol", "unsold_bags": 4.0, "unsold_kg": 120.0},
+        {"warehouse": "London", "unsold_bags": 3.0, "unsold_kg": 70.0},
+    ]
+    assert dataset["landed_stock_reference_exposure"] == [
+        {"product_reference": "REF-OLD", "unsold_bags": 4.0, "unsold_kg": 120.0},
+        {"product_reference": "REF-MID", "unsold_bags": 2.0, "unsold_kg": 50.0},
+        {"product_reference": "REF-NEW", "unsold_bags": 1.0, "unsold_kg": 20.0},
+    ]
+    assert dataset["landed_stock_details"] == [
+        {
+            "product_reference": "REF-OLD",
+            "product_id": "p-1",
+            "warehouse": "Bristol",
+            "landing_date": "2025-06-01",
+            "days_since_landing": 279,
+            "aging_bucket": "270+",
+            "landed_bags": 10.0,
+            "unsold_bags": 4.0,
+            "unsold_kg": 120.0,
+            "unsold_value_gbp": 1320.0,
+            "data_status": "Complete",
+        },
+        {
+            "product_reference": "REF-MID",
+            "product_id": "p-2",
+            "warehouse": "London",
+            "landing_date": "2025-12-15",
+            "days_since_landing": 82,
+            "aging_bucket": "61-90",
+            "landed_bags": 8.0,
+            "unsold_bags": 2.0,
+            "unsold_kg": 50.0,
+            "unsold_value_gbp": 600.0,
+            "data_status": "Complete",
+        },
+        {
+            "product_reference": "REF-NEW",
+            "product_id": "p-3",
+            "warehouse": "London",
+            "landing_date": "2026-02-20",
+            "days_since_landing": 15,
+            "aging_bucket": "0-30",
+            "landed_bags": 5.0,
+            "unsold_bags": 1.0,
+            "unsold_kg": 20.0,
+            "unsold_value_gbp": None,
+            "data_status": "Unsold value unavailable",
+        },
+        {
+            "product_reference": "REF-NODATE",
+            "product_id": "p-4",
+            "warehouse": "Antwerp",
+            "landing_date": "",
+            "days_since_landing": None,
+            "aging_bucket": "Date unavailable",
+            "landed_bags": 6.0,
+            "unsold_bags": None,
+            "unsold_kg": None,
+            "unsold_value_gbp": None,
+            "data_status": "Unsold bags unavailable; Landing date unavailable",
+        },
+    ]
