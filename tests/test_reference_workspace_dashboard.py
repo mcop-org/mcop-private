@@ -193,8 +193,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="reference-search"' in first
     assert 'id="selected-reference-chip"' in first
     assert 'id="selected-reference-value"' in first
-    assert 'id="reservation-reset"' in first
-    assert 'id="product-reset"' in first
+    assert 'id="shared-selector-reset"' in first
     assert 'id="landed-reset"' in first
     assert 'id="tab-reservation"' in first
     assert 'id="tab-product"' in first
@@ -287,8 +286,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'function renderLandedCharts()' in first
     assert 'function renderLandedTable()' in first
     assert 'function currentLandedDetails()' in first
-    assert 'function resetReservationView()' in first
-    assert 'function resetProductView()' in first
+    assert 'function resetSharedSelectorView()' in first
     assert 'function resetLandedView()' in first
     assert 'function renderBarChart(containerId, emptyId, rows, labelKey, valueKey, formatter, showZeroRows = false)' in first
     assert 'return "Unavailable";' in first
@@ -302,7 +300,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'canonicalAgingBucket(row.aging_bucket) !== state.landedAgingBucket' in first
     assert 'renderBarChart("landed-aging-chart", "landed-aging-empty", landedAging, "aging_bucket", "unsold_bags", (value) => formatNumber(value, 0) + " bags", true);' in first
     assert 'sharedSelectorPanel.hidden = landedActive;' in first
-    assert 'state.selectedReference = data.default_reference || "";' in first
+    assert 'state.selectedReference = "";' in first
     assert 'state.filterText = "";' in first
     assert 'state.sortKey = "company_name";' in first
     assert 'state.sortDirection = "asc";' in first
@@ -315,14 +313,13 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'landedWarehouseFilter.value = "all";' in first
     assert 'landedAgingFilter.value = "all";' in first
     assert 'landedStatusFilter.value = "all";' in first
-    assert 'reservationResetButton.addEventListener("click", () => {' in first
-    assert 'productResetButton.addEventListener("click", () => {' in first
+    assert 'sharedSelectorResetButton.addEventListener("click", () => {' in first
     assert 'landedResetButton.addEventListener("click", () => {' in first
     assert 'return "Expected on " + landingLabel + ", in " + formatNumber(diff, 0) + " days.";' in first
     assert 'return "Recorded as landed on " + landingLabel + ", " + formatNumber(daysSinceLanding, 0) + " days ago.";' in first
     assert 'return "Landing date not available for this reference.";' in first
-    assert 'const selectedReference = currentSelectedReference() || "-";' in first
-    assert 'const landingStatus = summary?.landing_status || "Unknown";' in first
+    assert 'const selectedReference = currentSelectedReference() || "Select product";' in first
+    assert 'const landingStatus = currentSelectedReference() ? (summary?.landing_status || "Unknown") : "Not selected";' in first
     assert 'sharedSelectorPanel.hidden = landedActive;' in first
     assert 'state.activeTab = button.dataset.tab || "reservation";' in first
     assert 'summaryByReference.get(state.selectedReference);' in first

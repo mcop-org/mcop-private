@@ -531,8 +531,11 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
             <datalist id="reference-options"></datalist>
           </div>
           <div class="selected-reference-inline">
-            <span class="control-label" style="margin:0;">Selected Reference</span>
-            <p class="selected-reference-value" id="selected-reference-value">-</p>
+            <div>
+              <span class="control-label" style="margin:0;">Selected Reference</span>
+              <p class="selected-reference-value" id="selected-reference-value">Select product</p>
+            </div>
+            <button class="reset-button" id="shared-selector-reset" type="button">Reset Selector</button>
           </div>
         </section>
       </div>
@@ -548,7 +551,6 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       <div class="panel view-frame">
         <div class="view-head">
           <h2 class="view-title">Reservation Intelligence</h2>
-          <button class="reset-button" id="reservation-reset" type="button">Reset View</button>
         </div>
 
         <section class="kpi-grid" aria-label="Reservation Intelligence KPIs">
@@ -617,7 +619,6 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
             <h2 class="view-title">Product Reference Intelligence</h2>
             <p class="view-copy">Stock-only view of whether the selected reference looks early-stage, balanced, or at risk of landed build-up.</p>
           </div>
-          <button class="reset-button" id="product-reset" type="button">Reset View</button>
         </div>
 
         <section class="kpi-grid" aria-label="Product Reference Intelligence KPIs">
@@ -792,8 +793,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const optionList = document.getElementById("reference-options");
     const selectedReferenceValueEl = document.getElementById("selected-reference-value");
     const selectedReferenceChipEl = document.getElementById("selected-reference-chip");
-    const reservationResetButton = document.getElementById("reservation-reset");
-    const productResetButton = document.getElementById("product-reset");
+    const sharedSelectorResetButton = document.getElementById("shared-selector-reset");
     const landedResetButton = document.getElementById("landed-reset");
     const tableFilter = document.getElementById("table-filter");
     const tableBody = document.getElementById("reservation-table-body");
@@ -871,11 +871,13 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     function normaliseSelectedReferenceForActiveTab() {{
       const validOptions = new Set((data.reference_options || []).map((row) => String(row.product_reference || "").trim()).filter(Boolean));
       const selected = currentSelectedReference().trim();
-      if (selected && validOptions.has(selected)) {{
+      if (!selected) {{
         return;
       }}
-      const fallback = validOptions.values().next().value || "";
-      setCurrentSelectedReference(fallback);
+      if (validOptions.has(selected)) {{
+        return;
+      }}
+      setCurrentSelectedReference("");
     }}
 
     function escapeHtml(value) {{
@@ -1080,9 +1082,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }}
 
     function renderSelection() {{
-      const selectedReference = currentSelectedReference() || "-";
+      const selectedReference = currentSelectedReference() || "Select product";
       const summary = summaryByReference.get(state.selectedReference);
-      const landingStatus = summary?.landing_status || "Unknown";
+      const landingStatus = currentSelectedReference() ? (summary?.landing_status || "Unknown") : "Not selected";
       selectedReferenceValueEl.textContent = selectedReference;
       selectedReferenceChipEl.innerHTML =
         "<span>Reference: <strong>" + escapeHtml(selectedReference) + "</strong></span>" +
@@ -1090,17 +1092,12 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       referenceInput.value = currentSelectedReference() || "";
     }}
 
-    function resetReservationView() {{
-      state.selectedReference = data.default_reference || "";
+    function resetSharedSelectorView() {{
+      state.selectedReference = "";
       state.filterText = "";
       state.sortKey = "company_name";
       state.sortDirection = "asc";
       tableFilter.value = "";
-      render();
-    }}
-
-    function resetProductView() {{
-      state.selectedReference = data.default_reference || "";
       render();
     }}
 
@@ -1452,11 +1449,8 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       state.landedStatus = landedStatusFilter.value;
       renderLandedTable();
     }});
-    reservationResetButton.addEventListener("click", () => {{
-      resetReservationView();
-    }});
-    productResetButton.addEventListener("click", () => {{
-      resetProductView();
+    sharedSelectorResetButton.addEventListener("click", () => {{
+      resetSharedSelectorView();
     }});
     landedResetButton.addEventListener("click", () => {{
       resetLandedView();
