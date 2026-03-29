@@ -131,7 +131,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       color: var(--ink);
       font-weight: 700;
     }}
-    .theme-toggle, .tab-button, .sort-button {{
+    .theme-toggle, .tab-button, .sort-button, .reset-button {{
       cursor: pointer;
       transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease;
     }}
@@ -140,7 +140,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     .tab-button:hover,
     .tab-button:focus-visible,
     .sort-button:hover,
-    .sort-button:focus-visible {{
+    .sort-button:focus-visible,
+    .reset-button:hover,
+    .reset-button:focus-visible {{
       transform: translateY(-1px);
       border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
       outline: none;
@@ -179,6 +181,24 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       font-size: 18px;
       line-height: 1.1;
       letter-spacing: -0.02em;
+    }}
+    .view-head {{
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }}
+    .reset-button {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel-strong) 88%, transparent);
+      color: var(--label);
+      box-shadow: var(--shadow-md);
     }}
     .control-label {{
       display: block;
@@ -495,7 +515,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       </div>
     </header>
 
-    <section class="hero panel">
+    <section class="hero panel" id="shared-selector-panel">
       <div class="control-grid">
         <section class="control-panel panel">
           <div class="control-head">
@@ -526,7 +546,10 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 
     <section class="workspace-view" id="reservation-view">
       <div class="panel view-frame">
-        <h2 class="view-title">Reservation Intelligence</h2>
+        <div class="view-head">
+          <h2 class="view-title">Reservation Intelligence</h2>
+          <button class="reset-button" id="reservation-reset" type="button">Reset View</button>
+        </div>
 
         <section class="kpi-grid" aria-label="Reservation Intelligence KPIs">
           <article class="kpi-card">
@@ -589,8 +612,13 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 
     <section class="workspace-view" id="product-view" hidden>
       <div class="panel view-frame">
-        <h2 class="view-title">Product Reference Intelligence</h2>
-        <p class="view-copy">Stock-only view of whether the selected reference looks early-stage, balanced, or at risk of landed build-up.</p>
+        <div class="view-head">
+          <div>
+            <h2 class="view-title">Product Reference Intelligence</h2>
+            <p class="view-copy">Stock-only view of whether the selected reference looks early-stage, balanced, or at risk of landed build-up.</p>
+          </div>
+          <button class="reset-button" id="product-reset" type="button">Reset View</button>
+        </div>
 
         <section class="kpi-grid" aria-label="Product Reference Intelligence KPIs">
           <article class="kpi-card">
@@ -645,8 +673,13 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 
     <section class="workspace-view" id="landed-view" hidden>
       <div class="panel view-frame">
-        <h2 class="view-title">Landed Stock Intelligence</h2>
-        <p class="view-copy">Landed-only operational view of unsold stock, aging exposure, and where current warehouse concentration sits.</p>
+        <div class="view-head">
+          <div>
+            <h2 class="view-title">Landed Stock Intelligence</h2>
+            <p class="view-copy">Landed-only operational view of unsold stock, aging exposure, and where current warehouse concentration sits.</p>
+          </div>
+          <button class="reset-button" id="landed-reset" type="button">Reset View</button>
+        </div>
 
         <section class="kpi-grid" aria-label="Landed Stock Intelligence KPIs">
           <article class="kpi-card">
@@ -754,10 +787,14 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const LANDED_AGING_BUCKETS = ["0-30", "31-60", "61-90", "91-180", "181-270", "270+"];
     const root = document.documentElement;
     const themeToggle = document.getElementById("theme-toggle");
+    const sharedSelectorPanel = document.getElementById("shared-selector-panel");
     const referenceInput = document.getElementById("reference-search");
     const optionList = document.getElementById("reference-options");
     const selectedReferenceValueEl = document.getElementById("selected-reference-value");
     const selectedReferenceChipEl = document.getElementById("selected-reference-chip");
+    const reservationResetButton = document.getElementById("reservation-reset");
+    const productResetButton = document.getElementById("product-reset");
+    const landedResetButton = document.getElementById("landed-reset");
     const tableFilter = document.getElementById("table-filter");
     const tableBody = document.getElementById("reservation-table-body");
     const emptyState = document.getElementById("reservation-empty");
@@ -779,7 +816,6 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const detailsByReference = new Map();
     const productSummaryByReference = new Map((data.product_reference_summary || []).map((row) => [row.product_reference, row]));
     const productDetailsByReference = new Map();
-    const landedReferenceOptions = Array.isArray(data.landed_reference_options) ? data.landed_reference_options : [];
     const landedSummary = data.landed_stock_summary || {{}};
     const landedAgingRaw = Array.isArray(data.landed_stock_aging) ? data.landed_stock_aging : [];
     const landedWarehouseExposure = Array.isArray(data.landed_stock_warehouse_exposure) ? data.landed_stock_warehouse_exposure : [];
@@ -809,7 +845,6 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 
     let state = {{
       selectedReference: data.default_reference || "",
-      landedSelectedReference: data.default_landed_reference || "",
       filterText: "",
       landedFilterText: "",
       landedWarehouse: "all",
@@ -825,28 +860,16 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       return LANDED_AGING_BUCKETS.includes(label) ? label : "Date unavailable";
     }}
 
-    function currentOptionRows() {{
-      return state.activeTab === "landed"
-        ? landedReferenceOptions
-        : (data.reference_options || []);
-    }}
-
     function currentSelectedReference() {{
-      return state.activeTab === "landed"
-        ? state.landedSelectedReference
-        : state.selectedReference;
+      return state.selectedReference;
     }}
 
     function setCurrentSelectedReference(value) {{
-      if (state.activeTab === "landed") {{
-        state.landedSelectedReference = value;
-        return;
-      }}
       state.selectedReference = value;
     }}
 
     function normaliseSelectedReferenceForActiveTab() {{
-      const validOptions = new Set(currentOptionRows().map((row) => String(row.product_reference || "").trim()).filter(Boolean));
+      const validOptions = new Set((data.reference_options || []).map((row) => String(row.product_reference || "").trim()).filter(Boolean));
       const selected = currentSelectedReference().trim();
       if (selected && validOptions.has(selected)) {{
         return;
@@ -965,11 +988,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }}
 
     function renderOptions() {{
-      const options = currentOptionRows().map((row) => {{
-        if (state.activeTab === "landed") {{
-          const label = row.product_reference + " | Landed stock live";
-          return '<option value="' + escapeHtml(row.product_reference) + '" label="' + escapeHtml(label) + '"></option>';
-        }}
+      const options = (data.reference_options || []).map((row) => {{
         const landingStatus = row.landing_status || "Unknown";
         const reservationState = row.has_reservations ? "Reservations live" : "No reservations";
         const label = row.product_reference + " | " + landingStatus + " | " + reservationState;
@@ -1063,14 +1082,38 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     function renderSelection() {{
       const selectedReference = currentSelectedReference() || "-";
       const summary = summaryByReference.get(state.selectedReference);
-      const landingStatus = state.activeTab === "landed"
-        ? "Landed only"
-        : (summary?.landing_status || "Unknown");
+      const landingStatus = summary?.landing_status || "Unknown";
       selectedReferenceValueEl.textContent = selectedReference;
       selectedReferenceChipEl.innerHTML =
         "<span>Reference: <strong>" + escapeHtml(selectedReference) + "</strong></span>" +
         renderStatusChip(landingStatus);
       referenceInput.value = currentSelectedReference() || "";
+    }}
+
+    function resetReservationView() {{
+      state.selectedReference = data.default_reference || "";
+      state.filterText = "";
+      state.sortKey = "company_name";
+      state.sortDirection = "asc";
+      tableFilter.value = "";
+      render();
+    }}
+
+    function resetProductView() {{
+      state.selectedReference = data.default_reference || "";
+      render();
+    }}
+
+    function resetLandedView() {{
+      state.landedFilterText = "";
+      state.landedWarehouse = "all";
+      state.landedAgingBucket = "all";
+      state.landedStatus = "all";
+      landedTableFilter.value = "";
+      landedWarehouseFilter.value = "all";
+      landedAgingFilter.value = "all";
+      landedStatusFilter.value = "all";
+      render();
     }}
 
     function renderReservationKpis() {{
@@ -1337,6 +1380,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       const reservationActive = state.activeTab === "reservation";
       const productActive = state.activeTab === "product";
       const landedActive = state.activeTab === "landed";
+      sharedSelectorPanel.hidden = landedActive;
       reservationView.hidden = !reservationActive;
       productView.hidden = !productActive;
       landedView.hidden = !landedActive;
@@ -1407,6 +1451,15 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     landedStatusFilter.addEventListener("change", () => {{
       state.landedStatus = landedStatusFilter.value;
       renderLandedTable();
+    }});
+    reservationResetButton.addEventListener("click", () => {{
+      resetReservationView();
+    }});
+    productResetButton.addEventListener("click", () => {{
+      resetProductView();
+    }});
+    landedResetButton.addEventListener("click", () => {{
+      resetLandedView();
     }});
     for (const button of sortButtons) {{
       button.addEventListener("click", () => {{

@@ -189,9 +189,13 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert "<title>MCOP Reference Workspace v1</title>" in first
     assert "Reference Workspace" in first
     assert 'id="theme-toggle"' in first
+    assert 'id="shared-selector-panel"' in first
     assert 'id="reference-search"' in first
     assert 'id="selected-reference-chip"' in first
     assert 'id="selected-reference-value"' in first
+    assert 'id="reservation-reset"' in first
+    assert 'id="product-reset"' in first
+    assert 'id="landed-reset"' in first
     assert 'id="tab-reservation"' in first
     assert 'id="tab-product"' in first
     assert 'id="tab-landed"' in first
@@ -283,23 +287,45 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'function renderLandedCharts()' in first
     assert 'function renderLandedTable()' in first
     assert 'function currentLandedDetails()' in first
+    assert 'function resetReservationView()' in first
+    assert 'function resetProductView()' in first
+    assert 'function resetLandedView()' in first
     assert 'function renderBarChart(containerId, emptyId, rows, labelKey, valueKey, formatter, showZeroRows = false)' in first
     assert 'return "Unavailable";' in first
     assert 'const rows = productDetailsByReference.get(state.selectedReference) || [];' in first
     assert 'const landedSummary = data.landed_stock_summary || {};' in first
-    assert 'const landedReferenceOptions = Array.isArray(data.landed_reference_options) ? data.landed_reference_options : [];' in first
     assert 'const landedAgingRaw = Array.isArray(data.landed_stock_aging) ? data.landed_stock_aging : [];' in first
     assert 'const landedAging = LANDED_AGING_BUCKETS.map((bucket) => ({' in first
     assert 'const landedWarehouseExposure = Array.isArray(data.landed_stock_warehouse_exposure) ? data.landed_stock_warehouse_exposure : [];' in first
     assert 'const landedReferenceExposure = Array.isArray(data.landed_stock_reference_exposure) ? data.landed_stock_reference_exposure : [];' in first
     assert 'const landedDetails = Array.isArray(data.landed_stock_details) ? data.landed_stock_details : [];' in first
-    assert 'return state.activeTab === "landed"' in first
-    assert 'state.landedSelectedReference = value;' in first
     assert 'canonicalAgingBucket(row.aging_bucket) !== state.landedAgingBucket' in first
     assert 'renderBarChart("landed-aging-chart", "landed-aging-empty", landedAging, "aging_bucket", "unsold_bags", (value) => formatNumber(value, 0) + " bags", true);' in first
+    assert 'sharedSelectorPanel.hidden = landedActive;' in first
+    assert 'state.selectedReference = data.default_reference || "";' in first
+    assert 'state.filterText = "";' in first
+    assert 'state.sortKey = "company_name";' in first
+    assert 'state.sortDirection = "asc";' in first
+    assert 'tableFilter.value = "";' in first
+    assert 'state.landedFilterText = "";' in first
+    assert 'state.landedWarehouse = "all";' in first
+    assert 'state.landedAgingBucket = "all";' in first
+    assert 'state.landedStatus = "all";' in first
+    assert 'landedTableFilter.value = "";' in first
+    assert 'landedWarehouseFilter.value = "all";' in first
+    assert 'landedAgingFilter.value = "all";' in first
+    assert 'landedStatusFilter.value = "all";' in first
+    assert 'reservationResetButton.addEventListener("click", () => {' in first
+    assert 'productResetButton.addEventListener("click", () => {' in first
+    assert 'landedResetButton.addEventListener("click", () => {' in first
     assert 'return "Expected on " + landingLabel + ", in " + formatNumber(diff, 0) + " days.";' in first
     assert 'return "Recorded as landed on " + landingLabel + ", " + formatNumber(daysSinceLanding, 0) + " days ago.";' in first
     assert 'return "Landing date not available for this reference.";' in first
+    assert 'const selectedReference = currentSelectedReference() || "-";' in first
+    assert 'const landingStatus = summary?.landing_status || "Unknown";' in first
+    assert 'sharedSelectorPanel.hidden = landedActive;' in first
+    assert 'state.activeTab = button.dataset.tab || "reservation";' in first
+    assert 'summaryByReference.get(state.selectedReference);' in first
     assert '"reference_profiles"' not in first
     assert "Reference Intelligence Workspace" not in first
     assert "Latest non-rejected reservation row per reservation key" not in first
@@ -318,6 +344,8 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert "Stock and client linkage shown here come only from the approved safe product and reservation fields." not in first
     assert "Current Stock Exposure by Lot/Warehouse" in first
     assert "Days Since Landing / Not landed" in first
+    assert 'state.landedSelectedReference' not in first
+    assert 'function currentOptionRows()' not in first
     assert "Landed Available" in first
     assert "Stock Health" in first
     assert "Landed Available Exposure" in first
