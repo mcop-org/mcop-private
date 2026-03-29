@@ -30,6 +30,66 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
                 "reserved_value_gbp": 1150.0,
             }
         ],
+        "product_reference_summary": [
+            {
+                "product_reference": "REF-1",
+                "incoming_bags": 4.0,
+                "incoming_bags_available": True,
+                "incoming_kg": 120.0,
+                "incoming_kg_available": True,
+                "landed_bags": 2.0,
+                "landed_bags_available": True,
+                "landed_kg": 40.0,
+                "landed_kg_available": True,
+                "landed_available_bags": 1.0,
+                "landed_available_bags_available": True,
+                "landed_available_kg": 20.0,
+                "landed_available_kg_available": True,
+                "stock_health": "Mostly Incoming",
+            },
+            {
+                "product_reference": "REF-2",
+                "incoming_bags": 0.0,
+                "incoming_bags_available": True,
+                "incoming_kg": 0.0,
+                "incoming_kg_available": True,
+                "landed_bags": 0.0,
+                "landed_bags_available": True,
+                "landed_kg": 0.0,
+                "landed_kg_available": True,
+                "landed_available_bags": 0.0,
+                "landed_available_bags_available": False,
+                "landed_available_kg": 0.0,
+                "landed_available_kg_available": False,
+                "stock_health": "Data Incomplete",
+            },
+        ],
+        "product_landing_profile": [
+            {
+                "product_reference": "REF-1",
+                "product_id": "p-2",
+                "landing_status": "Landed",
+                "landing_date": "2026-03-18",
+                "warehouse": "Bristol",
+                "bags": 2.0,
+                "bag_size_kg": 20.0,
+                "total_kg": 40.0,
+                "bags_available": 1.0,
+                "available_kg": 20.0,
+            },
+            {
+                "product_reference": "REF-1",
+                "product_id": "p-1",
+                "landing_status": "Incoming",
+                "landing_date": "2026-03-20",
+                "warehouse": "London",
+                "bags": 4.0,
+                "bag_size_kg": 30.0,
+                "total_kg": 120.0,
+                "bags_available": 2.0,
+                "available_kg": 60.0,
+            },
+        ],
         "reservation_details": [
             {
                 "product_reference": "REF-1",
@@ -81,8 +141,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="product-view" hidden' in first
     assert "Reservation Intelligence" in first
     assert "Product Reference Intelligence" in first
-    assert "Metrics withheld pending verified business logic" in first
-    assert "Released, open, and profile-level product reference metrics are not shown here" in first
+    assert "Stock-only view of whether the selected reference looks early-stage, balanced, or at risk of landed build-up." in first
     assert 'id="table-filter"' in first
     assert "Search reservation rows" in first
     assert 'data-sort="company_name"' in first
@@ -101,8 +160,18 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="reservation-kpi-clients"' in first
     assert 'id="reservation-kpi-landing-status"' in first
     assert 'id="reservation-kpi-landing-support"' in first
+    assert 'id="product-kpi-incoming"' in first
+    assert 'id="product-kpi-incoming-kg"' in first
+    assert 'id="product-kpi-landed"' in first
+    assert 'id="product-kpi-landed-kg"' in first
+    assert 'id="product-kpi-available"' in first
+    assert 'id="product-kpi-available-kg"' in first
+    assert 'id="product-kpi-health"' in first
+    assert 'id="product-kpi-health-meta"' in first
+    assert 'id="product-detail-body"' in first
     assert '"default_reference":"REF-1"' in first
     assert '"product_reference":"REF-2"' in first
+    assert '"product_id":"p-1"' in first
     assert 'const reservationState = row.has_reservations ? "Reservations live" : "No reservations";' in first
     assert 'const label = row.product_reference + " | " + landingStatus + " | " + reservationState;' in first
     assert "Snapshot: <strong>2026-03-07</strong>" in first
@@ -126,6 +195,10 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'landingStatus.innerHTML = renderStatusChip(summary.landing_status || "-");' in first
     assert '"<td>" + renderStatusChip(row.landing_status || "-") + "</td>" +' in first
     assert '"<td>" + renderStatusChip(row.request_status || "-") + "</td>" +' in first
+    assert 'function renderProductKpis()' in first
+    assert 'function renderProductTable()' in first
+    assert 'return "Unavailable";' in first
+    assert 'const rows = productDetailsByReference.get(state.selectedReference) || [];' in first
     assert 'return "Expected on " + landingLabel + ", in " + formatNumber(diff, 0) + " days.";' in first
     assert 'return "Recorded as landed on " + landingLabel + ", " + formatNumber(daysSinceLanding, 0) + " days ago.";' in first
     assert 'return "Landing date not available for this reference.";' in first
@@ -138,12 +211,19 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert "reservation-kpi-rows" not in first
     assert ">Company</button>" in first
     assert ">Client</button>" not in first
-    assert 'id="product-kpi-incoming"' not in first
-    assert 'id="product-kpi-landed"' not in first
     assert 'id="product-kpi-reserved"' not in first
     assert 'id="product-kpi-released"' not in first
     assert 'id="product-kpi-open"' not in first
-    assert 'id="product-detail-body"' not in first
-    assert "Current phase-2 reference metrics for the selected product reference." not in first
+    assert 'id="product-kpi-clients"' not in first
+    assert 'id="product-kpi-clients-meta"' not in first
+    assert 'id="product-clients-list"' not in first
+    assert "Stock and client linkage shown here come only from the approved safe product and reservation fields." not in first
+    assert "Current Stock Exposure by Lot/Warehouse" in first
+    assert "Days Since Landing / Not landed" in first
+    assert "Landed Available" in first
+    assert "Stock Health" in first
+    assert 'health.innerHTML = renderStatusChip(summary.stock_health || "Data Incomplete");' in first
+    assert 'daysLabel = "Not landed";' in first
     assert "Released Bags" not in first
     assert "Open Value GBP" not in first
+    assert "Sell-through" not in first

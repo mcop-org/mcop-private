@@ -373,45 +373,6 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       color: var(--muted);
       font-size: 15px;
     }}
-    .placeholder-card {{
-      margin-top: 18px;
-      padding: 28px;
-      border: 1px solid var(--line);
-      border-radius: 24px;
-      background:
-        linear-gradient(145deg, color-mix(in srgb, var(--accent-soft) 35%, transparent), transparent 52%),
-        color-mix(in srgb, var(--panel-strong) 95%, transparent);
-      box-shadow: var(--shadow-md);
-    }}
-    .placeholder-kicker {{
-      color: var(--muted);
-      font-size: 12px;
-      text-transform: uppercase;
-      letter-spacing: 0.14em;
-    }}
-    .placeholder-title {{
-      margin: 10px 0 0;
-      font-size: 28px;
-      letter-spacing: -0.04em;
-    }}
-    .placeholder-copy {{
-      margin: 12px 0 0;
-      max-width: 680px;
-      color: var(--muted);
-      font-size: 15px;
-      line-height: 1.55;
-    }}
-    .placeholder-ref {{
-      margin-top: 18px;
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 14px;
-      border-radius: 999px;
-      border: 1px solid var(--line);
-      background: color-mix(in srgb, var(--panel-soft) 92%, transparent);
-      color: var(--label);
-    }}
     @media (max-width: 1280px) {{
       .kpi-grid {{
         grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -551,12 +512,55 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     <section class="workspace-view" id="product-view" hidden>
       <div class="panel view-frame">
         <h2 class="view-title">Product Reference Intelligence</h2>
-        <p class="view-copy">This tab is intentionally in a safe placeholder state.</p>
-        <section class="placeholder-card">
-          <div class="placeholder-kicker">Temporary Hold</div>
-          <h3 class="placeholder-title">Metrics withheld pending verified business logic</h3>
-          <p class="placeholder-copy">Released, open, and profile-level product reference metrics are not shown here until the underlying commercial math is redefined and validated. Use Reservation Intelligence for the current trusted reference view.</p>
-          <div class="placeholder-ref">Selected reference: <strong id="product-placeholder-reference">-</strong></div>
+        <p class="view-copy">Stock-only view of whether the selected reference looks early-stage, balanced, or at risk of landed build-up.</p>
+
+        <section class="kpi-grid" aria-label="Product Reference Intelligence KPIs">
+          <article class="kpi-card">
+            <div class="kpi-label">Incoming Stock</div>
+            <div class="kpi-value" id="product-kpi-incoming">-</div>
+            <div class="kpi-meta" id="product-kpi-incoming-kg">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Landed Stock</div>
+            <div class="kpi-value" id="product-kpi-landed">-</div>
+            <div class="kpi-meta" id="product-kpi-landed-kg">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Landed Available</div>
+            <div class="kpi-value" id="product-kpi-available">-</div>
+            <div class="kpi-meta" id="product-kpi-available-kg">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Stock Health</div>
+            <div class="kpi-status-wrap" id="product-kpi-health">-</div>
+            <div class="kpi-submeta" id="product-kpi-health-meta">Safe stock-state classification only.</div>
+          </article>
+        </section>
+
+        <section class="table-shell">
+          <div class="table-topbar">
+            <div>
+              <h3 class="table-title">Current Stock Exposure by Lot/Warehouse</h3>
+              <p class="table-subtitle">Most concerning landed-available rows appear first, followed by other landed rows, then incoming rows.</p>
+            </div>
+          </div>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product ID</th>
+                  <th>Warehouse</th>
+                  <th>Landing Status</th>
+                  <th>Landing Date</th>
+                  <th>Days Since Landing / Not landed</th>
+                  <th class="num">Bags</th>
+                  <th class="num">Bags Available</th>
+                </tr>
+              </thead>
+              <tbody id="product-detail-body"></tbody>
+            </table>
+          </div>
+          <div class="empty" id="product-detail-empty" hidden>No product rows match the current reference.</div>
         </section>
       </div>
     </section>
@@ -574,7 +578,8 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const tableFilter = document.getElementById("table-filter");
     const tableBody = document.getElementById("reservation-table-body");
     const emptyState = document.getElementById("reservation-empty");
-    const productPlaceholderReferenceEl = document.getElementById("product-placeholder-reference");
+    const productDetailBody = document.getElementById("product-detail-body");
+    const productDetailEmpty = document.getElementById("product-detail-empty");
     const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
     const sortButtons = Array.from(document.querySelectorAll("[data-sort]"));
     const reservationView = document.getElementById("reservation-view");
@@ -582,12 +587,21 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 
     const summaryByReference = new Map((data.reference_summary || []).map((row) => [row.product_reference, row]));
     const detailsByReference = new Map();
+    const productSummaryByReference = new Map((data.product_reference_summary || []).map((row) => [row.product_reference, row]));
+    const productDetailsByReference = new Map();
     for (const row of data.reservation_details || []) {{
       const key = row.product_reference || "";
       if (!detailsByReference.has(key)) {{
         detailsByReference.set(key, []);
       }}
       detailsByReference.get(key).push(row);
+    }}
+    for (const row of data.product_landing_profile || []) {{
+      const key = row.product_reference || "";
+      if (!productDetailsByReference.has(key)) {{
+        productDetailsByReference.set(key, []);
+      }}
+      productDetailsByReference.get(key).push(row);
     }}
 
     let state = {{
@@ -634,6 +648,20 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
             maximumFractionDigits: 0,
           }}) + " kg"
         : "- kg";
+    }}
+
+    function formatBags(value) {{
+      const number = Number(value || 0);
+      return Number.isFinite(number)
+        ? formatNumber(number, 0) + " bags"
+        : "Unavailable";
+    }}
+
+    function formatKgOrUnavailable(value, isAvailable) {{
+      if (!isAvailable) {{
+        return "Unavailable";
+      }}
+      return formatKilos(value);
     }}
 
     function formatPercent(value) {{
@@ -783,7 +811,6 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       selectedReferenceChipEl.innerHTML =
         "<span>Reference: <strong>" + escapeHtml(selectedReference) + "</strong></span>" +
         renderStatusChip(landingStatus);
-      productPlaceholderReferenceEl.textContent = selectedReference;
       referenceInput.value = state.selectedReference || "";
     }}
 
@@ -852,6 +879,67 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       }}).join("");
     }}
 
+    function renderProductKpis() {{
+      const summary = productSummaryByReference.get(state.selectedReference);
+      const incoming = document.getElementById("product-kpi-incoming");
+      const incomingKg = document.getElementById("product-kpi-incoming-kg");
+      const landed = document.getElementById("product-kpi-landed");
+      const landedKg = document.getElementById("product-kpi-landed-kg");
+      const available = document.getElementById("product-kpi-available");
+      const availableKg = document.getElementById("product-kpi-available-kg");
+      const health = document.getElementById("product-kpi-health");
+      const healthMeta = document.getElementById("product-kpi-health-meta");
+
+      if (!summary) {{
+        incoming.textContent = "0 bags";
+        incomingKg.textContent = "0 kg";
+        landed.textContent = "0 bags";
+        landedKg.textContent = "0 kg";
+        available.textContent = "Unavailable";
+        availableKg.textContent = "Unavailable";
+        health.innerHTML = renderStatusChip("Data Incomplete");
+        healthMeta.textContent = "Safe stock-state classification only.";
+        return;
+      }}
+
+      incoming.textContent = summary.incoming_bags_available ? formatBags(summary.incoming_bags) : "Unavailable";
+      incomingKg.textContent = formatKgOrUnavailable(summary.incoming_kg, summary.incoming_kg_available);
+      landed.textContent = summary.landed_bags_available ? formatBags(summary.landed_bags) : "Unavailable";
+      landedKg.textContent = formatKgOrUnavailable(summary.landed_kg, summary.landed_kg_available);
+      available.textContent = summary.landed_available_bags_available ? formatBags(summary.landed_available_bags) : "Unavailable";
+      availableKg.textContent = formatKgOrUnavailable(summary.landed_available_kg, summary.landed_available_kg_available);
+      health.innerHTML = renderStatusChip(summary.stock_health || "Data Incomplete");
+      healthMeta.textContent = "Safe stock-state classification only.";
+    }}
+
+    function renderProductTable() {{
+      const rows = productDetailsByReference.get(state.selectedReference) || [];
+      productDetailEmpty.hidden = rows.length > 0;
+      productDetailBody.innerHTML = rows.map((row) => {{
+        const bags = row.bags === null ? "Unavailable" : formatNumber(row.bags, 0);
+        const availableBags = row.bags_available === null ? "Unavailable" : formatNumber(row.bags_available, 0);
+        const landingStatus = String(row.landing_status || "").trim().toLowerCase();
+        let daysLabel = "Date unavailable";
+        if (landingStatus === "incoming") {{
+          daysLabel = "Not landed";
+        }} else if (landingStatus === "landed") {{
+          const diff = dayDiff(row.landing_date || "", data.snapshot_date || "");
+          if (diff !== null && diff >= 0) {{
+            daysLabel = formatNumber(diff, 0) + " days";
+          }}
+        }}
+        return "<tr>" +
+          "<td><strong>" + escapeHtml(row.product_id || "-") + "</strong></td>" +
+          "<td>" + escapeHtml(row.warehouse || "-") + "</td>" +
+          "<td>" + renderStatusChip(row.landing_status || "-") + "</td>" +
+          "<td>" + escapeHtml(row.landing_date || "-") + "</td>" +
+          "<td>" + escapeHtml(daysLabel) + "</td>" +
+          "<td class='num'>" + escapeHtml(bags) + "</td>" +
+          "<td class='num'>" + escapeHtml(availableBags) + "</td>" +
+        "</tr>";
+      }}).join("");
+    }}
+
     function renderTabs() {{
       const reservationActive = state.activeTab === "reservation";
       reservationView.hidden = !reservationActive;
@@ -867,6 +955,8 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       renderSelection();
       renderReservationKpis();
       renderReservationTable();
+      renderProductKpis();
+      renderProductTable();
       renderTabs();
     }}
 
