@@ -159,10 +159,14 @@ def test_builder_restores_phase1_reservation_contract_and_keeps_completed_visibl
 
     assert dataset["snapshot_date"] == "2026-03-07"
     assert dataset["default_reference"] == "REF-1"
+    assert dataset["default_landed_reference"] == "REF-1"
     assert dataset["notes"] == [RESERVATION_NOTE]
     assert dataset["reference_options"] == [
         {"product_reference": "REF-1", "has_reservations": True, "landing_status": "Mixed"},
         {"product_reference": "REF-2", "has_reservations": False, "landing_status": "Incoming"},
+    ]
+    assert dataset["landed_reference_options"] == [
+        {"product_reference": "REF-1"},
     ]
     assert dataset["reference_summary"] == [
         {
@@ -599,6 +603,13 @@ def test_builder_landed_stock_intelligence_builds_aging_exposure_and_incomplete_
 
     dataset = build_reference_workspace_dataset(activity, products)
 
+    assert dataset["default_landed_reference"] == "REF-MID"
+    assert dataset["landed_reference_options"] == [
+        {"product_reference": "REF-MID"},
+        {"product_reference": "REF-NEW"},
+        {"product_reference": "REF-NODATE"},
+        {"product_reference": "REF-OLD"},
+    ]
     assert dataset["landed_stock_summary"] == {
         "as_of_date": "2026-03-07",
         "landed_bags": 29.0,
@@ -618,6 +629,14 @@ def test_builder_landed_stock_intelligence_builds_aging_exposure_and_incomplete_
         {"aging_bucket": "91-180", "unsold_bags": 0.0},
         {"aging_bucket": "181-270", "unsold_bags": 0.0},
         {"aging_bucket": "270+", "unsold_bags": 4.0},
+    ]
+    assert [row["aging_bucket"] for row in dataset["landed_stock_aging"]] == [
+        "0-30",
+        "31-60",
+        "61-90",
+        "91-180",
+        "181-270",
+        "270+",
     ]
     assert dataset["landed_stock_warehouse_exposure"] == [
         {"warehouse": "Bristol", "unsold_bags": 4.0, "unsold_kg": 120.0},

@@ -751,6 +751,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
   <script id="workspace-data" type="application/json">{payload_json}</script>
   <script>
     const data = JSON.parse(document.getElementById("workspace-data").textContent);
+    const LANDED_AGING_BUCKETS = ["0-30", "31-60", "61-90", "91-180", "181-270", "270+"];
     const root = document.documentElement;
     const themeToggle = document.getElementById("theme-toggle");
     const referenceInput = document.getElementById("reference-search");
@@ -778,11 +779,19 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const detailsByReference = new Map();
     const productSummaryByReference = new Map((data.product_reference_summary || []).map((row) => [row.product_reference, row]));
     const productDetailsByReference = new Map();
+    const landedReferenceOptions = Array.isArray(data.landed_reference_options) ? data.landed_reference_options : [];
     const landedSummary = data.landed_stock_summary || {{}};
-    const landedAging = Array.isArray(data.landed_stock_aging) ? data.landed_stock_aging : [];
+    const landedAgingRaw = Array.isArray(data.landed_stock_aging) ? data.landed_stock_aging : [];
     const landedWarehouseExposure = Array.isArray(data.landed_stock_warehouse_exposure) ? data.landed_stock_warehouse_exposure : [];
     const landedReferenceExposure = Array.isArray(data.landed_stock_reference_exposure) ? data.landed_stock_reference_exposure : [];
     const landedDetails = Array.isArray(data.landed_stock_details) ? data.landed_stock_details : [];
+    const landedAgingByBucket = new Map(
+      landedAgingRaw.map((row) => [String(row.aging_bucket || "").trim(), Number(row.unsold_bags || 0)])
+    );
+    const landedAging = LANDED_AGING_BUCKETS.map((bucket) => ({{
+      aging_bucket: bucket,
+      unsold_bags: landedAgingByBucket.get(bucket) || 0,
+    }}));
     for (const row of data.reservation_details || []) {{
       const key = row.product_reference || "";
       if (!detailsByReference.has(key)) {{
@@ -800,6 +809,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 
     let state = {{
       selectedReference: data.default_reference || "",
+      landedSelectedReference: data.default_landed_reference || "",
       filterText: "",
       landedFilterText: "",
       landedWarehouse: "all",
@@ -809,6 +819,41 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       sortDirection: "asc",
       activeTab: "reservation",
     }};
+
+    function canonicalAgingBucket(value) {{
+      const label = String(value ?? "").trim();
+      return LANDED_AGING_BUCKETS.includes(label) ? label : "Date unavailable";
+    }}
+
+    function currentOptionRows() {{
+      return state.activeTab === "landed"
+        ? landedReferenceOptions
+        : (data.reference_options || []);
+    }}
+
+    function currentSelectedReference() {{
+      return state.activeTab === "landed"
+        ? state.landedSelectedReference
+        : state.selectedReference;
+    }}
+
+    function setCurrentSelectedReference(value) {{
+      if (state.activeTab === "landed") {{
+        state.landedSelectedReference = value;
+        return;
+      }}
+      state.selectedReference = value;
+    }}
+
+    function normaliseSelectedReferenceForActiveTab() {{
+      const validOptions = new Set(currentOptionRows().map((row) => String(row.product_reference || "").trim()).filter(Boolean));
+      const selected = currentSelectedReference().trim();
+      if (selected && validOptions.has(selected)) {{
+        return;
+      }}
+      const fallback = validOptions.values().next().value || "";
+      setCurrentSelectedReference(fallback);
+    }}
 
     function escapeHtml(value) {{
       return String(value ?? "")
@@ -920,7 +965,11 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }}
 
     function renderOptions() {{
-      const options = (data.reference_options || []).map((row) => {{
+      const options = currentOptionRows().map((row) => {{
+        if (state.activeTab === "landed") {{
+          const label = row.product_reference + " | Landed stock live";
+          return '<option value="' + escapeHtml(row.product_reference) + '" label="' + escapeHtml(label) + '"></option>';
+        }}
         const landingStatus = row.landing_status || "Unknown";
         const reservationState = row.has_reservations ? "Reservations live" : "No reservations";
         const label = row.product_reference + " | " + landingStatus + " | " + reservationState;
@@ -1012,14 +1061,16 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }}
 
     function renderSelection() {{
-      const selectedReference = state.selectedReference || "-";
+      const selectedReference = currentSelectedReference() || "-";
       const summary = summaryByReference.get(state.selectedReference);
-      const landingStatus = summary?.landing_status || "Unknown";
+      const landingStatus = state.activeTab === "landed"
+        ? "Landed only"
+        : (summary?.landing_status || "Unknown");
       selectedReferenceValueEl.textContent = selectedReference;
       selectedReferenceChipEl.innerHTML =
         "<span>Reference: <strong>" + escapeHtml(selectedReference) + "</strong></span>" +
         renderStatusChip(landingStatus);
-      referenceInput.value = state.selectedReference || "";
+      referenceInput.value = currentSelectedReference() || "";
     }}
 
     function renderReservationKpis() {{
@@ -1154,7 +1205,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         if (state.landedWarehouse !== "all" && (row.warehouse || "Unknown") !== state.landedWarehouse) {{
           return false;
         }}
-        if (state.landedAgingBucket !== "all" && (row.aging_bucket || "Date unavailable") !== state.landedAgingBucket) {{
+        if (state.landedAgingBucket !== "all" && canonicalAgingBucket(row.aging_bucket) !== state.landedAgingBucket) {{
           return false;
         }}
         if (state.landedStatus === "incomplete" && String(row.data_status || "").trim().toLowerCase() === "complete") {{
@@ -1177,10 +1228,10 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       }});
     }}
 
-    function renderBarChart(containerId, emptyId, rows, labelKey, valueKey, formatter) {{
+    function renderBarChart(containerId, emptyId, rows, labelKey, valueKey, formatter, showZeroRows = false) {{
       const container = document.getElementById(containerId);
       const empty = document.getElementById(emptyId);
-      const filteredRows = rows.filter((row) => Number(row[valueKey] || 0) > 0);
+      const filteredRows = showZeroRows ? rows : rows.filter((row) => Number(row[valueKey] || 0) > 0);
       empty.hidden = filteredRows.length > 0;
       if (!filteredRows.length) {{
         container.innerHTML = "";
@@ -1208,7 +1259,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       }}).join("");
       landedWarehouseFilter.value = warehouses.includes(state.landedWarehouse) ? state.landedWarehouse : "all";
 
-      const agingOptions = ["all", "0-30", "31-60", "61-90", "91-180", "181-270", "270+", "Date unavailable"];
+      const agingOptions = ["all", ...LANDED_AGING_BUCKETS, "Date unavailable"];
       landedAgingFilter.innerHTML = agingOptions.map((value) => {{
         const label = value === "all" ? "All Aging" : value;
         return '<option value="' + escapeHtml(value) + '">' + escapeHtml(label) + '</option>';
@@ -1252,7 +1303,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }}
 
     function renderLandedCharts() {{
-      renderBarChart("landed-aging-chart", "landed-aging-empty", landedAging, "aging_bucket", "unsold_bags", (value) => formatNumber(value, 0) + " bags");
+      renderBarChart("landed-aging-chart", "landed-aging-empty", landedAging, "aging_bucket", "unsold_bags", (value) => formatNumber(value, 0) + " bags", true);
       renderBarChart("landed-warehouse-chart", "landed-warehouse-empty", landedWarehouseExposure, "warehouse", "unsold_bags", (value) => formatNumber(value, 0) + " bags");
       renderBarChart("landed-reference-chart", "landed-reference-empty", landedReferenceExposure.slice(0, 8), "product_reference", "unsold_bags", (value) => formatNumber(value, 0) + " bags");
     }}
@@ -1297,6 +1348,8 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }}
 
     function render() {{
+      normaliseSelectedReferenceForActiveTab();
+      renderOptions();
       renderSelection();
       renderReservationKpis();
       renderReservationTable();
@@ -1326,12 +1379,12 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }});
 
     referenceInput.addEventListener("change", () => {{
-      state.selectedReference = referenceInput.value.trim();
+      setCurrentSelectedReference(referenceInput.value.trim());
       render();
     }});
     referenceInput.addEventListener("input", () => {{
       if (!referenceInput.value.trim()) {{
-        state.selectedReference = "";
+        setCurrentSelectedReference("");
         render();
       }}
     }});
@@ -1370,11 +1423,10 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     for (const button of tabButtons) {{
       button.addEventListener("click", () => {{
         state.activeTab = button.dataset.tab || "reservation";
-        renderTabs();
+        render();
       }});
     }}
 
-    renderOptions();
     render();
   </script>
 </body>

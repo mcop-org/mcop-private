@@ -108,6 +108,28 @@ def _available_bags_by_reference(products: pd.DataFrame) -> dict[str, float]:
     }
 
 
+def _landed_selector_refs(products: pd.DataFrame) -> list[str]:
+    if products.empty:
+        return []
+
+    landed = products.copy()
+    if "product_reference" not in landed.columns:
+        landed["product_reference"] = ""
+    if "landing_status" not in landed.columns:
+        landed["landing_status"] = ""
+
+    landed["product_reference"] = landed["product_reference"].map(_clean_text)
+    landed["landing_status"] = landed["landing_status"].map(_clean_text).str.lower()
+    landed = landed[
+        (landed["product_reference"] != "")
+        & (landed["landing_status"] == "landed")
+    ].copy()
+    if landed.empty:
+        return []
+
+    return sorted({reference for reference in landed["product_reference"].tolist() if reference})
+
+
 def _product_reference_fallbacks(products: pd.DataFrame) -> tuple[dict[str, str], dict[str, str]]:
     if products.empty:
         return {}, {}
@@ -559,12 +581,14 @@ def _latest_rows_per_reservation_product(reservations: pd.DataFrame) -> pd.DataF
 
 def _empty_dataset(
     selector_refs: list[str],
+    landed_selector_refs: list[str],
     landing_status_by_reference: dict[str, str],
     available_bags_by_reference: dict[str, float],
 ) -> dict:
     return {
         "snapshot_date": "",
         "default_reference": selector_refs[0] if selector_refs else "",
+        "default_landed_reference": landed_selector_refs[0] if landed_selector_refs else "",
         "notes": [RESERVATION_NOTE],
         "reference_options": [
             {
@@ -573,6 +597,10 @@ def _empty_dataset(
                 "landing_status": landing_status_by_reference.get(reference, "").title(),
             }
             for reference in selector_refs
+        ],
+        "landed_reference_options": [
+            {"product_reference": reference}
+            for reference in landed_selector_refs
         ],
         "reference_summary": [
             {
@@ -643,10 +671,16 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
             if _clean_text(row.get("product_reference"))
         }
     )
+    landed_selector_refs = _landed_selector_refs(products)
 
     reservations = activity.copy()
     if reservations.empty:
-        empty_dataset = _empty_dataset(selector_refs, landing_status_by_reference, available_bags_by_reference)
+        empty_dataset = _empty_dataset(
+            selector_refs,
+            landed_selector_refs,
+            landing_status_by_reference,
+            available_bags_by_reference,
+        )
         product_summary, product_details = _build_product_reference_intelligence(
             products,
             selector_refs,
@@ -698,7 +732,12 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
             reservations[column] = pd.NA
 
     if reservations.empty:
-        empty_dataset = _empty_dataset(selector_refs, landing_status_by_reference, available_bags_by_reference)
+        empty_dataset = _empty_dataset(
+            selector_refs,
+            landed_selector_refs,
+            landing_status_by_reference,
+            available_bags_by_reference,
+        )
         product_summary, product_details = _build_product_reference_intelligence(
             products,
             selector_refs,
@@ -891,6 +930,10 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         }
         for reference in selector_refs
     ]
+    landed_reference_options = [
+        {"product_reference": reference}
+        for reference in landed_selector_refs
+    ]
 
     snapshot_candidates = latest["effective_dt"].dropna().sort_values(kind="stable")
     snapshot_date = ""
@@ -902,6 +945,7 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         default_reference = summary_rows[0]["product_reference"]
     elif selector_refs:
         default_reference = selector_refs[0]
+    default_landed_reference = landed_selector_refs[0] if landed_selector_refs else ""
 
     product_summary, product_details = _build_product_reference_intelligence(
         products,
@@ -918,8 +962,10 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
     return {
         "snapshot_date": snapshot_date,
         "default_reference": default_reference,
+        "default_landed_reference": default_landed_reference,
         "notes": [RESERVATION_NOTE],
         "reference_options": reference_options,
+        "landed_reference_options": landed_reference_options,
         "reference_summary": summary_rows,
         "reservation_details": reservation_details,
         "product_reference_summary": product_summary,

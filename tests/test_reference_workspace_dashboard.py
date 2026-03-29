@@ -9,12 +9,16 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     dataset = {
         "snapshot_date": "2026-03-07",
         "default_reference": "REF-1",
+        "default_landed_reference": "REF-2",
         "notes": [
             "Reservation completed means all products within the reservation have been released."
         ],
         "reference_options": [
             {"product_reference": "REF-1", "has_reservations": True, "landing_status": "Incoming"},
             {"product_reference": "REF-2", "has_reservations": False, "landing_status": "Landed"},
+        ],
+        "landed_reference_options": [
+            {"product_reference": "REF-2"},
         ],
         "reference_summary": [
             {
@@ -243,15 +247,19 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="landed-status-filter"' in first
     assert 'id="landed-detail-body"' in first
     assert '"default_reference":"REF-1"' in first
+    assert '"default_landed_reference":"REF-2"' in first
+    assert '"landed_reference_options":[{"product_reference":"REF-2"}]' in first
     assert '"product_reference":"REF-2"' in first
     assert '"product_id":"p-1"' in first
     assert 'const reservationState = row.has_reservations ? "Reservations live" : "No reservations";' in first
     assert 'const label = row.product_reference + " | " + landingStatus + " | " + reservationState;' in first
+    assert 'const LANDED_AGING_BUCKETS = ["0-30", "31-60", "61-90", "91-180", "181-270", "270+"];' in first
     assert "Snapshot: <strong>2026-03-07</strong>" in first
     assert 'function formatPercent(value)' in first
     assert 'function formatReservationKey(value)' in first
     assert 'function renderStatusChip(value)' in first
     assert 'function landingSupportText(summary, rows)' in first
+    assert 'function canonicalAgingBucket(value)' in first
     assert 'const reservationKey = formatReservationKey(row.reservation_key || row.id_request || "-");' in first
     assert 'return formatNumber(number, 0);' in first
     assert '"reservation_key":"580.0"' in first
@@ -275,14 +283,20 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'function renderLandedCharts()' in first
     assert 'function renderLandedTable()' in first
     assert 'function currentLandedDetails()' in first
-    assert 'function renderBarChart(containerId, emptyId, rows, labelKey, valueKey, formatter)' in first
+    assert 'function renderBarChart(containerId, emptyId, rows, labelKey, valueKey, formatter, showZeroRows = false)' in first
     assert 'return "Unavailable";' in first
     assert 'const rows = productDetailsByReference.get(state.selectedReference) || [];' in first
     assert 'const landedSummary = data.landed_stock_summary || {};' in first
-    assert 'const landedAging = Array.isArray(data.landed_stock_aging) ? data.landed_stock_aging : [];' in first
+    assert 'const landedReferenceOptions = Array.isArray(data.landed_reference_options) ? data.landed_reference_options : [];' in first
+    assert 'const landedAgingRaw = Array.isArray(data.landed_stock_aging) ? data.landed_stock_aging : [];' in first
+    assert 'const landedAging = LANDED_AGING_BUCKETS.map((bucket) => ({' in first
     assert 'const landedWarehouseExposure = Array.isArray(data.landed_stock_warehouse_exposure) ? data.landed_stock_warehouse_exposure : [];' in first
     assert 'const landedReferenceExposure = Array.isArray(data.landed_stock_reference_exposure) ? data.landed_stock_reference_exposure : [];' in first
     assert 'const landedDetails = Array.isArray(data.landed_stock_details) ? data.landed_stock_details : [];' in first
+    assert 'return state.activeTab === "landed"' in first
+    assert 'state.landedSelectedReference = value;' in first
+    assert 'canonicalAgingBucket(row.aging_bucket) !== state.landedAgingBucket' in first
+    assert 'renderBarChart("landed-aging-chart", "landed-aging-empty", landedAging, "aging_bucket", "unsold_bags", (value) => formatNumber(value, 0) + " bags", true);' in first
     assert 'return "Expected on " + landingLabel + ", in " + formatNumber(diff, 0) + " days.";' in first
     assert 'return "Recorded as landed on " + landingLabel + ", " + formatNumber(daysSinceLanding, 0) + " days ago.";' in first
     assert 'return "Landing date not available for this reference.";' in first
