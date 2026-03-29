@@ -87,6 +87,13 @@ def _status_summary(parts: list[str]) -> str:
     return "; ".join(cleaned) if cleaned else "Complete"
 
 
+def _client_key(row: pd.Series) -> str:
+    client_id = _clean_text(row.get("client_id"))
+    if client_id:
+        return client_id
+    return _clean_text(row.get("company_name"))
+
+
 def _available_bags_by_reference(products: pd.DataFrame) -> dict[str, float]:
     if products.empty or "bags_available" not in products.columns:
         return {}
@@ -579,6 +586,226 @@ def _latest_rows_per_reservation_product(reservations: pd.DataFrame) -> pd.DataF
     return keyed.groupby("reservation_product_key", dropna=False, as_index=False).tail(1).copy()
 
 
+def _landing_mix(values: Iterable[object]) -> str:
+    cleaned = sorted(
+        {
+            _clean_text(value).lower()
+            for value in values
+            if _clean_text(value).lower() in {"incoming", "landed"}
+        }
+    )
+    if not cleaned:
+        return "Unknown"
+    if len(cleaned) == 1:
+        return cleaned[0].title()
+    return "Mixed"
+
+
+def _build_client_intelligence(latest: pd.DataFrame) -> tuple[dict, list[dict], list[dict], list[dict]]:
+    if latest.empty:
+        return (
+            {
+                "clients_with_current_exposure": 0,
+                "total_current_reserved_value_gbp": 0.0,
+                "total_current_reserved_value_available": True,
+                "largest_client_company_name": "",
+                "largest_client_id": "",
+                "largest_client_reserved_value_gbp": 0.0,
+                "largest_client_reserved_value_available": True,
+                "clients_concentrated_in_one_reference": 0,
+            },
+            [],
+            [],
+            [],
+        )
+
+    client_rows = latest.copy()
+    client_rows["client_key"] = [
+        _client_key(row)
+        for _, row in client_rows.iterrows()
+    ]
+    client_rows = client_rows[client_rows["client_key"] != ""].copy()
+    if client_rows.empty:
+        return (
+            {
+                "clients_with_current_exposure": 0,
+                "total_current_reserved_value_gbp": 0.0,
+                "total_current_reserved_value_available": True,
+                "largest_client_company_name": "",
+                "largest_client_id": "",
+                "largest_client_reserved_value_gbp": 0.0,
+                "largest_client_reserved_value_available": True,
+                "clients_concentrated_in_one_reference": 0,
+            },
+            [],
+            [],
+            [],
+        )
+
+    client_rows["company_name"] = client_rows["company_name"].map(_clean_text)
+    client_rows["client_id"] = client_rows["client_id"].map(_clean_text)
+    client_rows["product_reference"] = client_rows["product_reference"].map(_clean_text)
+    client_rows["landing_status"] = client_rows["landing_status"].map(_clean_text).str.lower()
+    client_rows["effective_bags"] = pd.to_numeric(client_rows["effective_bags"], errors="coerce").fillna(0.0)
+    client_rows["reserved_kg"] = pd.to_numeric(client_rows["reserved_kg"], errors="coerce").fillna(0.0)
+    client_rows["reserved_value_gbp"] = pd.to_numeric(client_rows["reserved_value_gbp"], errors="coerce").fillna(0.0)
+
+    client_rows["value_complete"] = (
+        client_rows["effective_bags_raw"].notna()
+        & client_rows["bag_size_kg_raw"].notna()
+        & client_rows["price_per_kg_raw"].notna()
+    )
+    client_rows["kg_complete"] = (
+        client_rows["effective_bags_raw"].notna()
+        & client_rows["bag_size_kg_raw"].notna()
+    )
+
+    detail_rows: list[dict] = []
+    concentration_rows: list[dict] = []
+    top_clients: list[dict] = []
+
+    grouped_clients: list[dict[str, object]] = []
+    for client_key, group in client_rows.groupby("client_key", sort=True):
+        client_id = _clean_text(group["client_id"].iloc[0])
+        company_candidates = sorted({name for name in group["company_name"].tolist() if name})
+        company_name = company_candidates[0] if company_candidates else client_id or _clean_text(client_key)
+        reservation_row_count = int(len(group))
+        reserved_bags = round(float(group["effective_bags"].sum()), 4)
+        reserved_kg = round(float(group["reserved_kg"].sum()), 4)
+        reserved_value = round(float(group["reserved_value_gbp"].sum()), 2)
+        value_available = bool(group["value_complete"].all())
+        distinct_references = int(group["product_reference"].replace("", pd.NA).dropna().nunique())
+        landing_mix = _landing_mix(group["landing_status"].tolist())
+
+        reference_groups = (
+            group.groupby("product_reference", sort=True, as_index=False)[
+                ["reserved_value_gbp", "reserved_kg", "effective_bags"]
+            ]
+            .sum()
+            .rename(columns={"effective_bags": "reserved_bags"})
+        )
+        reference_groups = reference_groups[reference_groups["product_reference"].map(_clean_text) != ""].copy()
+        reference_groups = reference_groups.sort_values(
+            ["reserved_value_gbp", "reserved_kg", "product_reference"],
+            ascending=[False, False, True],
+            kind="stable",
+        )
+
+        primary_reference = ""
+        primary_reference_share = None
+        primary_reference_share_available = False
+        if not reference_groups.empty:
+            primary_row = reference_groups.iloc[0]
+            primary_reference = _clean_text(primary_row["product_reference"])
+            if value_available and reserved_value > 0:
+                primary_reference_share = round(float(primary_row["reserved_value_gbp"]) / reserved_value, 4)
+                primary_reference_share_available = True
+            elif reserved_kg > 0:
+                primary_reference_share = round(float(primary_row["reserved_kg"]) / reserved_kg, 4)
+                primary_reference_share_available = True
+
+            for _, row in reference_groups.iterrows():
+                concentration_rows.append(
+                    {
+                        "company_name": company_name,
+                        "client_id": client_id,
+                        "product_reference": _clean_text(row["product_reference"]),
+                        "reserved_value_gbp": round(float(row["reserved_value_gbp"]), 2),
+                    }
+                )
+
+        detail_rows.append(
+            {
+                "company_name": company_name,
+                "client_id": client_id,
+                "reservation_row_count": reservation_row_count,
+                "reserved_bags": reserved_bags,
+                "reserved_kg": reserved_kg,
+                "reserved_value_gbp": reserved_value,
+                "reserved_value_available": value_available,
+                "distinct_reference_count": distinct_references,
+                "primary_reference": primary_reference,
+                "primary_reference_share": primary_reference_share,
+                "primary_reference_share_available": primary_reference_share_available,
+                "landing_mix": landing_mix,
+            }
+        )
+        grouped_clients.append(
+            {
+                "client_key": client_key,
+                "company_name": company_name,
+                "client_id": client_id,
+                "reserved_value_gbp": reserved_value,
+                "reserved_value_available": value_available,
+                "primary_reference_share": primary_reference_share,
+                "primary_reference_share_available": primary_reference_share_available,
+                "reserved_kg": reserved_kg,
+                "reserved_bags": reserved_bags,
+            }
+        )
+
+    detail_rows = sorted(
+        detail_rows,
+        key=lambda row: (
+            -float(row["reserved_value_gbp"]),
+            -float(row["reserved_kg"]),
+            _clean_text(row["company_name"]).lower(),
+            _clean_text(row["client_id"]).lower(),
+        ),
+    )
+    top_clients = [
+        {
+            "company_name": row["company_name"],
+            "client_id": row["client_id"],
+            "reserved_value_gbp": row["reserved_value_gbp"],
+        }
+        for row in detail_rows[:10]
+    ]
+
+    ranked_client_keys = {
+        (_clean_text(row["client_id"]) or _clean_text(row["company_name"]))
+        for row in detail_rows
+        if float(row["reserved_bags"]) > 0
+    }
+    total_value_available = bool(client_rows["value_complete"].all())
+    client_summary = {
+        "clients_with_current_exposure": int(len(ranked_client_keys)),
+        "total_current_reserved_value_gbp": round(float(client_rows["reserved_value_gbp"].sum()), 2),
+        "total_current_reserved_value_available": total_value_available,
+        "largest_client_company_name": detail_rows[0]["company_name"] if detail_rows else "",
+        "largest_client_id": detail_rows[0]["client_id"] if detail_rows else "",
+        "largest_client_reserved_value_gbp": round(float(detail_rows[0]["reserved_value_gbp"]), 2) if detail_rows else 0.0,
+        "largest_client_reserved_value_available": bool(detail_rows[0]["reserved_value_available"]) if detail_rows else True,
+        "clients_concentrated_in_one_reference": int(
+            sum(
+                1
+                for row in detail_rows
+                if bool(row["primary_reference_share_available"])
+                and row["primary_reference_share"] is not None
+                and float(row["primary_reference_share"]) >= 0.8
+            )
+        ),
+    }
+    concentration_rows = sorted(
+        concentration_rows,
+        key=lambda row: (
+            -next(
+                (
+                    float(detail["reserved_value_gbp"])
+                    for detail in detail_rows
+                    if _clean_text(detail["company_name"]) == _clean_text(row["company_name"])
+                    and _clean_text(detail["client_id"]) == _clean_text(row["client_id"])
+                ),
+                0.0,
+            ),
+            _clean_text(row["company_name"]).lower(),
+            -float(row["reserved_value_gbp"]),
+            _clean_text(row["product_reference"]).lower(),
+        ),
+    )
+    return client_summary, detail_rows, top_clients, concentration_rows
+
+
 def _empty_dataset(
     selector_refs: list[str],
     landed_selector_refs: list[str],
@@ -657,6 +884,19 @@ def _empty_dataset(
         "landed_stock_warehouse_exposure": [],
         "landed_stock_reference_exposure": [],
         "landed_stock_details": [],
+        "client_summary": {
+            "clients_with_current_exposure": 0,
+            "total_current_reserved_value_gbp": 0.0,
+            "total_current_reserved_value_available": True,
+            "largest_client_company_name": "",
+            "largest_client_id": "",
+            "largest_client_reserved_value_gbp": 0.0,
+            "largest_client_reserved_value_available": True,
+            "clients_concentrated_in_one_reference": 0,
+        },
+        "client_details": [],
+        "client_top_exposure": [],
+        "client_reference_concentration": [],
     }
 
 
@@ -775,6 +1015,10 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         .fillna(reservations["request_dt"])
     )
 
+    reservations["bags_raw"] = _to_numeric_or_nan_series(reservations, "bags")
+    reservations["bags_remaining_raw"] = _to_numeric_or_nan_series(reservations, "bags_remaining")
+    reservations["bag_size_kg_raw"] = _to_numeric_or_nan_series(reservations, "bag_size_kg")
+    reservations["price_per_kg_raw"] = _to_numeric_or_nan_series(reservations, "price_per_kg")
     reservations["bags"] = _to_float_series(reservations, "bags")
     reservations["bags_remaining"] = _to_float_series(reservations, "bags_remaining")
     reservations["bag_size_kg"] = _to_float_series(reservations, "bag_size_kg")
@@ -811,6 +1055,7 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
     latest["effective_bags"] = latest["bags_remaining"].where(latest["bags_remaining"] > 0, latest["bags"])
     latest["reserved_kg"] = latest["effective_bags"] * latest["bag_size_kg"]
     latest["reserved_value_gbp"] = latest["reserved_kg"] * latest["price_per_kg"]
+    latest["effective_bags_raw"] = latest["bags_remaining_raw"].where(latest["bags_remaining_raw"] > 0, latest["bags_raw"])
 
     detail_rows = latest.copy()
     detail_rows["landing_date"] = detail_rows["landing_date"].map(_clean_text)
@@ -958,6 +1203,7 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         landed_reference,
         landed_details,
     ) = _build_landed_stock_intelligence(products, snapshot_date)
+    client_summary, client_details, client_top_exposure, client_reference_concentration = _build_client_intelligence(latest)
 
     return {
         "snapshot_date": snapshot_date,
@@ -975,4 +1221,8 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         "landed_stock_warehouse_exposure": landed_warehouse,
         "landed_stock_reference_exposure": landed_reference,
         "landed_stock_details": landed_details,
+        "client_summary": client_summary,
+        "client_details": client_details,
+        "client_top_exposure": client_top_exposure,
+        "client_reference_concentration": client_reference_concentration,
     }

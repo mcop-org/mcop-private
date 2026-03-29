@@ -406,6 +406,46 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       border-radius: 999px;
       background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--warn) 34%, var(--accent)));
     }}
+    .stacked-chart-list {{
+      margin-top: 16px;
+      display: grid;
+      gap: 16px;
+    }}
+    .stack-row {{
+      display: grid;
+      gap: 8px;
+    }}
+    .stack-bar {{
+      width: 100%;
+      min-height: 14px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--line) 64%, transparent);
+      overflow: hidden;
+      display: flex;
+    }}
+    .stack-segment {{
+      min-width: 2px;
+      height: 14px;
+    }}
+    .stack-legend {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      margin-top: 10px;
+    }}
+    .stack-legend-item {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }}
+    .stack-swatch {{
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      flex: 0 0 auto;
+    }}
     table {{
       width: 100%;
       border-collapse: collapse;
@@ -544,6 +584,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     <nav class="tab-strip" aria-label="Workspace tabs">
       <button class="tab-button is-active" id="tab-reservation" type="button" data-tab="reservation" aria-pressed="true">Reservation Intelligence</button>
       <button class="tab-button" id="tab-product" type="button" data-tab="product" aria-pressed="false">Product Reference Intelligence</button>
+      <button class="tab-button" id="tab-client" type="button" data-tab="client" aria-pressed="false">Client Intelligence</button>
       <button class="tab-button" id="tab-landed" type="button" data-tab="landed" aria-pressed="false">Landed Stock Intelligence</button>
     </nav>
 
@@ -668,6 +709,97 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
             </table>
           </div>
           <div class="empty" id="product-detail-empty" hidden>No product rows match the current reference.</div>
+        </section>
+      </div>
+    </section>
+
+    <section class="workspace-view" id="client-view" hidden>
+      <div class="panel view-frame">
+        <div class="view-head">
+          <div>
+            <h2 class="view-title">Client Intelligence</h2>
+            <p class="view-copy">Client-exposure and concentration view of who matters most now, where their exposure sits, and whether it is incoming, landed, mixed, or unknown.</p>
+          </div>
+        </div>
+
+        <section class="kpi-grid" aria-label="Client Intelligence KPIs">
+          <article class="kpi-card">
+            <div class="kpi-label">Clients With Current Exposure</div>
+            <div class="kpi-value" id="client-kpi-count">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Total Current Reserved Value</div>
+            <div class="kpi-value" id="client-kpi-total-value">-</div>
+            <div class="kpi-submeta" id="client-kpi-total-value-meta">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Largest Client Exposure</div>
+            <div class="kpi-value" id="client-kpi-largest-value">-</div>
+            <div class="kpi-submeta" id="client-kpi-largest-meta">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Clients Concentrated In One Reference</div>
+            <div class="kpi-value" id="client-kpi-concentrated">-</div>
+            <div class="kpi-submeta" id="client-kpi-concentrated-meta">Primary reference share at or above 80%.</div>
+          </article>
+        </section>
+
+        <section class="chart-grid" aria-label="Client Intelligence Charts">
+          <article class="chart-card">
+            <h3 class="chart-title">Top Clients By Reserved Value</h3>
+            <p class="chart-copy">Current reservation exposure only. This ranks the clients that matter most now by reserved value.</p>
+            <div class="chart-list" id="client-exposure-chart"></div>
+            <div class="chart-empty" id="client-exposure-empty" hidden>No client exposure to show.</div>
+          </article>
+          <article class="chart-card" style="grid-column: span 2;">
+            <h3 class="chart-title">Client Reference Concentration</h3>
+            <p class="chart-copy">Top clients by reserved value, segmented by current product reference exposure.</p>
+            <div class="stacked-chart-list" id="client-concentration-chart"></div>
+            <div class="chart-empty" id="client-concentration-empty" hidden>No client concentration data to show.</div>
+          </article>
+        </section>
+
+        <section class="table-shell">
+          <div class="table-topbar">
+            <div>
+              <h3 class="table-title">Client Exposure Detail</h3>
+              <p class="table-subtitle">Default order is highest current reserved value first.</p>
+            </div>
+            <div class="table-filters">
+              <div class="table-filter">
+                <label class="control-label" for="client-table-filter">Search clients</label>
+                <input class="control-input" id="client-table-filter" type="search" autocomplete="off" placeholder="Filter by company, client ID, or reference">
+              </div>
+              <div class="table-filter compact">
+                <label class="control-label" for="client-concentration-filter">Concentration</label>
+                <select class="control-input" id="client-concentration-filter">
+                  <option value="all">All Clients</option>
+                  <option value="concentrated">80%+ One Reference</option>
+                  <option value="multi">Multi-Reference</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>Client ID</th>
+                  <th class="num">Reservation Rows</th>
+                  <th class="num">Reserved Bags</th>
+                  <th class="num">Reserved KG</th>
+                  <th class="num">Reserved Value GBP</th>
+                  <th class="num">Distinct References</th>
+                  <th>Primary Reference</th>
+                  <th class="num">Primary Reference Share</th>
+                  <th>Landing Mix</th>
+                </tr>
+              </thead>
+              <tbody id="client-detail-body"></tbody>
+            </table>
+          </div>
+          <div class="empty" id="client-detail-empty" hidden>No client rows match the current filters.</div>
         </section>
       </div>
     </section>
@@ -800,6 +932,10 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const emptyState = document.getElementById("reservation-empty");
     const productDetailBody = document.getElementById("product-detail-body");
     const productDetailEmpty = document.getElementById("product-detail-empty");
+    const clientDetailBody = document.getElementById("client-detail-body");
+    const clientDetailEmpty = document.getElementById("client-detail-empty");
+    const clientTableFilter = document.getElementById("client-table-filter");
+    const clientConcentrationFilter = document.getElementById("client-concentration-filter");
     const landedDetailBody = document.getElementById("landed-detail-body");
     const landedDetailEmpty = document.getElementById("landed-detail-empty");
     const landedTableFilter = document.getElementById("landed-table-filter");
@@ -810,12 +946,17 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const sortButtons = Array.from(document.querySelectorAll("[data-sort]"));
     const reservationView = document.getElementById("reservation-view");
     const productView = document.getElementById("product-view");
+    const clientView = document.getElementById("client-view");
     const landedView = document.getElementById("landed-view");
 
     const summaryByReference = new Map((data.reference_summary || []).map((row) => [row.product_reference, row]));
     const detailsByReference = new Map();
     const productSummaryByReference = new Map((data.product_reference_summary || []).map((row) => [row.product_reference, row]));
     const productDetailsByReference = new Map();
+    const clientSummary = data.client_summary || {{}};
+    const clientDetails = Array.isArray(data.client_details) ? data.client_details : [];
+    const clientTopExposure = Array.isArray(data.client_top_exposure) ? data.client_top_exposure : [];
+    const clientReferenceConcentration = Array.isArray(data.client_reference_concentration) ? data.client_reference_concentration : [];
     const landedSummary = data.landed_stock_summary || {{}};
     const landedAgingRaw = Array.isArray(data.landed_stock_aging) ? data.landed_stock_aging : [];
     const landedWarehouseExposure = Array.isArray(data.landed_stock_warehouse_exposure) ? data.landed_stock_warehouse_exposure : [];
@@ -850,6 +991,8 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       landedWarehouse: "all",
       landedAgingBucket: "all",
       landedStatus: "all",
+      clientFilterText: "",
+      clientConcentration: "all",
       sortKey: "company_name",
       sortDirection: "asc",
       activeTab: "reservation",
@@ -951,6 +1094,19 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
             maximumFractionDigits: 0,
           }})
         : "-%";
+    }}
+
+    function formatPercentOrUnavailable(value, isAvailable) {{
+      if (!isAvailable || value === null || value === undefined) {{
+        return "Unavailable";
+      }}
+      return formatPercent(value);
+    }}
+
+    function clientLabel(row) {{
+      const company = String(row.company_name || "").trim() || "Unknown";
+      const clientId = String(row.client_id || "").trim();
+      return clientId ? company + " (" + clientId + ")" : company;
     }}
 
     function compareValues(left, right) {{
@@ -1239,6 +1395,29 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       }}).join("");
     }}
 
+    function currentClientDetails() {{
+      const text = state.clientFilterText.trim().toLowerCase();
+      return clientDetails.filter((row) => {{
+        const share = Number(row.primary_reference_share || 0);
+        const shareAvailable = Boolean(row.primary_reference_share_available);
+        if (state.clientConcentration === "concentrated" && (!shareAvailable || share < 0.8)) {{
+          return false;
+        }}
+        if (state.clientConcentration === "multi" && shareAvailable && share >= 0.8) {{
+          return false;
+        }}
+        if (!text) {{
+          return true;
+        }}
+        const haystack = [
+          row.company_name,
+          row.client_id,
+          row.primary_reference,
+        ].join(" ").toLowerCase();
+        return haystack.includes(text);
+      }});
+    }}
+
     function currentLandedDetails() {{
       const text = state.landedFilterText.trim().toLowerCase();
       return landedDetails.filter((row) => {{
@@ -1289,6 +1468,52 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
           "<div class='bar-track'><div class='bar-fill' style='width:" + escapeHtml(formatNumber(width, 2)) + "%'></div></div>" +
         "</div>";
       }}).join("");
+    }}
+
+    function renderStackedBarChart(containerId, emptyId, clients, segments) {{
+      const container = document.getElementById(containerId);
+      const empty = document.getElementById(emptyId);
+      const topClients = clients.filter((row) => Number(row.reserved_value_gbp || 0) > 0).slice(0, 8);
+      if (!topClients.length) {{
+        empty.hidden = false;
+        container.innerHTML = "";
+        return;
+      }}
+
+      const clientKeys = topClients.map((row) => clientLabel(row));
+      const segmentRows = segments.filter((row) => clientKeys.includes(clientLabel(row)));
+      const references = [...new Set(segmentRows.map((row) => String(row.product_reference || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "en", {{ sensitivity: "base" }}));
+      const palette = ["#215376", "#a96a3e", "#2f7d4a", "#8f4f8b", "#8a6d1d", "#56657a", "#6e8f2a", "#b35656"];
+      const colorByReference = new Map(references.map((reference, index) => [reference, palette[index % palette.length]]));
+      empty.hidden = false;
+
+      container.innerHTML = topClients.map((client) => {{
+        const total = Number(client.reserved_value_gbp || 0);
+        const rows = segmentRows.filter((row) => clientLabel(row) === clientLabel(client) && Number(row.reserved_value_gbp || 0) > 0);
+        if (!rows.length || total <= 0) {{
+          return "";
+        }}
+        empty.hidden = true;
+        const segmentsHtml = rows.map((row) => {{
+          const value = Number(row.reserved_value_gbp || 0);
+          const width = Math.max((value / total) * 100, 2);
+          return "<div class='stack-segment' title='" + escapeHtml(row.product_reference + ": " + formatCompactMoney(value)) + "' style='width:" + escapeHtml(formatNumber(width, 2)) + "%;background:" + escapeHtml(colorByReference.get(row.product_reference) || "#215376") + ";'></div>";
+        }}).join("");
+        const legendHtml = rows.map((row) => {{
+          return "<span class='stack-legend-item'>" +
+            "<span class='stack-swatch' style='background:" + escapeHtml(colorByReference.get(row.product_reference) || "#215376") + ";'></span>" +
+            "<span>" + escapeHtml(row.product_reference || "-") + " | " + escapeHtml(formatCompactMoney(row.reserved_value_gbp)) + "</span>" +
+          "</span>";
+        }}).join("");
+        return "<div class='stack-row'>" +
+          "<div class='bar-head'>" +
+            "<span class='bar-label'>" + escapeHtml(clientLabel(client)) + "</span>" +
+            "<span class='bar-value'>" + escapeHtml(formatCompactMoney(total)) + "</span>" +
+          "</div>" +
+          "<div class='stack-bar'>" + segmentsHtml + "</div>" +
+          "<div class='stack-legend'>" + legendHtml + "</div>" +
+        "</div>";
+      }}).filter(Boolean).join("");
     }}
 
     function renderLandedFilters() {{
@@ -1342,6 +1567,56 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       valueMeta.textContent = landedSummary.value_completeness_status || "Unavailable";
     }}
 
+    function renderClientKpis() {{
+      const count = document.getElementById("client-kpi-count");
+      const totalValue = document.getElementById("client-kpi-total-value");
+      const totalValueMeta = document.getElementById("client-kpi-total-value-meta");
+      const largestValue = document.getElementById("client-kpi-largest-value");
+      const largestMeta = document.getElementById("client-kpi-largest-meta");
+      const concentrated = document.getElementById("client-kpi-concentrated");
+
+      count.textContent = formatNumber(clientSummary.clients_with_current_exposure || 0, 0);
+      totalValue.textContent = clientSummary.total_current_reserved_value_available
+        ? formatCompactMoney(clientSummary.total_current_reserved_value_gbp)
+        : "Unavailable";
+      totalValueMeta.textContent = clientSummary.total_current_reserved_value_available
+        ? "Complete across current client rows."
+        : "Unavailable on one or more current client rows due to missing kg or price.";
+      largestValue.textContent = clientSummary.largest_client_reserved_value_available
+        ? formatCompactMoney(clientSummary.largest_client_reserved_value_gbp)
+        : "Unavailable";
+      largestMeta.textContent = clientSummary.largest_client_company_name
+        ? clientLabel({{ company_name: clientSummary.largest_client_company_name, client_id: clientSummary.largest_client_id }})
+        : "No client exposure recorded.";
+      concentrated.textContent = formatNumber(clientSummary.clients_concentrated_in_one_reference || 0, 0);
+    }}
+
+    function renderClientCharts() {{
+      renderBarChart("client-exposure-chart", "client-exposure-empty", clientTopExposure, "company_name", "reserved_value_gbp", (value) => formatCompactMoney(value));
+      renderStackedBarChart("client-concentration-chart", "client-concentration-empty", clientTopExposure, clientReferenceConcentration);
+    }}
+
+    function renderClientTable() {{
+      const rows = currentClientDetails();
+      clientDetailEmpty.hidden = rows.length > 0;
+      clientDetailBody.innerHTML = rows.map((row) => {{
+        const reservedValue = row.reserved_value_available ? formatCompactMoney(row.reserved_value_gbp) : "Unavailable";
+        const primaryReferenceShare = formatPercentOrUnavailable(row.primary_reference_share, row.primary_reference_share_available);
+        return "<tr>" +
+          "<td><strong>" + escapeHtml(row.company_name || "-") + "</strong></td>" +
+          "<td>" + escapeHtml(row.client_id || "-") + "</td>" +
+          "<td class='num'>" + escapeHtml(formatNumber(row.reservation_row_count, 0)) + "</td>" +
+          "<td class='num'>" + escapeHtml(formatNumber(row.reserved_bags, 0)) + "</td>" +
+          "<td class='num'>" + escapeHtml(formatKilos(row.reserved_kg)) + "</td>" +
+          "<td class='num'>" + escapeHtml(reservedValue) + "</td>" +
+          "<td class='num'>" + escapeHtml(formatNumber(row.distinct_reference_count, 0)) + "</td>" +
+          "<td>" + escapeHtml(row.primary_reference || "-") + "</td>" +
+          "<td class='num'>" + escapeHtml(primaryReferenceShare) + "</td>" +
+          "<td>" + renderStatusChip(row.landing_mix || "-") + "</td>" +
+        "</tr>";
+      }}).join("");
+    }}
+
     function renderLandedCharts() {{
       renderBarChart("landed-aging-chart", "landed-aging-empty", landedAging, "aging_bucket", "unsold_bags", (value) => formatNumber(value, 0) + " bags", true);
       renderBarChart("landed-warehouse-chart", "landed-warehouse-empty", landedWarehouseExposure, "warehouse", "unsold_bags", (value) => formatNumber(value, 0) + " bags");
@@ -1376,10 +1651,12 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     function renderTabs() {{
       const reservationActive = state.activeTab === "reservation";
       const productActive = state.activeTab === "product";
+      const clientActive = state.activeTab === "client";
       const landedActive = state.activeTab === "landed";
-      sharedSelectorPanel.hidden = landedActive;
+      sharedSelectorPanel.hidden = landedActive || clientActive;
       reservationView.hidden = !reservationActive;
       productView.hidden = !productActive;
+      clientView.hidden = !clientActive;
       landedView.hidden = !landedActive;
       for (const button of tabButtons) {{
         const isActive = button.dataset.tab === state.activeTab;
@@ -1396,6 +1673,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       renderReservationTable();
       renderProductKpis();
       renderProductTable();
+      renderClientKpis();
+      renderClientCharts();
+      renderClientTable();
       renderLandedFilters();
       renderLandedKpis();
       renderLandedCharts();
@@ -1432,6 +1712,14 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     tableFilter.addEventListener("input", () => {{
       state.filterText = tableFilter.value;
       renderReservationTable();
+    }});
+    clientTableFilter.addEventListener("input", () => {{
+      state.clientFilterText = clientTableFilter.value;
+      renderClientTable();
+    }});
+    clientConcentrationFilter.addEventListener("change", () => {{
+      state.clientConcentration = clientConcentrationFilter.value;
+      renderClientTable();
     }});
     landedTableFilter.addEventListener("input", () => {{
       state.landedFilterText = landedTableFilter.value;

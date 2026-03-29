@@ -175,6 +175,54 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
                 "reserved_value_gbp": 250.0,
             }
         ],
+        "client_summary": {
+            "clients_with_current_exposure": 2,
+            "total_current_reserved_value_gbp": 1150.0,
+            "total_current_reserved_value_available": True,
+            "largest_client_company_name": "Alpha Roasters",
+            "largest_client_id": "c-1",
+            "largest_client_reserved_value_gbp": 900.0,
+            "largest_client_reserved_value_available": True,
+            "clients_concentrated_in_one_reference": 1,
+        },
+        "client_details": [
+            {
+                "company_name": "Alpha Roasters",
+                "client_id": "c-1",
+                "reservation_row_count": 2,
+                "reserved_bags": 3.0,
+                "reserved_kg": 90.0,
+                "reserved_value_gbp": 900.0,
+                "reserved_value_available": True,
+                "distinct_reference_count": 1,
+                "primary_reference": "REF-1",
+                "primary_reference_share": 1.0,
+                "primary_reference_share_available": True,
+                "landing_mix": "Incoming",
+            },
+            {
+                "company_name": "Bravo Coffee",
+                "client_id": "c-2",
+                "reservation_row_count": 1,
+                "reserved_bags": 1.0,
+                "reserved_kg": 20.0,
+                "reserved_value_gbp": 250.0,
+                "reserved_value_available": True,
+                "distinct_reference_count": 1,
+                "primary_reference": "REF-1",
+                "primary_reference_share": 1.0,
+                "primary_reference_share_available": True,
+                "landing_mix": "Landed",
+            },
+        ],
+        "client_top_exposure": [
+            {"company_name": "Alpha Roasters", "client_id": "c-1", "reserved_value_gbp": 900.0},
+            {"company_name": "Bravo Coffee", "client_id": "c-2", "reserved_value_gbp": 250.0},
+        ],
+        "client_reference_concentration": [
+            {"company_name": "Alpha Roasters", "client_id": "c-1", "product_reference": "REF-1", "reserved_value_gbp": 900.0},
+            {"company_name": "Bravo Coffee", "client_id": "c-2", "product_reference": "REF-1", "reserved_value_gbp": 250.0},
+        ],
     }
     out = tmp_path / "reference_workspace.html"
 
@@ -197,16 +245,20 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="landed-reset"' in first
     assert 'id="tab-reservation"' in first
     assert 'id="tab-product"' in first
+    assert 'id="tab-client"' in first
     assert 'id="tab-landed"' in first
     assert 'data-tab="reservation"' in first
     assert 'data-tab="product"' in first
+    assert 'data-tab="client"' in first
     assert 'data-tab="landed"' in first
     assert 'activeTab: "reservation"' in first
     assert 'id="reservation-view"' in first
     assert 'id="product-view" hidden' in first
+    assert 'id="client-view" hidden' in first
     assert 'id="landed-view" hidden' in first
     assert "Reservation Intelligence" in first
     assert "Product Reference Intelligence" in first
+    assert "Client Intelligence" in first
     assert "Landed Stock Intelligence" in first
     assert "Stock-only view of whether the selected reference looks early-stage, balanced, or at risk of landed build-up." in first
     assert 'id="table-filter"' in first
@@ -236,6 +288,15 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="product-kpi-health"' in first
     assert 'id="product-kpi-health-meta"' in first
     assert 'id="product-detail-body"' in first
+    assert 'id="client-kpi-count"' in first
+    assert 'id="client-kpi-total-value"' in first
+    assert 'id="client-kpi-largest-value"' in first
+    assert 'id="client-kpi-concentrated"' in first
+    assert 'id="client-exposure-chart"' in first
+    assert 'id="client-concentration-chart"' in first
+    assert 'id="client-table-filter"' in first
+    assert 'id="client-concentration-filter"' in first
+    assert 'id="client-detail-body"' in first
     assert 'id="landed-kpi-unsold-bags"' in first
     assert 'id="landed-kpi-unsold-kg"' in first
     assert 'id="landed-kpi-aged-bags"' in first
@@ -282,6 +343,10 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert '"<td>" + renderStatusChip(row.request_status || "-") + "</td>" +' in first
     assert 'function renderProductKpis()' in first
     assert 'function renderProductTable()' in first
+    assert 'function renderClientKpis()' in first
+    assert 'function renderClientCharts()' in first
+    assert 'function renderClientTable()' in first
+    assert 'function renderStackedBarChart(containerId, emptyId, clients, segments)' in first
     assert 'function renderLandedKpis()' in first
     assert 'function renderLandedCharts()' in first
     assert 'function renderLandedTable()' in first
@@ -299,7 +364,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'const landedDetails = Array.isArray(data.landed_stock_details) ? data.landed_stock_details : [];' in first
     assert 'canonicalAgingBucket(row.aging_bucket) !== state.landedAgingBucket' in first
     assert 'renderBarChart("landed-aging-chart", "landed-aging-empty", landedAging, "aging_bucket", "unsold_bags", (value) => formatNumber(value, 0) + " bags", true);' in first
-    assert 'sharedSelectorPanel.hidden = landedActive;' in first
+    assert 'sharedSelectorPanel.hidden = landedActive || clientActive;' in first
     assert 'state.selectedReference = "";' in first
     assert 'state.filterText = "";' in first
     assert 'state.sortKey = "company_name";' in first
@@ -314,13 +379,15 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'landedAgingFilter.value = "all";' in first
     assert 'landedStatusFilter.value = "all";' in first
     assert 'sharedSelectorResetButton.addEventListener("click", () => {' in first
+    assert 'clientTableFilter.addEventListener("input", () => {' in first
+    assert 'clientConcentrationFilter.addEventListener("change", () => {' in first
     assert 'landedResetButton.addEventListener("click", () => {' in first
     assert 'return "Expected on " + landingLabel + ", in " + formatNumber(diff, 0) + " days.";' in first
     assert 'return "Recorded as landed on " + landingLabel + ", " + formatNumber(daysSinceLanding, 0) + " days ago.";' in first
     assert 'return "Landing date not available for this reference.";' in first
     assert 'const selectedReference = currentSelectedReference() || "Select product";' in first
     assert 'const landingStatus = currentSelectedReference() ? (summary?.landing_status || "Unknown") : "Not selected";' in first
-    assert 'sharedSelectorPanel.hidden = landedActive;' in first
+    assert 'sharedSelectorPanel.hidden = landedActive || clientActive;' in first
     assert 'state.activeTab = button.dataset.tab || "reservation";' in first
     assert 'summaryByReference.get(state.selectedReference);' in first
     assert '"reference_profiles"' not in first
@@ -357,7 +424,11 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'renderLandedKpis();' in first
     assert 'renderLandedCharts();' in first
     assert 'renderLandedTable();' in first
+    assert 'renderClientKpis();' in first
+    assert 'renderClientCharts();' in first
+    assert 'renderClientTable();' in first
     assert '"landed_stock_summary":{"aged_180_plus_bags":1.0,"as_of_date":"2026-03-07"' in first
+    assert '"client_summary":{"clients_concentrated_in_one_reference":1,"clients_with_current_exposure":2,"largest_client_company_name":"Alpha Roasters"' in first
     assert "Released Bags" not in first
     assert "Open Value GBP" not in first
     assert "Sell-through" not in first
