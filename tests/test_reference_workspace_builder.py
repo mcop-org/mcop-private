@@ -854,3 +854,125 @@ def test_builder_client_intelligence_keeps_current_exposure_and_safe_concentrati
         {"company_name": "Alpha Roasters", "client_id": "c-1", "product_reference": "REF-2", "reserved_value_gbp": 0.0},
         {"company_name": "Bravo Coffee", "client_id": "c-2", "product_reference": "REF-3", "reserved_value_gbp": 300.0},
     ]
+    assert dataset["client_activity_rows"] == [
+        {
+            "company_name": "Alpha Roasters",
+            "client_id": "c-1",
+            "client_key": "c-1",
+            "product_reference": "REF-1",
+            "request_date": "2026-03-01",
+            "request_date_available": True,
+            "landing_status": "Incoming",
+            "effective_bags": 2.0,
+            "reserved_kg": 60.0,
+            "reserved_value_gbp": 600.0,
+            "reserved_value_available": True,
+        },
+        {
+            "company_name": "Alpha Roasters",
+            "client_id": "c-1",
+            "client_key": "c-1",
+            "product_reference": "REF-2",
+            "request_date": "2026-03-01",
+            "request_date_available": True,
+            "landing_status": "Landed",
+            "effective_bags": 2.0,
+            "reserved_kg": 60.0,
+            "reserved_value_gbp": 0.0,
+            "reserved_value_available": False,
+        },
+        {
+            "company_name": "Bravo Coffee",
+            "client_id": "c-2",
+            "client_key": "c-2",
+            "product_reference": "REF-3",
+            "request_date": "2026-03-03",
+            "request_date_available": True,
+            "landing_status": "Landed",
+            "effective_bags": 1.0,
+            "reserved_kg": 20.0,
+            "reserved_value_gbp": 300.0,
+            "reserved_value_available": True,
+        },
+    ]
+
+
+def test_builder_client_activity_rows_keep_missing_request_date_for_default_client_view() -> None:
+    activity = pd.DataFrame(
+        [
+            {
+                "id_request": "r-1",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "",
+                "approval_date": "2026-07-30",
+                "amendment_date": "",
+                "client_id": "c-1",
+                "company_name": "Alpha Roasters",
+                "product_id": "p-1",
+                "product_reference": "REF-1",
+                "bags": 2,
+                "bags_remaining": 2,
+                "bag_size_kg": 30,
+                "price_per_kg": 10.0,
+                "landing_status": "incoming",
+            },
+            {
+                "id_request": "r-2",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-08-02",
+                "approval_date": "2026-08-03",
+                "amendment_date": "",
+                "client_id": "c-2",
+                "company_name": "Bravo Coffee",
+                "product_id": "p-2",
+                "product_reference": "REF-2",
+                "bags": 1,
+                "bags_remaining": 1,
+                "bag_size_kg": 20,
+                "price_per_kg": 12.0,
+                "landing_status": "landed",
+            },
+        ]
+    )
+    products = pd.DataFrame(
+        [
+            {"product_id": "p-1", "product_reference": "REF-1", "landing_status": "incoming"},
+            {"product_id": "p-2", "product_reference": "REF-2", "landing_status": "landed"},
+        ]
+    )
+
+    dataset = build_reference_workspace_dataset(activity, products)
+
+    assert dataset["client_summary"]["clients_with_current_exposure"] == 2
+    assert dataset["client_activity_rows"] == [
+        {
+            "company_name": "Alpha Roasters",
+            "client_id": "c-1",
+            "client_key": "c-1",
+            "product_reference": "REF-1",
+            "request_date": "",
+            "request_date_available": False,
+            "landing_status": "Incoming",
+            "effective_bags": 2.0,
+            "reserved_kg": 60.0,
+            "reserved_value_gbp": 600.0,
+            "reserved_value_available": True,
+        },
+        {
+            "company_name": "Bravo Coffee",
+            "client_id": "c-2",
+            "client_key": "c-2",
+            "product_reference": "REF-2",
+            "request_date": "2026-08-02",
+            "request_date_available": True,
+            "landing_status": "Landed",
+            "effective_bags": 1.0,
+            "reserved_kg": 20.0,
+            "reserved_value_gbp": 240.0,
+            "reserved_value_available": True,
+        },
+    ]

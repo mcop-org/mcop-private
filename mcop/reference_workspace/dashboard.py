@@ -722,9 +722,39 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
           </div>
         </div>
 
+        <section class="table-shell" aria-label="Client Intelligence Filters">
+          <div class="table-topbar">
+            <div>
+              <h3 class="table-title">Request Date Filter</h3>
+              <p class="table-subtitle">Applies only to Client Intelligence and is anchored to the workspace snapshot date.</p>
+            </div>
+            <div class="table-filters">
+              <div class="table-filter compact">
+                <label class="control-label" for="client-date-preset">Date range</label>
+                <select class="control-input" id="client-date-preset">
+                  <option value="all">All request dates</option>
+                  <option value="last-30">Last 30 days</option>
+                  <option value="last-90">Last 90 days</option>
+                  <option value="month-to-date">Month to date</option>
+                  <option value="financial-year-to-date">Financial Year to Date</option>
+                  <option value="custom">Custom range</option>
+                </select>
+              </div>
+              <div class="table-filter compact" id="client-date-from-shell" hidden>
+                <label class="control-label" for="client-date-from">From</label>
+                <input class="control-input" id="client-date-from" type="date" inputmode="numeric">
+              </div>
+              <div class="table-filter compact" id="client-date-to-shell" hidden>
+                <label class="control-label" for="client-date-to">To</label>
+                <input class="control-input" id="client-date-to" type="date" inputmode="numeric">
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section class="kpi-grid" aria-label="Client Intelligence KPIs">
           <article class="kpi-card">
-            <div class="kpi-label">Clients With Reservations</div>
+            <div class="kpi-label">Clients With Reservation Activity</div>
             <div class="kpi-value" id="client-kpi-count">-</div>
           </article>
           <article class="kpi-card">
@@ -747,23 +777,23 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         <section class="chart-grid" aria-label="Client Intelligence Charts">
           <article class="chart-card">
             <h3 class="chart-title">Top Clients by Reservation Value Recorded</h3>
-            <p class="chart-copy">Current reservation exposure only. This ranks the clients that matter most now by reserved value.</p>
+            <p class="chart-copy">Ranks clients by reservation value recorded during the selected request-date period.</p>
             <div class="chart-list" id="client-exposure-chart"></div>
-            <div class="chart-empty" id="client-exposure-empty" hidden>No client exposure to show.</div>
+            <div class="chart-empty" id="client-exposure-empty" hidden>No client activity to show for this request-date range.</div>
           </article>
           <article class="chart-card" style="grid-column: span 2;">
             <h3 class="chart-title">Reservation Value Recorded by Client and Reference</h3>
-            <p class="chart-copy">Top clients by reserved value, segmented by current product reference exposure.</p>
+            <p class="chart-copy">Shows how recorded reservation value is distributed across product references during the selected period.</p>
             <div class="stacked-chart-list" id="client-concentration-chart"></div>
-            <div class="chart-empty" id="client-concentration-empty" hidden>No client concentration data to show.</div>
+            <div class="chart-empty" id="client-concentration-empty" hidden>No client concentration data to show for this request-date range.</div>
           </article>
         </section>
 
         <section class="table-shell">
           <div class="table-topbar">
             <div>
-              <h3 class="table-title">Client Exposure Detail</h3>
-              <p class="table-subtitle">Default order is highest current reserved value first.</p>
+              <h3 class="table-title">Client Activity Detail</h3>
+              <p class="table-subtitle">Default order is highest recorded reservation value first for the selected request-date period.</p>
             </div>
             <div class="table-filters">
               <div class="table-filter">
@@ -936,6 +966,11 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const clientDetailEmpty = document.getElementById("client-detail-empty");
     const clientTableFilter = document.getElementById("client-table-filter");
     const clientConcentrationFilter = document.getElementById("client-concentration-filter");
+    const clientDatePreset = document.getElementById("client-date-preset");
+    const clientDateFromShell = document.getElementById("client-date-from-shell");
+    const clientDateToShell = document.getElementById("client-date-to-shell");
+    const clientDateFrom = document.getElementById("client-date-from");
+    const clientDateTo = document.getElementById("client-date-to");
     const landedDetailBody = document.getElementById("landed-detail-body");
     const landedDetailEmpty = document.getElementById("landed-detail-empty");
     const landedTableFilter = document.getElementById("landed-table-filter");
@@ -957,6 +992,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const clientDetails = Array.isArray(data.client_details) ? data.client_details : [];
     const clientTopExposure = Array.isArray(data.client_top_exposure) ? data.client_top_exposure : [];
     const clientReferenceConcentration = Array.isArray(data.client_reference_concentration) ? data.client_reference_concentration : [];
+    const clientActivityRows = Array.isArray(data.client_activity_rows) ? data.client_activity_rows : [];
     const landedSummary = data.landed_stock_summary || {{}};
     const landedAgingRaw = Array.isArray(data.landed_stock_aging) ? data.landed_stock_aging : [];
     const landedWarehouseExposure = Array.isArray(data.landed_stock_warehouse_exposure) ? data.landed_stock_warehouse_exposure : [];
@@ -993,6 +1029,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       landedStatus: "all",
       clientFilterText: "",
       clientConcentration: "all",
+      clientDatePreset: "all",
+      clientDateFrom: "",
+      clientDateTo: "",
       sortKey: "company_name",
       sortDirection: "asc",
       activeTab: "reservation",
@@ -1269,6 +1308,312 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       render();
     }}
 
+    function normaliseIsoDate(value) {{
+      const text = String(value ?? "").trim();
+      return /^\\d{{4}}-\\d{{2}}-\\d{{2}}$/.test(text) ? text : "";
+    }}
+
+    function dateFromIso(value) {{
+      const text = normaliseIsoDate(value);
+      if (!text) {{
+        return null;
+      }}
+      const [year, month, day] = text.split("-").map(Number);
+      return new Date(Date.UTC(year, month - 1, day));
+    }}
+
+    function isoFromDate(date) {{
+      if (!(date instanceof Date) || Number.isNaN(date.getTime())) {{
+        return "";
+      }}
+      return date.toISOString().slice(0, 10);
+    }}
+
+    function addDays(value, days) {{
+      const base = dateFromIso(value);
+      if (!base) {{
+        return "";
+      }}
+      const next = new Date(base.getTime());
+      next.setUTCDate(next.getUTCDate() + days);
+      return isoFromDate(next);
+    }}
+
+    function snapshotAnchorDate() {{
+      return normaliseIsoDate(data.snapshot_date || "");
+    }}
+
+    function financialYearStart(value) {{
+      const anchor = dateFromIso(value);
+      if (!anchor) {{
+        return "";
+      }}
+      const year = anchor.getUTCMonth() >= 7 ? anchor.getUTCFullYear() : anchor.getUTCFullYear() - 1;
+      return isoFromDate(new Date(Date.UTC(year, 7, 1)));
+    }}
+
+    function monthStart(value) {{
+      const anchor = dateFromIso(value);
+      if (!anchor) {{
+        return "";
+      }}
+      return isoFromDate(new Date(Date.UTC(anchor.getUTCFullYear(), anchor.getUTCMonth(), 1)));
+    }}
+
+    function currentClientDateRange() {{
+      const anchor = snapshotAnchorDate();
+      if (state.clientDatePreset === "all") {{
+        return {{ from: "", to: "", anchored: false }};
+      }}
+      if (state.clientDatePreset === "custom") {{
+        const from = normaliseIsoDate(state.clientDateFrom);
+        const to = normaliseIsoDate(state.clientDateTo);
+        return {{
+          from,
+          to,
+          anchored: Boolean(from || to),
+        }};
+      }}
+      if (!anchor) {{
+        return {{ from: "", to: "", anchored: false }};
+      }}
+      if (state.clientDatePreset === "last-30") {{
+        return {{ from: addDays(anchor, -29), to: anchor, anchored: true }};
+      }}
+      if (state.clientDatePreset === "last-90") {{
+        return {{ from: addDays(anchor, -89), to: anchor, anchored: true }};
+      }}
+      if (state.clientDatePreset === "month-to-date") {{
+        return {{ from: monthStart(anchor), to: anchor, anchored: true }};
+      }}
+      if (state.clientDatePreset === "financial-year-to-date") {{
+        return {{ from: financialYearStart(anchor), to: anchor, anchored: true }};
+      }}
+      return {{ from: "", to: "", anchored: false }};
+    }}
+
+    function currentClientActivityRows() {{
+      const range = currentClientDateRange();
+      if (!range.anchored) {{
+        return clientActivityRows;
+      }}
+      return clientActivityRows.filter((row) => {{
+        const requestDate = normaliseIsoDate(row.request_date || "");
+        if (!requestDate) {{
+          return false;
+        }}
+        if (range.from && requestDate < range.from) {{
+          return false;
+        }}
+        if (range.to && requestDate > range.to) {{
+          return false;
+        }}
+        return true;
+      }});
+    }}
+
+    function aggregateClientMetrics(rows) {{
+      if (!rows.length) {{
+        return {{
+          summary: {{
+            clients_with_current_exposure: 0,
+            total_current_reserved_value_gbp: 0,
+            total_current_reserved_value_available: true,
+            largest_client_company_name: "",
+            largest_client_id: "",
+            largest_client_reserved_value_gbp: 0,
+            largest_client_reserved_value_available: true,
+            clients_concentrated_in_one_reference: 0,
+          }},
+          details: [],
+          topExposure: [],
+          concentration: [],
+        }};
+      }}
+
+      const clientGroups = new Map();
+      for (const row of rows) {{
+        const clientKey = String(row.client_key || row.client_id || row.company_name || "").trim();
+        if (!clientKey) {{
+          continue;
+        }}
+        if (!clientGroups.has(clientKey)) {{
+          clientGroups.set(clientKey, []);
+        }}
+        clientGroups.get(clientKey).push(row);
+      }}
+
+      const details = [];
+      const concentration = [];
+      for (const [clientKey, group] of [...clientGroups.entries()].sort((a, b) => a[0].localeCompare(b[0], "en", {{ sensitivity: "base" }}))) {{
+        const clientId = String(group[0].client_id || "").trim();
+        const companyCandidates = [...new Set(group.map((row) => String(row.company_name || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b, "en", {{ sensitivity: "base" }}));
+        const companyName = companyCandidates[0] || clientId || clientKey;
+        const reservationRowCount = group.length;
+        const reservedBags = group.reduce((sum, row) => sum + Number(row.effective_bags || 0), 0);
+        const reservedKg = group.reduce((sum, row) => sum + Number(row.reserved_kg || 0), 0);
+        const reservedValue = group.reduce((sum, row) => sum + Number(row.reserved_value_gbp || 0), 0);
+        const valueAvailable = group.every((row) => Boolean(row.reserved_value_available));
+        const distinctReferenceCount = new Set(group.map((row) => String(row.product_reference || "").trim()).filter(Boolean)).size;
+        const landingStatuses = [...new Set(group.map((row) => String(row.landing_status || "").trim().toLowerCase()).filter((value) => value === "incoming" || value === "landed"))].sort();
+        let landingMix = "Unknown";
+        if (landingStatuses.length === 1) {{
+          landingMix = landingStatuses[0].charAt(0).toUpperCase() + landingStatuses[0].slice(1);
+        }} else if (landingStatuses.length > 1) {{
+          landingMix = "Mixed";
+        }}
+
+        const referenceMap = new Map();
+        for (const row of group) {{
+          const reference = String(row.product_reference || "").trim();
+          if (!reference) {{
+            continue;
+          }}
+          if (!referenceMap.has(reference)) {{
+            referenceMap.set(reference, {{
+              product_reference: reference,
+              reserved_value_gbp: 0,
+              reserved_kg: 0,
+              reserved_bags: 0,
+            }});
+          }}
+          const entry = referenceMap.get(reference);
+          entry.reserved_value_gbp += Number(row.reserved_value_gbp || 0);
+          entry.reserved_kg += Number(row.reserved_kg || 0);
+          entry.reserved_bags += Number(row.effective_bags || 0);
+        }}
+
+        const referenceGroups = [...referenceMap.values()].sort((left, right) => {{
+          const valueDiff = Number(right.reserved_value_gbp || 0) - Number(left.reserved_value_gbp || 0);
+          if (valueDiff !== 0) {{
+            return valueDiff;
+          }}
+          const kgDiff = Number(right.reserved_kg || 0) - Number(left.reserved_kg || 0);
+          if (kgDiff !== 0) {{
+            return kgDiff;
+          }}
+          return String(left.product_reference || "").localeCompare(String(right.product_reference || ""), "en", {{ sensitivity: "base" }});
+        }});
+
+        let primaryReference = "";
+        let primaryReferenceShare = null;
+        let primaryReferenceShareAvailable = false;
+        if (referenceGroups.length) {{
+          const primaryRow = referenceGroups[0];
+          primaryReference = String(primaryRow.product_reference || "").trim();
+          if (valueAvailable && reservedValue > 0) {{
+            primaryReferenceShare = Number(primaryRow.reserved_value_gbp || 0) / reservedValue;
+            primaryReferenceShareAvailable = true;
+          }} else if (reservedKg > 0) {{
+            primaryReferenceShare = Number(primaryRow.reserved_kg || 0) / reservedKg;
+            primaryReferenceShareAvailable = true;
+          }}
+          for (const referenceRow of referenceGroups) {{
+            concentration.push({{
+              company_name: companyName,
+              client_id: clientId,
+              product_reference: referenceRow.product_reference,
+              reserved_value_gbp: Number(referenceRow.reserved_value_gbp.toFixed(2)),
+            }});
+          }}
+        }}
+
+        details.push({{
+          company_name: companyName,
+          client_id: clientId,
+          reservation_row_count: reservationRowCount,
+          reserved_bags: Number(reservedBags.toFixed(4)),
+          reserved_kg: Number(reservedKg.toFixed(4)),
+          reserved_value_gbp: Number(reservedValue.toFixed(2)),
+          reserved_value_available: valueAvailable,
+          distinct_reference_count: distinctReferenceCount,
+          primary_reference: primaryReference,
+          primary_reference_share: primaryReferenceShare === null ? null : Number(primaryReferenceShare.toFixed(4)),
+          primary_reference_share_available: primaryReferenceShareAvailable,
+          landing_mix: landingMix,
+        }});
+      }}
+
+      details.sort((left, right) => {{
+        const valueDiff = Number(right.reserved_value_gbp || 0) - Number(left.reserved_value_gbp || 0);
+        if (valueDiff !== 0) {{
+          return valueDiff;
+        }}
+        const kgDiff = Number(right.reserved_kg || 0) - Number(left.reserved_kg || 0);
+        if (kgDiff !== 0) {{
+          return kgDiff;
+        }}
+        const companyDiff = String(left.company_name || "").localeCompare(String(right.company_name || ""), "en", {{ sensitivity: "base" }});
+        if (companyDiff !== 0) {{
+          return companyDiff;
+        }}
+        return String(left.client_id || "").localeCompare(String(right.client_id || ""), "en", {{ sensitivity: "base" }});
+      }});
+
+      concentration.sort((left, right) => {{
+        const leftDetail = details.find((row) => String(row.company_name || "") === String(left.company_name || "") && String(row.client_id || "") === String(left.client_id || ""));
+        const rightDetail = details.find((row) => String(row.company_name || "") === String(right.company_name || "") && String(row.client_id || "") === String(right.client_id || ""));
+        const clientValueDiff = Number(rightDetail?.reserved_value_gbp || 0) - Number(leftDetail?.reserved_value_gbp || 0);
+        if (clientValueDiff !== 0) {{
+          return clientValueDiff;
+        }}
+        const companyDiff = String(left.company_name || "").localeCompare(String(right.company_name || ""), "en", {{ sensitivity: "base" }});
+        if (companyDiff !== 0) {{
+          return companyDiff;
+        }}
+        const valueDiff = Number(right.reserved_value_gbp || 0) - Number(left.reserved_value_gbp || 0);
+        if (valueDiff !== 0) {{
+          return valueDiff;
+        }}
+        return String(left.product_reference || "").localeCompare(String(right.product_reference || ""), "en", {{ sensitivity: "base" }});
+      }});
+
+      const rankedClientKeys = new Set(details.filter((row) => Number(row.reserved_bags || 0) > 0).map((row) => String(row.client_id || "").trim() || String(row.company_name || "").trim()));
+      const summary = {{
+        clients_with_current_exposure: rankedClientKeys.size,
+        total_current_reserved_value_gbp: Number(rows.reduce((sum, row) => sum + Number(row.reserved_value_gbp || 0), 0).toFixed(2)),
+        total_current_reserved_value_available: rows.every((row) => Boolean(row.reserved_value_available)),
+        largest_client_company_name: details[0]?.company_name || "",
+        largest_client_id: details[0]?.client_id || "",
+        largest_client_reserved_value_gbp: Number((details[0]?.reserved_value_gbp || 0).toFixed(2)),
+        largest_client_reserved_value_available: Boolean(details[0]?.reserved_value_available ?? true),
+        clients_concentrated_in_one_reference: details.filter((row) => Boolean(row.primary_reference_share_available) && row.primary_reference_share !== null && Number(row.primary_reference_share || 0) >= 0.8).length,
+      }};
+      const topExposure = details.slice(0, 10).map((row) => ({{
+        company_name: row.company_name,
+        client_id: row.client_id,
+        reserved_value_gbp: row.reserved_value_gbp,
+      }}));
+      return {{ summary, details, topExposure, concentration }};
+    }}
+
+    function currentClientMetrics() {{
+      const filteredRows = currentClientActivityRows();
+      if (state.clientDatePreset === "all") {{
+        return {{
+          summary: clientSummary,
+          details: clientDetails,
+          topExposure: clientTopExposure,
+          concentration: clientReferenceConcentration,
+          filteredRows,
+        }};
+      }}
+      const aggregated = aggregateClientMetrics(filteredRows);
+      return {{
+        ...aggregated,
+        filteredRows,
+      }};
+    }}
+
+    function renderClientDateControls() {{
+      const showCustomRange = state.clientDatePreset === "custom";
+      clientDatePreset.value = state.clientDatePreset;
+      clientDateFromShell.hidden = !showCustomRange;
+      clientDateToShell.hidden = !showCustomRange;
+      clientDateFrom.value = state.clientDateFrom;
+      clientDateTo.value = state.clientDateTo;
+    }}
+
     function renderReservationKpis() {{
       const summary = summaryByReference.get(state.selectedReference);
       const rows = detailsByReference.get(state.selectedReference) || [];
@@ -1396,8 +1741,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }}
 
     function currentClientDetails() {{
+      const clientMetrics = currentClientMetrics();
       const text = state.clientFilterText.trim().toLowerCase();
-      return clientDetails.filter((row) => {{
+      return clientMetrics.details.filter((row) => {{
         const share = Number(row.primary_reference_share || 0);
         const shareAvailable = Boolean(row.primary_reference_share_available);
         if (state.clientConcentration === "concentrated" && (!shareAvailable || share < 0.8)) {{
@@ -1568,6 +1914,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }}
 
     function renderClientKpis() {{
+      const clientMetrics = currentClientMetrics();
       const count = document.getElementById("client-kpi-count");
       const totalValue = document.getElementById("client-kpi-total-value");
       const totalValueMeta = document.getElementById("client-kpi-total-value-meta");
@@ -1575,25 +1922,26 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       const largestMeta = document.getElementById("client-kpi-largest-meta");
       const concentrated = document.getElementById("client-kpi-concentrated");
 
-      count.textContent = formatNumber(clientSummary.clients_with_current_exposure || 0, 0);
-      totalValue.textContent = clientSummary.total_current_reserved_value_available
-        ? formatCompactMoney(clientSummary.total_current_reserved_value_gbp)
+      count.textContent = formatNumber(clientMetrics.summary.clients_with_current_exposure || 0, 0);
+      totalValue.textContent = clientMetrics.summary.total_current_reserved_value_available
+        ? formatCompactMoney(clientMetrics.summary.total_current_reserved_value_gbp)
         : "Unavailable";
-      totalValueMeta.textContent = clientSummary.total_current_reserved_value_available
-        ? "Complete across current client rows."
-        : "Unavailable on one or more current client rows due to missing kg or price.";
-      largestValue.textContent = clientSummary.largest_client_reserved_value_available
-        ? formatCompactMoney(clientSummary.largest_client_reserved_value_gbp)
+      totalValueMeta.textContent = clientMetrics.summary.total_current_reserved_value_available
+        ? "Complete across recorded client rows in the selected request-date range."
+        : "Unavailable on one or more recorded client rows due to missing kg or price.";
+      largestValue.textContent = clientMetrics.summary.largest_client_reserved_value_available
+        ? formatCompactMoney(clientMetrics.summary.largest_client_reserved_value_gbp)
         : "Unavailable";
-      largestMeta.textContent = clientSummary.largest_client_company_name
-        ? clientLabel({{ company_name: clientSummary.largest_client_company_name, client_id: clientSummary.largest_client_id }})
-        : "No client exposure recorded.";
-      concentrated.textContent = formatNumber(clientSummary.clients_concentrated_in_one_reference || 0, 0);
+      largestMeta.textContent = clientMetrics.summary.largest_client_company_name
+        ? clientLabel({{ company_name: clientMetrics.summary.largest_client_company_name, client_id: clientMetrics.summary.largest_client_id }})
+        : "No client activity recorded.";
+      concentrated.textContent = formatNumber(clientMetrics.summary.clients_concentrated_in_one_reference || 0, 0);
     }}
 
     function renderClientCharts() {{
-      renderBarChart("client-exposure-chart", "client-exposure-empty", clientTopExposure, "company_name", "reserved_value_gbp", (value) => formatCompactMoney(value));
-      renderStackedBarChart("client-concentration-chart", "client-concentration-empty", clientTopExposure, clientReferenceConcentration);
+      const clientMetrics = currentClientMetrics();
+      renderBarChart("client-exposure-chart", "client-exposure-empty", clientMetrics.topExposure, "company_name", "reserved_value_gbp", (value) => formatCompactMoney(value));
+      renderStackedBarChart("client-concentration-chart", "client-concentration-empty", clientMetrics.topExposure, clientMetrics.concentration);
     }}
 
     function renderClientTable() {{
@@ -1673,6 +2021,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       renderReservationTable();
       renderProductKpis();
       renderProductTable();
+      renderClientDateControls();
       renderClientKpis();
       renderClientCharts();
       renderClientTable();
@@ -1720,6 +2069,18 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     clientConcentrationFilter.addEventListener("change", () => {{
       state.clientConcentration = clientConcentrationFilter.value;
       renderClientTable();
+    }});
+    clientDatePreset.addEventListener("change", () => {{
+      state.clientDatePreset = clientDatePreset.value;
+      render();
+    }});
+    clientDateFrom.addEventListener("change", () => {{
+      state.clientDateFrom = normaliseIsoDate(clientDateFrom.value);
+      render();
+    }});
+    clientDateTo.addEventListener("change", () => {{
+      state.clientDateTo = normaliseIsoDate(clientDateTo.value);
+      render();
     }});
     landedTableFilter.addEventListener("input", () => {{
       state.landedFilterText = landedTableFilter.value;

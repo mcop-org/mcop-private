@@ -94,6 +94,19 @@ def _client_key(row: pd.Series) -> str:
     return _clean_text(row.get("company_name"))
 
 
+def _empty_client_summary() -> dict:
+    return {
+        "clients_with_current_exposure": 0,
+        "total_current_reserved_value_gbp": 0.0,
+        "total_current_reserved_value_available": True,
+        "largest_client_company_name": "",
+        "largest_client_id": "",
+        "largest_client_reserved_value_gbp": 0.0,
+        "largest_client_reserved_value_available": True,
+        "clients_concentrated_in_one_reference": 0,
+    }
+
+
 def _available_bags_by_reference(products: pd.DataFrame) -> dict[str, float]:
     if products.empty or "bags_available" not in products.columns:
         return {}
@@ -601,51 +614,21 @@ def _landing_mix(values: Iterable[object]) -> str:
     return "Mixed"
 
 
-def _build_client_intelligence(latest: pd.DataFrame) -> tuple[dict, list[dict], list[dict], list[dict]]:
+def _build_client_intelligence_rows(latest: pd.DataFrame) -> pd.DataFrame:
     if latest.empty:
-        return (
-            {
-                "clients_with_current_exposure": 0,
-                "total_current_reserved_value_gbp": 0.0,
-                "total_current_reserved_value_available": True,
-                "largest_client_company_name": "",
-                "largest_client_id": "",
-                "largest_client_reserved_value_gbp": 0.0,
-                "largest_client_reserved_value_available": True,
-                "clients_concentrated_in_one_reference": 0,
-            },
-            [],
-            [],
-            [],
-        )
+        return latest.copy()
 
     client_rows = latest.copy()
-    client_rows["client_key"] = [
-        _client_key(row)
-        for _, row in client_rows.iterrows()
-    ]
+    client_rows["client_key"] = [_client_key(row) for _, row in client_rows.iterrows()]
     client_rows = client_rows[client_rows["client_key"] != ""].copy()
     if client_rows.empty:
-        return (
-            {
-                "clients_with_current_exposure": 0,
-                "total_current_reserved_value_gbp": 0.0,
-                "total_current_reserved_value_available": True,
-                "largest_client_company_name": "",
-                "largest_client_id": "",
-                "largest_client_reserved_value_gbp": 0.0,
-                "largest_client_reserved_value_available": True,
-                "clients_concentrated_in_one_reference": 0,
-            },
-            [],
-            [],
-            [],
-        )
+        return client_rows
 
     client_rows["company_name"] = client_rows["company_name"].map(_clean_text)
     client_rows["client_id"] = client_rows["client_id"].map(_clean_text)
     client_rows["product_reference"] = client_rows["product_reference"].map(_clean_text)
     client_rows["landing_status"] = client_rows["landing_status"].map(_clean_text).str.lower()
+    client_rows["request_date"] = client_rows["request_date"].map(_normalise_iso_date)
     client_rows["effective_bags"] = pd.to_numeric(client_rows["effective_bags"], errors="coerce").fillna(0.0)
     client_rows["reserved_kg"] = pd.to_numeric(client_rows["reserved_kg"], errors="coerce").fillna(0.0)
     client_rows["reserved_value_gbp"] = pd.to_numeric(client_rows["reserved_value_gbp"], errors="coerce").fillna(0.0)
@@ -659,12 +642,15 @@ def _build_client_intelligence(latest: pd.DataFrame) -> tuple[dict, list[dict], 
         client_rows["effective_bags_raw"].notna()
         & client_rows["bag_size_kg_raw"].notna()
     )
+    return client_rows
+
+
+def _build_client_intelligence_from_rows(client_rows: pd.DataFrame) -> tuple[dict, list[dict], list[dict], list[dict]]:
+    if client_rows.empty:
+        return _empty_client_summary(), [], [], []
 
     detail_rows: list[dict] = []
     concentration_rows: list[dict] = []
-    top_clients: list[dict] = []
-
-    grouped_clients: list[dict[str, object]] = []
     for client_key, group in client_rows.groupby("client_key", sort=True):
         client_id = _clean_text(group["client_id"].iloc[0])
         company_candidates = sorted({name for name in group["company_name"].tolist() if name})
@@ -730,19 +716,6 @@ def _build_client_intelligence(latest: pd.DataFrame) -> tuple[dict, list[dict], 
                 "landing_mix": landing_mix,
             }
         )
-        grouped_clients.append(
-            {
-                "client_key": client_key,
-                "company_name": company_name,
-                "client_id": client_id,
-                "reserved_value_gbp": reserved_value,
-                "reserved_value_available": value_available,
-                "primary_reference_share": primary_reference_share,
-                "primary_reference_share_available": primary_reference_share_available,
-                "reserved_kg": reserved_kg,
-                "reserved_bags": reserved_bags,
-            }
-        )
 
     detail_rows = sorted(
         detail_rows,
@@ -804,6 +777,32 @@ def _build_client_intelligence(latest: pd.DataFrame) -> tuple[dict, list[dict], 
         ),
     )
     return client_summary, detail_rows, top_clients, concentration_rows
+
+
+def _build_client_intelligence(latest: pd.DataFrame) -> tuple[dict, list[dict], list[dict], list[dict], list[dict]]:
+    client_rows = _build_client_intelligence_rows(latest)
+    client_summary, detail_rows, top_clients, concentration_rows = _build_client_intelligence_from_rows(client_rows)
+    client_activity_rows = [
+        {
+            "company_name": _clean_text(row["company_name"]),
+            "client_id": _clean_text(row["client_id"]),
+            "client_key": _clean_text(row["client_key"]),
+            "product_reference": _clean_text(row["product_reference"]),
+            "request_date": _clean_text(row["request_date"]),
+            "request_date_available": bool(_clean_text(row["request_date"])),
+            "landing_status": _clean_text(row["landing_status"]).title(),
+            "effective_bags": round(float(row["effective_bags"]), 4),
+            "reserved_kg": round(float(row["reserved_kg"]), 4),
+            "reserved_value_gbp": round(float(row["reserved_value_gbp"]), 2),
+            "reserved_value_available": bool(row["value_complete"]),
+        }
+        for _, row in client_rows.sort_values(
+            ["company_name", "client_id", "product_reference", "request_date"],
+            kind="stable",
+            na_position="last",
+        ).iterrows()
+    ]
+    return client_summary, detail_rows, top_clients, concentration_rows, client_activity_rows
 
 
 def _empty_dataset(
@@ -885,18 +884,12 @@ def _empty_dataset(
         "landed_stock_reference_exposure": [],
         "landed_stock_details": [],
         "client_summary": {
-            "clients_with_current_exposure": 0,
-            "total_current_reserved_value_gbp": 0.0,
-            "total_current_reserved_value_available": True,
-            "largest_client_company_name": "",
-            "largest_client_id": "",
-            "largest_client_reserved_value_gbp": 0.0,
-            "largest_client_reserved_value_available": True,
-            "clients_concentrated_in_one_reference": 0,
+            **_empty_client_summary(),
         },
         "client_details": [],
         "client_top_exposure": [],
         "client_reference_concentration": [],
+        "client_activity_rows": [],
     }
 
 
@@ -1203,7 +1196,13 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         landed_reference,
         landed_details,
     ) = _build_landed_stock_intelligence(products, snapshot_date)
-    client_summary, client_details, client_top_exposure, client_reference_concentration = _build_client_intelligence(latest)
+    (
+        client_summary,
+        client_details,
+        client_top_exposure,
+        client_reference_concentration,
+        client_activity_rows,
+    ) = _build_client_intelligence(latest)
 
     return {
         "snapshot_date": snapshot_date,
@@ -1225,4 +1224,5 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         "client_details": client_details,
         "client_top_exposure": client_top_exposure,
         "client_reference_concentration": client_reference_concentration,
+        "client_activity_rows": client_activity_rows,
     }

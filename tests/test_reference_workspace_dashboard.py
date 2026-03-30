@@ -223,6 +223,21 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
             {"company_name": "Alpha Roasters", "client_id": "c-1", "product_reference": "REF-1", "reserved_value_gbp": 900.0},
             {"company_name": "Bravo Coffee", "client_id": "c-2", "product_reference": "REF-1", "reserved_value_gbp": 250.0},
         ],
+        "client_activity_rows": [
+            {
+                "company_name": "Alpha Roasters",
+                "client_id": "c-1",
+                "client_key": "c-1",
+                "product_reference": "REF-1",
+                "request_date": "2026-03-04",
+                "request_date_available": True,
+                "landing_status": "Incoming",
+                "effective_bags": 1.0,
+                "reserved_kg": 20.0,
+                "reserved_value_gbp": 250.0,
+                "reserved_value_available": True,
+            }
+        ],
     }
     out = tmp_path / "reference_workspace.html"
 
@@ -261,12 +276,27 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert "Client Intelligence" in first
     assert "Landed Stock Intelligence" in first
     assert "Shows reservation activity recorded in the system, excluding rejected reservations." in first
-    assert "Clients With Reservations" in first
+    assert "Request Date Filter" in first
+    assert 'id="client-date-preset"' in first
+    assert 'id="client-date-from-shell" hidden' in first
+    assert 'id="client-date-to-shell" hidden' in first
+    assert 'id="client-date-from"' in first
+    assert 'id="client-date-to"' in first
+    assert "All request dates" in first
+    assert "Last 30 days" in first
+    assert "Last 90 days" in first
+    assert "Month to date" in first
+    assert "Financial Year to Date" in first
+    assert "Custom range" in first
+    assert "Quarter to date" not in first
+    assert "Clients With Reservation Activity" in first
     assert "Reservation Value Recorded" in first
     assert "Largest Recorded Reservation Value" in first
     assert "Clients Concentrated In One Reference" in first
     assert "Top Clients by Reservation Value Recorded" in first
     assert "Reservation Value Recorded by Client and Reference" in first
+    assert "Ranks clients by reservation value recorded during the selected request-date period." in first
+    assert "Shows how recorded reservation value is distributed across product references during the selected period." in first
     assert "Reserved Bags Recorded" in first
     assert "Reserved KG Recorded" in first
     assert "Reserved Value GBP Recorded" in first
@@ -323,6 +353,10 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert '"default_reference":"REF-1"' in first
     assert '"default_landed_reference":"REF-2"' in first
     assert '"landed_reference_options":[{"product_reference":"REF-2"}]' in first
+    assert '"client_activity_rows":[' in first
+    assert '"client_key":"c-1"' in first
+    assert '"request_date":"2026-03-04"' in first
+    assert '"request_date_available":true' in first
     assert '"product_reference":"REF-2"' in first
     assert '"product_id":"p-1"' in first
     assert 'const reservationState = row.has_reservations ? "Reservations live" : "No reservations";' in first
@@ -356,6 +390,14 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'function renderClientKpis()' in first
     assert 'function renderClientCharts()' in first
     assert 'function renderClientTable()' in first
+    assert 'function financialYearStart(value)' in first
+    assert 'const year = anchor.getUTCMonth() >= 7 ? anchor.getUTCFullYear() : anchor.getUTCFullYear() - 1;' in first
+    assert 'return isoFromDate(new Date(Date.UTC(year, 7, 1)));' in first
+    assert 'if (state.clientDatePreset === "financial-year-to-date")' in first
+    assert 'if (state.clientDatePreset === "month-to-date")' in first
+    assert 'if (state.clientDatePreset === "last-30")' in first
+    assert 'if (state.clientDatePreset === "last-90")' in first
+    assert 'renderClientDateControls();' in first
     assert 'function renderStackedBarChart(containerId, emptyId, clients, segments)' in first
     assert 'function renderLandedKpis()' in first
     assert 'function renderLandedCharts()' in first
