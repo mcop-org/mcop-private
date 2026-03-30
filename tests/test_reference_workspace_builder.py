@@ -1084,13 +1084,26 @@ def test_builder_reservation_action_queue_uses_strict_open_rows_and_safe_expiry_
         "as_of_date": "2026-03-10",
         "near_expiry_threshold_days": 7,
         "open_reservation_rows": 3,
+        "open_reservations": 3,
         "open_reserved_bags": 6.0,
+        "open_reserved_bags_landed": 4.0,
+        "open_reserved_bags_incoming": 2.0,
+        "open_reserved_value_gbp": 1340.0,
+        "open_reserved_value_available": False,
+        "open_reserved_value_landed_gbp": 900.0,
+        "open_reserved_value_landed_available": False,
+        "open_reserved_value_incoming_gbp": 440.0,
+        "open_reserved_value_incoming_available": True,
         "near_expiry_rows": 1,
+        "near_expiry_reservations": 1,
         "breached_rows": 1,
+        "breached_reservations": 1,
         "landed_not_released_value_gbp": 900.0,
         "landed_not_released_value_available": False,
         "landed_not_released_value_status": "Unavailable on one or more landed open reservation rows due to missing kg or price.",
         "action_now_rows": 3,
+        "action_now_reservations": 3,
+        "open_exposure_reservations": 0,
     }
     assert queue["action_bucket_counts"] == [
         {"action_bucket": "Breached", "row_count": 1},
@@ -1135,6 +1148,74 @@ def test_builder_reservation_action_queue_uses_strict_open_rows_and_safe_expiry_
     assert queue["details"][2]["request_status"] == "Completed"
     assert queue["details"][2]["remaining_value_gbp"] is None
     assert queue["details"][2]["data_status"] == "Approval date unavailable; Reservation days unavailable; Remaining value unavailable"
+
+
+def test_builder_action_queue_kpis_count_unique_reservations_by_reservation_key() -> None:
+    activity = pd.DataFrame(
+        [
+            {
+                "id_request": "r-1a",
+                "id_booking": "booking-1",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-01",
+                "approval_date": "2026-03-01",
+                "amendment_date": "2026-03-10",
+                "reservation_days": 14,
+                "client_id": "c-1",
+                "company_name": "Alpha Roasters",
+                "product_id": "p-1",
+                "product_reference": "REF-1",
+                "bags": 3,
+                "bags_remaining": 2,
+                "bag_size_kg": 30,
+                "price_per_kg": 10.0,
+                "landing_status": "incoming",
+                "landing_date": "2026-03-20",
+                "warehouse": "London",
+            },
+            {
+                "id_request": "r-1b",
+                "id_booking": "booking-1",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-01",
+                "approval_date": "2026-03-01",
+                "amendment_date": "2026-03-10",
+                "reservation_days": 14,
+                "client_id": "c-1",
+                "company_name": "Alpha Roasters",
+                "product_id": "p-2",
+                "product_reference": "REF-2",
+                "bags": 4,
+                "bags_remaining": 1,
+                "bag_size_kg": 20,
+                "price_per_kg": 12.0,
+                "landing_status": "landed",
+                "landing_date": "2026-03-05",
+                "warehouse": "Bristol",
+            },
+        ]
+    )
+    products = pd.DataFrame(
+        [
+            {"product_id": "p-1", "product_reference": "REF-1", "landing_status": "incoming", "landing_date": "2026-03-20", "warehouse": "London", "bags": 3, "bag_size_kg": 30, "bags_available": 1},
+            {"product_id": "p-2", "product_reference": "REF-2", "landing_status": "landed", "landing_date": "2026-03-05", "warehouse": "Bristol", "bags": 4, "bag_size_kg": 20, "bags_available": 1},
+        ]
+    )
+
+    dataset = build_reference_workspace_dataset(activity, products)
+    summary = dataset["reservation_action_queue"]["summary"]
+
+    assert summary["open_reservation_rows"] == 2
+    assert summary["open_reservations"] == 1
+    assert summary["near_expiry_rows"] == 2
+    assert summary["near_expiry_reservations"] == 1
+    assert summary["breached_rows"] == 0
+    assert summary["breached_reservations"] == 0
+    assert summary["action_now_rows"] == 2
+    assert summary["action_now_reservations"] == 1
+    assert summary["open_exposure_reservations"] == 0
 
 
 def test_builder_splits_landed_not_approved_from_landed_not_released() -> None:

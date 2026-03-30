@@ -266,6 +266,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       gap: 16px;
       margin-top: 18px;
     }}
+    .action-kpi-grid {{
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }}
     .kpi-card {{
       padding: 20px;
       border: 1px solid var(--line);
@@ -963,32 +966,39 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
           </div>
         </div>
 
-        <section class="kpi-grid" aria-label="Reservation Risk Action Queue KPIs">
+        <section class="kpi-grid action-kpi-grid" aria-label="Reservation Risk Action Queue KPIs">
           <article class="kpi-card">
-            <div class="kpi-label">Open Reservation Rows</div>
-            <div class="kpi-value" id="action-kpi-open-rows">-</div>
+            <div class="kpi-label">Open Reservations</div>
+            <div class="kpi-value" id="action-kpi-open-reservations">-</div>
           </article>
           <article class="kpi-card">
             <div class="kpi-label">Open Reserved Bags</div>
             <div class="kpi-value" id="action-kpi-open-bags">-</div>
+            <div class="kpi-submeta" id="action-kpi-open-bags-landed">-</div>
+            <div class="kpi-submeta" id="action-kpi-open-bags-incoming">-</div>
           </article>
           <article class="kpi-card">
-            <div class="kpi-label">Near Expiry Rows</div>
-            <div class="kpi-value" id="action-kpi-near-expiry">-</div>
+            <div class="kpi-label">Near Expiry Reservations</div>
+            <div class="kpi-value" id="action-kpi-near-expiry-reservations">-</div>
             <div class="kpi-submeta" id="action-kpi-near-expiry-meta">-</div>
           </article>
           <article class="kpi-card">
-            <div class="kpi-label">Breached Rows</div>
-            <div class="kpi-value" id="action-kpi-breached">-</div>
+            <div class="kpi-label">Breached Reservations</div>
+            <div class="kpi-value" id="action-kpi-breached-reservations">-</div>
           </article>
           <article class="kpi-card">
-            <div class="kpi-label">Landed Not Released Value</div>
-            <div class="kpi-value" id="action-kpi-landed-value">-</div>
-            <div class="kpi-submeta" id="action-kpi-landed-value-meta">-</div>
+            <div class="kpi-label">Open Reserved Value</div>
+            <div class="kpi-value" id="action-kpi-open-value">-</div>
+            <div class="kpi-submeta" id="action-kpi-open-value-landed">-</div>
+            <div class="kpi-submeta" id="action-kpi-open-value-incoming">-</div>
           </article>
           <article class="kpi-card">
-            <div class="kpi-label">Action Now Rows</div>
-            <div class="kpi-value" id="action-kpi-action-now">-</div>
+            <div class="kpi-label">Open Exposure Reservations</div>
+            <div class="kpi-value" id="action-kpi-open-exposure-reservations">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Action Now Reservations</div>
+            <div class="kpi-value" id="action-kpi-action-now-reservations">-</div>
           </article>
         </section>
 
@@ -2223,25 +2233,41 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }}
 
     function renderActionKpis() {{
-      const openRows = document.getElementById("action-kpi-open-rows");
+      const openReservations = document.getElementById("action-kpi-open-reservations");
       const openBags = document.getElementById("action-kpi-open-bags");
-      const nearExpiry = document.getElementById("action-kpi-near-expiry");
+      const openBagsLanded = document.getElementById("action-kpi-open-bags-landed");
+      const openBagsIncoming = document.getElementById("action-kpi-open-bags-incoming");
+      const nearExpiry = document.getElementById("action-kpi-near-expiry-reservations");
       const nearExpiryMeta = document.getElementById("action-kpi-near-expiry-meta");
-      const breached = document.getElementById("action-kpi-breached");
-      const landedValue = document.getElementById("action-kpi-landed-value");
-      const landedValueMeta = document.getElementById("action-kpi-landed-value-meta");
-      const actionNow = document.getElementById("action-kpi-action-now");
+      const breached = document.getElementById("action-kpi-breached-reservations");
+      const openValue = document.getElementById("action-kpi-open-value");
+      const openValueLanded = document.getElementById("action-kpi-open-value-landed");
+      const openValueIncoming = document.getElementById("action-kpi-open-value-incoming");
+      const openExposure = document.getElementById("action-kpi-open-exposure-reservations");
+      const actionNow = document.getElementById("action-kpi-action-now-reservations");
 
-      openRows.textContent = formatNumber(actionSummary.open_reservation_rows || 0, 0);
+      openReservations.textContent = formatNumber(actionSummary.open_reservations || 0, 0);
       openBags.textContent = formatBags(actionSummary.open_reserved_bags || 0);
-      nearExpiry.textContent = formatNumber(actionSummary.near_expiry_rows || 0, 0);
+      openBagsLanded.textContent = "Landed: " + formatBags(actionSummary.open_reserved_bags_landed || 0);
+      openBagsIncoming.textContent = "Incoming: " + formatBags(actionSummary.open_reserved_bags_incoming || 0);
+      nearExpiry.textContent = formatNumber(actionSummary.near_expiry_reservations || 0, 0);
       nearExpiryMeta.textContent = "Threshold: " + formatNumber(actionSummary.near_expiry_threshold_days || 0, 0) + " days to expiry.";
-      breached.textContent = formatNumber(actionSummary.breached_rows || 0, 0);
-      landedValue.textContent = actionSummary.landed_not_released_value_available
-        ? formatCompactMoney(actionSummary.landed_not_released_value_gbp)
+      breached.textContent = formatNumber(actionSummary.breached_reservations || 0, 0);
+      openValue.textContent = actionSummary.open_reserved_value_available
+        ? formatCompactMoney(actionSummary.open_reserved_value_gbp)
         : "Unavailable";
-      landedValueMeta.textContent = actionSummary.landed_not_released_value_status || "Unavailable";
-      actionNow.textContent = formatNumber(actionSummary.action_now_rows || 0, 0);
+      openValueLanded.textContent = "Landed: " + (
+        actionSummary.open_reserved_value_landed_available
+          ? formatCompactMoney(actionSummary.open_reserved_value_landed_gbp)
+          : "Unavailable"
+      );
+      openValueIncoming.textContent = "Incoming: " + (
+        actionSummary.open_reserved_value_incoming_available
+          ? formatCompactMoney(actionSummary.open_reserved_value_incoming_gbp)
+          : "Unavailable"
+      );
+      openExposure.textContent = formatNumber(actionSummary.open_exposure_reservations || 0, 0);
+      actionNow.textContent = formatNumber(actionSummary.action_now_reservations || 0, 0);
     }}
 
     function renderActionCharts() {{

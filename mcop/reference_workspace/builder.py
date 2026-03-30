@@ -829,13 +829,26 @@ def _empty_action_queue_dataset(snapshot_date: str) -> dict:
             "as_of_date": snapshot_date,
             "near_expiry_threshold_days": ACTION_QUEUE_NEAR_EXPIRY_DAYS,
             "open_reservation_rows": 0,
+            "open_reservations": 0,
             "open_reserved_bags": 0.0,
+            "open_reserved_bags_landed": 0.0,
+            "open_reserved_bags_incoming": 0.0,
+            "open_reserved_value_gbp": 0.0,
+            "open_reserved_value_available": True,
+            "open_reserved_value_landed_gbp": 0.0,
+            "open_reserved_value_landed_available": True,
+            "open_reserved_value_incoming_gbp": 0.0,
+            "open_reserved_value_incoming_available": True,
             "near_expiry_rows": 0,
+            "near_expiry_reservations": 0,
             "breached_rows": 0,
+            "breached_reservations": 0,
             "landed_not_released_value_gbp": 0.0,
             "landed_not_released_value_available": True,
             "landed_not_released_value_status": "No landed open reservation rows.",
             "action_now_rows": 0,
+            "action_now_reservations": 0,
+            "open_exposure_reservations": 0,
         },
         "action_bucket_counts": [
             {"action_bucket": "Breached", "row_count": 0},
@@ -954,6 +967,8 @@ def _build_reservation_action_queue(latest: pd.DataFrame, snapshot_date: str) ->
     ]
 
     landed_open_rows = rows[rows["is_landed_not_released"]].copy()
+    landed_rows = rows[rows["landing_status"] == "landed"].copy()
+    incoming_rows = rows[rows["landing_status"] == "incoming"].copy()
     landed_not_released_value_available = bool(
         landed_open_rows.empty or landed_open_rows["value_complete"].all()
     )
@@ -980,6 +995,11 @@ def _build_reservation_action_queue(latest: pd.DataFrame, snapshot_date: str) ->
                 "row_count": int((rows["action_bucket"] == bucket).sum()),
             }
         )
+
+    def _unique_reservation_count(frame: pd.DataFrame) -> int:
+        if frame.empty:
+            return 0
+        return int(frame["reservation_key"].map(_clean_text).replace("", pd.NA).dropna().nunique())
 
     expiry_bucket_rows = [
         {
@@ -1083,18 +1103,37 @@ def _build_reservation_action_queue(latest: pd.DataFrame, snapshot_date: str) ->
         for _, row in rows.iterrows()
     ]
 
+    open_reserved_value_available = bool(rows.empty or rows["value_complete"].all())
+    landed_value_available = bool(landed_rows.empty or landed_rows["value_complete"].all())
+    incoming_value_available = bool(incoming_rows.empty or incoming_rows["value_complete"].all())
+
     return {
         "summary": {
             "as_of_date": snapshot_date,
             "near_expiry_threshold_days": ACTION_QUEUE_NEAR_EXPIRY_DAYS,
             "open_reservation_rows": int(len(rows)),
+            "open_reservations": _unique_reservation_count(rows),
             "open_reserved_bags": round(float(rows["bags_remaining"].sum()), 4),
+            "open_reserved_bags_landed": round(float(landed_rows["bags_remaining"].sum()), 4),
+            "open_reserved_bags_incoming": round(float(incoming_rows["bags_remaining"].sum()), 4),
+            "open_reserved_value_gbp": round(float(rows["remaining_value_gbp_value"].sum()), 2),
+            "open_reserved_value_available": open_reserved_value_available,
+            "open_reserved_value_landed_gbp": round(float(landed_rows["remaining_value_gbp_value"].sum()), 2),
+            "open_reserved_value_landed_available": landed_value_available,
+            "open_reserved_value_incoming_gbp": round(float(incoming_rows["remaining_value_gbp_value"].sum()), 2),
+            "open_reserved_value_incoming_available": incoming_value_available,
             "near_expiry_rows": int(rows["is_near_expiry"].sum()),
+            "near_expiry_reservations": _unique_reservation_count(rows[rows["is_near_expiry"]]),
             "breached_rows": int(rows["is_breached"].sum()),
+            "breached_reservations": _unique_reservation_count(rows[rows["is_breached"]]),
             "landed_not_released_value_gbp": round(float(landed_open_rows["remaining_value_gbp_value"].sum()), 2),
             "landed_not_released_value_available": landed_not_released_value_available,
             "landed_not_released_value_status": landed_not_released_value_status,
             "action_now_rows": int(rows["action_now"].sum()),
+            "action_now_reservations": _unique_reservation_count(rows[rows["action_now"]]),
+            "open_exposure_reservations": _unique_reservation_count(
+                rows[rows["action_bucket"] == "Open Exposure"]
+            ),
         },
         "action_bucket_counts": action_bucket_counts,
         "open_bags_by_expiry_bucket": expiry_bucket_rows,

@@ -252,13 +252,26 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
                 "as_of_date": "2026-03-07",
                 "near_expiry_threshold_days": 7,
                 "open_reservation_rows": 2,
+                "open_reservations": 2,
                 "open_reserved_bags": 3.0,
+                "open_reserved_bags_landed": 1.0,
+                "open_reserved_bags_incoming": 2.0,
+                "open_reserved_value_gbp": 750.0,
+                "open_reserved_value_available": True,
+                "open_reserved_value_landed_gbp": 250.0,
+                "open_reserved_value_landed_available": True,
+                "open_reserved_value_incoming_gbp": 500.0,
+                "open_reserved_value_incoming_available": True,
                 "near_expiry_rows": 1,
+                "near_expiry_reservations": 1,
                 "breached_rows": 0,
+                "breached_reservations": 0,
                 "landed_not_released_value_gbp": 250.0,
                 "landed_not_released_value_available": True,
                 "landed_not_released_value_status": "Complete across all landed open reservation rows.",
                 "action_now_rows": 2,
+                "action_now_reservations": 2,
+                "open_exposure_reservations": 0,
             },
             "action_bucket_counts": [
                 {"action_bucket": "Breached", "row_count": 0},
@@ -432,12 +445,17 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="landed-aging-filter"' in first
     assert 'id="landed-status-filter"' in first
     assert 'id="landed-detail-body"' in first
-    assert 'id="action-kpi-open-rows"' in first
+    assert 'id="action-kpi-open-reservations"' in first
     assert 'id="action-kpi-open-bags"' in first
-    assert 'id="action-kpi-near-expiry"' in first
-    assert 'id="action-kpi-breached"' in first
-    assert 'id="action-kpi-landed-value"' in first
-    assert 'id="action-kpi-action-now"' in first
+    assert 'id="action-kpi-open-bags-landed"' in first
+    assert 'id="action-kpi-open-bags-incoming"' in first
+    assert 'id="action-kpi-near-expiry-reservations"' in first
+    assert 'id="action-kpi-breached-reservations"' in first
+    assert 'id="action-kpi-open-value"' in first
+    assert 'id="action-kpi-open-value-landed"' in first
+    assert 'id="action-kpi-open-value-incoming"' in first
+    assert 'id="action-kpi-open-exposure-reservations"' in first
+    assert 'id="action-kpi-action-now-reservations"' in first
     assert 'id="action-bucket-chart"' in first
     assert 'id="action-expiry-chart"' in first
     assert 'id="action-reference-chart"' in first
@@ -473,6 +491,8 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'productView.hidden = !productActive;' in first
     assert 'landedView.hidden = !landedActive;' in first
     assert "grid-template-columns: repeat(5, minmax(0, 1fr));" in first
+    assert ".action-kpi-grid {" in first
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in first
     assert "@media (max-width: 1280px)" in first
     assert ".pill.status-warm" in first
     assert ".pill.status-good" in first
@@ -482,6 +502,16 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'if (status === "landed" || status === "completed")' in first
     assert "Default order is breached first, then near-expiry, then landed-not-approved, then landed-not-released, then other open exposure." in first
     assert 'const bucketOptions = ["all", "Breached", "Near Expiry", "Landed Not Approved", "Landed Not Released", "Open Exposure"];' in first
+    assert 'openReservations.textContent = formatNumber(actionSummary.open_reservations || 0, 0);' in first
+    assert 'openBagsLanded.textContent = "Landed: " + formatBags(actionSummary.open_reserved_bags_landed || 0);' in first
+    assert 'openBagsIncoming.textContent = "Incoming: " + formatBags(actionSummary.open_reserved_bags_incoming || 0);' in first
+    assert 'nearExpiry.textContent = formatNumber(actionSummary.near_expiry_reservations || 0, 0);' in first
+    assert 'breached.textContent = formatNumber(actionSummary.breached_reservations || 0, 0);' in first
+    assert 'openValue.textContent = actionSummary.open_reserved_value_available' in first
+    assert 'actionSummary.open_reserved_value_landed_available' in first
+    assert 'actionSummary.open_reserved_value_incoming_available' in first
+    assert 'openExposure.textContent = formatNumber(actionSummary.open_exposure_reservations || 0, 0);' in first
+    assert 'actionNow.textContent = formatNumber(actionSummary.action_now_reservations || 0, 0);' in first
     assert 'selectedReferenceChipEl.innerHTML =' in first
     assert 'landingStatus.innerHTML = renderStatusChip(summary.landing_status || "-");' in first
     assert '"<td>" + renderStatusChip(row.landing_status || "-") + "</td>" +' in first
