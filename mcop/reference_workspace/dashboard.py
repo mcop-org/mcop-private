@@ -994,10 +994,6 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const detailsByReference = new Map();
     const productSummaryByReference = new Map((data.product_reference_summary || []).map((row) => [row.product_reference, row]));
     const productDetailsByReference = new Map();
-    const clientSummary = data.client_summary || {{}};
-    const clientDetails = Array.isArray(data.client_details) ? data.client_details : [];
-    const clientTopExposure = Array.isArray(data.client_top_exposure) ? data.client_top_exposure : [];
-    const clientReferenceConcentration = Array.isArray(data.client_reference_concentration) ? data.client_reference_concentration : [];
     const clientActivityRows = Array.isArray(data.client_activity_rows) ? data.client_activity_rows : [];
     const landedSummary = data.landed_stock_summary || {{}};
     const landedAgingRaw = Array.isArray(data.landed_stock_aging) ? data.landed_stock_aging : [];
@@ -1620,15 +1616,6 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 
     function currentClientMetrics() {{
       const filteredRows = currentClientActivityRows();
-      if (state.clientDatePreset === "all") {{
-        return {{
-          summary: clientSummary,
-          details: clientDetails,
-          topExposure: clientTopExposure,
-          concentration: clientReferenceConcentration,
-          filteredRows,
-        }};
-      }}
       const aggregated = aggregateClientMetrics(filteredRows);
       return {{
         ...aggregated,

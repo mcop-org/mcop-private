@@ -499,6 +499,11 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'topTenShare.textContent = "Top 10: unavailable for this range";' in first
     assert 'restShare.textContent = "Rest: unavailable for this range";' in first
     assert 'concentration_share_available: false,' in first
+    assert 'const filteredRows = currentClientActivityRows();' in first
+    assert 'summary: clientSummary,' not in first
+    assert 'details: clientDetails,' not in first
+    assert 'topExposure: clientTopExposure,' not in first
+    assert 'concentration: clientReferenceConcentration,' not in first
     assert '"landed_stock_summary":{"aged_180_plus_bags":1.0,"as_of_date":"2026-03-07"' in first
     assert '"client_summary":{"clients_concentrated_in_one_reference":1,"clients_with_current_exposure":2,"largest_client_company_name":"Alpha Roasters"' in first
     assert "Released Bags" not in first
@@ -636,5 +641,10 @@ def test_reference_workspace_client_concentration_contract_present() -> None:
     assert 'concentration_rest_share: concentrationRestShare === null ? null : Number(concentrationRestShare.toFixed(4))' in html
     assert 'const topFiveValue = rankedValues.slice(0, 5).reduce((sum, value) => sum + value, 0);' in html
     assert 'const topTenValue = rankedValues.slice(0, 10).reduce((sum, value) => sum + value, 0);' in html
+    assert 'const filteredRows = currentClientActivityRows();' in html
+    assert 'summary: clientSummary,' not in html
+    assert 'details: clientDetails,' not in html
+    assert 'topExposure: clientTopExposure,' not in html
+    assert 'concentration: clientReferenceConcentration,' not in html
     assert 'Top 10: ' in html
     assert 'Rest: ' in html
