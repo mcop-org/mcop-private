@@ -718,22 +718,22 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         <div class="view-head">
           <div>
             <h2 class="view-title">Client Intelligence</h2>
-            <p class="view-copy">Client-exposure and concentration view of who matters most now, where their exposure sits, and whether it is incoming, landed, mixed, or unknown.</p>
+            <p class="view-copy">Shows reservation activity recorded in the system, excluding rejected reservations.</p>
           </div>
         </div>
 
         <section class="kpi-grid" aria-label="Client Intelligence KPIs">
           <article class="kpi-card">
-            <div class="kpi-label">Clients With Current Exposure</div>
+            <div class="kpi-label">Clients With Reservations</div>
             <div class="kpi-value" id="client-kpi-count">-</div>
           </article>
           <article class="kpi-card">
-            <div class="kpi-label">Total Current Reserved Value</div>
+            <div class="kpi-label">Reservation Value Recorded</div>
             <div class="kpi-value" id="client-kpi-total-value">-</div>
             <div class="kpi-submeta" id="client-kpi-total-value-meta">-</div>
           </article>
           <article class="kpi-card">
-            <div class="kpi-label">Largest Client Exposure</div>
+            <div class="kpi-label">Largest Recorded Reservation Value</div>
             <div class="kpi-value" id="client-kpi-largest-value">-</div>
             <div class="kpi-submeta" id="client-kpi-largest-meta">-</div>
           </article>
@@ -746,13 +746,13 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 
         <section class="chart-grid" aria-label="Client Intelligence Charts">
           <article class="chart-card">
-            <h3 class="chart-title">Top Clients By Reserved Value</h3>
+            <h3 class="chart-title">Top Clients by Reservation Value Recorded</h3>
             <p class="chart-copy">Current reservation exposure only. This ranks the clients that matter most now by reserved value.</p>
             <div class="chart-list" id="client-exposure-chart"></div>
             <div class="chart-empty" id="client-exposure-empty" hidden>No client exposure to show.</div>
           </article>
           <article class="chart-card" style="grid-column: span 2;">
-            <h3 class="chart-title">Client Reference Concentration</h3>
+            <h3 class="chart-title">Reservation Value Recorded by Client and Reference</h3>
             <p class="chart-copy">Top clients by reserved value, segmented by current product reference exposure.</p>
             <div class="stacked-chart-list" id="client-concentration-chart"></div>
             <div class="chart-empty" id="client-concentration-empty" hidden>No client concentration data to show.</div>
@@ -787,9 +787,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
                   <th>Company</th>
                   <th>Client ID</th>
                   <th class="num">Reservation Rows</th>
-                  <th class="num">Reserved Bags</th>
-                  <th class="num">Reserved KG</th>
-                  <th class="num">Reserved Value GBP</th>
+                  <th class="num">Reserved Bags Recorded</th>
+                  <th class="num">Reserved KG Recorded</th>
+                  <th class="num">Reserved Value GBP Recorded</th>
                   <th class="num">Distinct References</th>
                   <th>Primary Reference</th>
                   <th class="num">Primary Reference Share</th>

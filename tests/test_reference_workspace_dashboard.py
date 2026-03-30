@@ -260,6 +260,16 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert "Product Reference Intelligence" in first
     assert "Client Intelligence" in first
     assert "Landed Stock Intelligence" in first
+    assert "Shows reservation activity recorded in the system, excluding rejected reservations." in first
+    assert "Clients With Reservations" in first
+    assert "Reservation Value Recorded" in first
+    assert "Largest Recorded Reservation Value" in first
+    assert "Clients Concentrated In One Reference" in first
+    assert "Top Clients by Reservation Value Recorded" in first
+    assert "Reservation Value Recorded by Client and Reference" in first
+    assert "Reserved Bags Recorded" in first
+    assert "Reserved KG Recorded" in first
+    assert "Reserved Value GBP Recorded" in first
     assert "Stock-only view of whether the selected reference looks early-stage, balanced, or at risk of landed build-up." in first
     assert 'id="table-filter"' in first
     assert "Search reservation rows" in first
