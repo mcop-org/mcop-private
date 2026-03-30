@@ -263,6 +263,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
             "action_bucket_counts": [
                 {"action_bucket": "Breached", "row_count": 0},
                 {"action_bucket": "Near Expiry", "row_count": 1},
+                {"action_bucket": "Landed Not Approved", "row_count": 0},
                 {"action_bucket": "Landed Not Released", "row_count": 1},
                 {"action_bucket": "Open Exposure", "row_count": 0},
             ],
@@ -475,8 +476,12 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert "@media (max-width: 1280px)" in first
     assert ".pill.status-warm" in first
     assert ".pill.status-good" in first
+    assert ".pill.status-bad" in first
+    assert 'if (status === "landed not approved" || status === "p3 landed not approved" || status === "breached" || status === "p1 breached")' in first
     assert 'if (status === "incoming" || status === "created")' in first
     assert 'if (status === "landed" || status === "completed")' in first
+    assert "Default order is breached first, then near-expiry, then landed-not-approved, then landed-not-released, then other open exposure." in first
+    assert 'const bucketOptions = ["all", "Breached", "Near Expiry", "Landed Not Approved", "Landed Not Released", "Open Exposure"];' in first
     assert 'selectedReferenceChipEl.innerHTML =' in first
     assert 'landingStatus.innerHTML = renderStatusChip(summary.landing_status || "-");' in first
     assert '"<td>" + renderStatusChip(row.landing_status || "-") + "</td>" +' in first

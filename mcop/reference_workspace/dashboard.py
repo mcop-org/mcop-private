@@ -494,6 +494,10 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       background: var(--warn-soft);
       color: var(--warn);
     }}
+    .pill.status-bad {{
+      background: color-mix(in srgb, #b13a3a 16%, transparent);
+      color: #b13a3a;
+    }}
     .pill.status-good {{
       background: color-mix(in srgb, #2f7d4a 16%, transparent);
       color: #2f7d4a;
@@ -1013,7 +1017,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
           <div class="table-topbar">
             <div>
               <h3 class="table-title">Action Queue Detail</h3>
-              <p class="table-subtitle">Default order is breached first, then near-expiry, then landed-not-released, then other open exposure.</p>
+              <p class="table-subtitle">Default order is breached first, then near-expiry, then landed-not-approved, then landed-not-released, then other open exposure.</p>
             </div>
             <div class="table-filters">
               <div class="table-filter">
@@ -1333,6 +1337,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 
     function statusTone(value) {{
       const status = String(value ?? "").trim().toLowerCase();
+      if (status === "landed not approved" || status === "p3 landed not approved" || status === "breached" || status === "p1 breached") {{
+        return "status-bad";
+      }}
       if (status === "incoming" || status === "created") {{
         return "status-warm";
       }}
@@ -2193,7 +2200,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }}
 
     function renderActionFilters() {{
-      const bucketOptions = ["all", "Breached", "Near Expiry", "Landed Not Released", "Open Exposure"];
+      const bucketOptions = ["all", "Breached", "Near Expiry", "Landed Not Approved", "Landed Not Released", "Open Exposure"];
       actionBucketFilter.innerHTML = bucketOptions.map((value) => {{
         const label = value === "all" ? "All Buckets" : value;
         return '<option value="' + escapeHtml(value) + '">' + escapeHtml(label) + '</option>';

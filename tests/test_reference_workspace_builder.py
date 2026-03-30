@@ -1095,6 +1095,7 @@ def test_builder_reservation_action_queue_uses_strict_open_rows_and_safe_expiry_
     assert queue["action_bucket_counts"] == [
         {"action_bucket": "Breached", "row_count": 1},
         {"action_bucket": "Near Expiry", "row_count": 1},
+        {"action_bucket": "Landed Not Approved", "row_count": 0},
         {"action_bucket": "Landed Not Released", "row_count": 1},
         {"action_bucket": "Open Exposure", "row_count": 0},
     ]
@@ -1130,7 +1131,77 @@ def test_builder_reservation_action_queue_uses_strict_open_rows_and_safe_expiry_
     assert queue["details"][0]["remaining_value_gbp"] == 900.0
     assert queue["details"][1]["action_priority"] == "P2 Near Expiry"
     assert queue["details"][1]["days_to_expiry"] == 5
-    assert queue["details"][2]["action_priority"] == "P3 Landed Not Released"
+    assert queue["details"][2]["action_priority"] == "P4 Landed Not Released"
     assert queue["details"][2]["request_status"] == "Completed"
     assert queue["details"][2]["remaining_value_gbp"] is None
     assert queue["details"][2]["data_status"] == "Approval date unavailable; Reservation days unavailable; Remaining value unavailable"
+
+
+def test_builder_splits_landed_not_approved_from_landed_not_released() -> None:
+    activity = pd.DataFrame(
+        [
+            {
+                "id_request": "r-1",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "created",
+                "request_date": "2026-03-10",
+                "approval_date": "",
+                "amendment_date": "",
+                "client_id": "c-1",
+                "company_name": "Alpha Roasters",
+                "product_id": "p-1",
+                "product_reference": "REF-1",
+                "bags": 3,
+                "bags_remaining": 3,
+                "bag_size_kg": 30,
+                "price_per_kg": 10.0,
+                "landing_status": "landed",
+                "landing_date": "2026-03-08",
+                "warehouse": "London",
+            },
+            {
+                "id_request": "r-2",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-10",
+                "approval_date": "2026-03-10",
+                "amendment_date": "",
+                "reservation_days": 30,
+                "client_id": "c-2",
+                "company_name": "Bravo Coffee",
+                "product_id": "p-2",
+                "product_reference": "REF-2",
+                "bags": 2,
+                "bags_remaining": 2,
+                "bag_size_kg": 20,
+                "price_per_kg": 12.0,
+                "landing_status": "landed",
+                "landing_date": "2026-03-07",
+                "warehouse": "Bristol",
+            },
+        ]
+    )
+    products = pd.DataFrame(
+        [
+            {"product_id": "p-1", "product_reference": "REF-1", "landing_status": "landed", "landing_date": "2026-03-08", "warehouse": "London", "bags": 3, "bag_size_kg": 30, "bags_available": 0},
+            {"product_id": "p-2", "product_reference": "REF-2", "landing_status": "landed", "landing_date": "2026-03-07", "warehouse": "Bristol", "bags": 2, "bag_size_kg": 20, "bags_available": 0},
+        ]
+    )
+
+    dataset = build_reference_workspace_dataset(activity, products)
+    queue = dataset["reservation_action_queue"]
+
+    assert queue["action_bucket_counts"] == [
+        {"action_bucket": "Breached", "row_count": 0},
+        {"action_bucket": "Near Expiry", "row_count": 0},
+        {"action_bucket": "Landed Not Approved", "row_count": 1},
+        {"action_bucket": "Landed Not Released", "row_count": 1},
+        {"action_bucket": "Open Exposure", "row_count": 0},
+    ]
+    assert queue["details"][0]["action_bucket"] == "Landed Not Approved"
+    assert queue["details"][0]["action_priority"] == "P3 Landed Not Approved"
+    assert queue["details"][0]["request_status"] == "Created"
+    assert queue["details"][1]["action_bucket"] == "Landed Not Released"
+    assert queue["details"][1]["action_priority"] == "P4 Landed Not Released"

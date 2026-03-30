@@ -91,15 +91,18 @@ def _status_summary(parts: list[str]) -> str:
 def _action_bucket_and_priority(
     is_breached: bool,
     is_near_expiry: bool,
+    is_landed_not_approved: bool,
     is_landed_not_released: bool,
 ) -> tuple[str, str, int]:
     if is_breached:
         return "Breached", "P1 Breached", 1
     if is_near_expiry:
         return "Near Expiry", "P2 Near Expiry", 2
+    if is_landed_not_approved:
+        return "Landed Not Approved", "P3 Landed Not Approved", 3
     if is_landed_not_released:
-        return "Landed Not Released", "P3 Landed Not Released", 3
-    return "Open Exposure", "P4 Open Exposure", 4
+        return "Landed Not Released", "P4 Landed Not Released", 4
+    return "Open Exposure", "P5 Open Exposure", 5
 
 
 def _client_key(row: pd.Series) -> str:
@@ -837,6 +840,7 @@ def _empty_action_queue_dataset(snapshot_date: str) -> dict:
         "action_bucket_counts": [
             {"action_bucket": "Breached", "row_count": 0},
             {"action_bucket": "Near Expiry", "row_count": 0},
+            {"action_bucket": "Landed Not Approved", "row_count": 0},
             {"action_bucket": "Landed Not Released", "row_count": 0},
             {"action_bucket": "Open Exposure", "row_count": 0},
         ],
@@ -907,7 +911,10 @@ def _build_reservation_action_queue(latest: pd.DataFrame, snapshot_date: str) ->
         & (rows["days_to_expiry"] >= 0)
         & (rows["days_to_expiry"] <= ACTION_QUEUE_NEAR_EXPIRY_DAYS)
     )
-    rows["is_landed_not_released"] = rows["landing_status"] == "landed"
+    rows["is_landed_not_approved"] = (
+        (rows["landing_status"] == "landed") & (rows["request_status"] == "created")
+    )
+    rows["is_landed_not_released"] = (rows["landing_status"] == "landed") & ~rows["is_landed_not_approved"]
     rows["kg_complete"] = rows["bag_size_kg_raw"].notna()
     rows["remaining_kg_value"] = (rows["bags_remaining"] * rows["bag_size_kg_raw"]).where(rows["kg_complete"], 0.0)
     rows["value_complete"] = rows["kg_complete"] & rows["price_per_kg_raw"].notna()
@@ -919,6 +926,7 @@ def _build_reservation_action_queue(latest: pd.DataFrame, snapshot_date: str) ->
         _action_bucket_and_priority(
             bool(row["is_breached"]),
             bool(row["is_near_expiry"]),
+            bool(row["is_landed_not_approved"]),
             bool(row["is_landed_not_released"]),
         )
         for _, row in rows.iterrows()
@@ -926,7 +934,12 @@ def _build_reservation_action_queue(latest: pd.DataFrame, snapshot_date: str) ->
     rows["action_bucket"] = [label[0] for label in labels]
     rows["action_priority"] = [label[1] for label in labels]
     rows["action_priority_rank"] = [label[2] for label in labels]
-    rows["action_now"] = rows["is_breached"] | rows["is_near_expiry"] | rows["is_landed_not_released"]
+    rows["action_now"] = (
+        rows["is_breached"]
+        | rows["is_near_expiry"]
+        | rows["is_landed_not_approved"]
+        | rows["is_landed_not_released"]
+    )
 
     rows["data_status"] = [
         _status_summary(
@@ -954,7 +967,13 @@ def _build_reservation_action_queue(latest: pd.DataFrame, snapshot_date: str) ->
         )
 
     action_bucket_counts = []
-    for bucket in ("Breached", "Near Expiry", "Landed Not Released", "Open Exposure"):
+    for bucket in (
+        "Breached",
+        "Near Expiry",
+        "Landed Not Approved",
+        "Landed Not Released",
+        "Open Exposure",
+    ):
         action_bucket_counts.append(
             {
                 "action_bucket": bucket,
