@@ -5,6 +5,15 @@ from pathlib import Path
 from mcop.reference_workspace.dashboard import write_reference_workspace_html
 
 
+def render_html(dataset: dict) -> str:
+    out = Path("reference_workspace_test.html")
+    write_reference_workspace_html(out, dataset)
+    try:
+        return out.read_text(encoding="utf-8")
+    finally:
+        out.unlink(missing_ok=True)
+
+
 def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(tmp_path: Path) -> None:
     dataset = {
         "snapshot_date": "2026-03-07",
@@ -293,6 +302,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert "Reservation Value Recorded" in first
     assert "Largest Recorded Reservation Value" in first
     assert "Clients Concentrated In One Reference" in first
+    assert "Client Concentration" in first
     assert "Top Clients by Reservation Value Recorded" in first
     assert "Reservation Value Recorded by Client and Reference" in first
     assert "Ranks clients by reservation value recorded during the selected request-date period." in first
@@ -332,6 +342,9 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="client-kpi-total-value"' in first
     assert 'id="client-kpi-largest-value"' in first
     assert 'id="client-kpi-concentrated"' in first
+    assert 'id="client-kpi-top-five-share"' in first
+    assert 'id="client-kpi-top-ten-share"' in first
+    assert 'id="client-kpi-rest-share"' in first
     assert 'id="client-exposure-chart"' in first
     assert 'id="client-concentration-chart"' in first
     assert 'id="client-table-filter"' in first
@@ -479,8 +492,149 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'renderClientKpis();' in first
     assert 'renderClientCharts();' in first
     assert 'renderClientTable();' in first
+    assert 'topFiveShare.textContent = formatPercent(clientMetrics.summary.concentration_top_five_share);' in first
+    assert 'topTenShare.textContent = "Top 10: " + formatPercent(clientMetrics.summary.concentration_top_ten_share);' in first
+    assert 'restShare.textContent = "Rest: " + formatPercent(clientMetrics.summary.concentration_rest_share);' in first
+    assert 'topFiveShare.textContent = "No value concentration view";' in first
+    assert 'topTenShare.textContent = "Top 10: unavailable for this range";' in first
+    assert 'restShare.textContent = "Rest: unavailable for this range";' in first
+    assert 'concentration_share_available: false,' in first
     assert '"landed_stock_summary":{"aged_180_plus_bags":1.0,"as_of_date":"2026-03-07"' in first
     assert '"client_summary":{"clients_concentrated_in_one_reference":1,"clients_with_current_exposure":2,"largest_client_company_name":"Alpha Roasters"' in first
     assert "Released Bags" not in first
     assert "Open Value GBP" not in first
     assert "Sell-through" not in first
+
+
+def test_reference_workspace_client_concentration_contract_present() -> None:
+    dataset = {
+        "snapshot_date": "2026-03-07",
+        "default_reference": "",
+        "default_landed_reference": "",
+        "notes": [],
+        "reference_options": [],
+        "landed_reference_options": [],
+        "reference_summary": [],
+        "reservation_details": [],
+        "product_reference_summary": [],
+        "product_landing_profile": [],
+        "landed_stock_summary": {
+            "as_of_date": "",
+            "landed_bags": 0.0,
+            "unsold_landed_bags": 0.0,
+            "unsold_landed_kg": 0.0,
+            "unsold_landed_kg_available": True,
+            "aged_180_plus_bags": 0.0,
+            "warehouses_exposed": 0,
+            "unsold_landed_value_gbp": 0.0,
+            "unsold_landed_value_available": True,
+            "value_completeness_status": "",
+        },
+        "landed_stock_aging": [],
+        "landed_stock_warehouse_exposure": [],
+        "landed_stock_reference_exposure": [],
+        "landed_stock_details": [],
+        "client_summary": {
+            "clients_with_current_exposure": 6,
+            "total_current_reserved_value_gbp": 2100.0,
+            "total_current_reserved_value_available": True,
+            "largest_client_company_name": "Alpha Roasters",
+            "largest_client_id": "c-1",
+            "largest_client_reserved_value_gbp": 700.0,
+            "largest_client_reserved_value_available": True,
+            "clients_concentrated_in_one_reference": 2,
+        },
+        "client_details": [],
+        "client_top_exposure": [],
+        "client_reference_concentration": [],
+        "client_activity_rows": [
+            {
+                "company_name": "Alpha Roasters",
+                "client_id": "c-1",
+                "client_key": "c-1",
+                "product_reference": "REF-1",
+                "request_date": "2026-03-01",
+                "request_date_available": True,
+                "landing_status": "Incoming",
+                "effective_bags": 1.0,
+                "reserved_kg": 10.0,
+                "reserved_value_gbp": 700.0,
+                "reserved_value_available": True,
+            },
+            {
+                "company_name": "Bravo Coffee",
+                "client_id": "c-2",
+                "client_key": "c-2",
+                "product_reference": "REF-1",
+                "request_date": "2026-03-01",
+                "request_date_available": True,
+                "landing_status": "Incoming",
+                "effective_bags": 1.0,
+                "reserved_kg": 10.0,
+                "reserved_value_gbp": 500.0,
+                "reserved_value_available": True,
+            },
+            {
+                "company_name": "Cinder Roastery",
+                "client_id": "c-3",
+                "client_key": "c-3",
+                "product_reference": "REF-1",
+                "request_date": "2026-03-01",
+                "request_date_available": True,
+                "landing_status": "Incoming",
+                "effective_bags": 1.0,
+                "reserved_kg": 10.0,
+                "reserved_value_gbp": 400.0,
+                "reserved_value_available": True,
+            },
+            {
+                "company_name": "Drift Coffee",
+                "client_id": "c-4",
+                "client_key": "c-4",
+                "product_reference": "REF-1",
+                "request_date": "2026-03-01",
+                "request_date_available": True,
+                "landing_status": "Incoming",
+                "effective_bags": 1.0,
+                "reserved_kg": 10.0,
+                "reserved_value_gbp": 300.0,
+                "reserved_value_available": True,
+            },
+            {
+                "company_name": "Ember Coffee",
+                "client_id": "c-5",
+                "client_key": "c-5",
+                "product_reference": "REF-1",
+                "request_date": "2026-03-01",
+                "request_date_available": True,
+                "landing_status": "Incoming",
+                "effective_bags": 1.0,
+                "reserved_kg": 10.0,
+                "reserved_value_gbp": 100.0,
+                "reserved_value_available": True,
+            },
+            {
+                "company_name": "Fable Coffee",
+                "client_id": "c-6",
+                "client_key": "c-6",
+                "product_reference": "REF-1",
+                "request_date": "2026-03-01",
+                "request_date_available": True,
+                "landing_status": "Incoming",
+                "effective_bags": 1.0,
+                "reserved_kg": 10.0,
+                "reserved_value_gbp": 100.0,
+                "reserved_value_available": True,
+            },
+        ],
+    }
+
+    html = render_html(dataset)
+
+    assert 'concentration_top_five_share: concentrationTopFiveShare === null ? null : Number(concentrationTopFiveShare.toFixed(4))' in html
+    assert 'concentration_top_ten_share: concentrationTopTenShare === null ? null : Number(concentrationTopTenShare.toFixed(4))' in html
+    assert 'concentration_rest_share: concentrationRestShare === null ? null : Number(concentrationRestShare.toFixed(4))' in html
+    assert 'const topFiveValue = rankedValues.slice(0, 5).reduce((sum, value) => sum + value, 0);' in html
+    assert 'const topTenValue = rankedValues.slice(0, 10).reduce((sum, value) => sum + value, 0);' in html
+    assert 'Top 10: ' in html
+    assert 'Rest: ' in html

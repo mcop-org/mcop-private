@@ -772,6 +772,12 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
             <div class="kpi-value" id="client-kpi-concentrated">-</div>
             <div class="kpi-submeta" id="client-kpi-concentrated-meta">Primary reference share at or above 80%.</div>
           </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Client Concentration</div>
+            <div class="kpi-value" id="client-kpi-top-five-share">-</div>
+            <div class="kpi-submeta" id="client-kpi-top-ten-share">-</div>
+            <div class="kpi-submeta" id="client-kpi-rest-share">-</div>
+          </article>
         </section>
 
         <section class="chart-grid" aria-label="Client Intelligence Charts">
@@ -1424,6 +1430,10 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
             largest_client_reserved_value_gbp: 0,
             largest_client_reserved_value_available: true,
             clients_concentrated_in_one_reference: 0,
+            concentration_top_five_share: null,
+            concentration_top_ten_share: null,
+            concentration_rest_share: null,
+            concentration_share_available: false,
           }},
           details: [],
           topExposure: [],
@@ -1569,15 +1579,36 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       }});
 
       const rankedClientKeys = new Set(details.filter((row) => Number(row.reserved_bags || 0) > 0).map((row) => String(row.client_id || "").trim() || String(row.company_name || "").trim()));
+      const rankedValues = details
+        .map((row) => Number(row.reserved_value_gbp || 0))
+        .filter((value) => Number.isFinite(value) && value > 0);
+      const totalReservedValue = Number(rows.reduce((sum, row) => sum + Number(row.reserved_value_gbp || 0), 0).toFixed(2));
+      const totalValueAvailable = rows.every((row) => Boolean(row.reserved_value_available));
+      let concentrationTopFiveShare = null;
+      let concentrationTopTenShare = null;
+      let concentrationRestShare = null;
+      let concentrationShareAvailable = false;
+      if (totalValueAvailable && totalReservedValue > 0) {{
+        const topFiveValue = rankedValues.slice(0, 5).reduce((sum, value) => sum + value, 0);
+        const topTenValue = rankedValues.slice(0, 10).reduce((sum, value) => sum + value, 0);
+        concentrationTopFiveShare = topFiveValue / totalReservedValue;
+        concentrationTopTenShare = topTenValue / totalReservedValue;
+        concentrationRestShare = Math.max(0, (totalReservedValue - topTenValue) / totalReservedValue);
+        concentrationShareAvailable = true;
+      }}
       const summary = {{
         clients_with_current_exposure: rankedClientKeys.size,
-        total_current_reserved_value_gbp: Number(rows.reduce((sum, row) => sum + Number(row.reserved_value_gbp || 0), 0).toFixed(2)),
-        total_current_reserved_value_available: rows.every((row) => Boolean(row.reserved_value_available)),
+        total_current_reserved_value_gbp: totalReservedValue,
+        total_current_reserved_value_available: totalValueAvailable,
         largest_client_company_name: details[0]?.company_name || "",
         largest_client_id: details[0]?.client_id || "",
         largest_client_reserved_value_gbp: Number((details[0]?.reserved_value_gbp || 0).toFixed(2)),
         largest_client_reserved_value_available: Boolean(details[0]?.reserved_value_available ?? true),
         clients_concentrated_in_one_reference: details.filter((row) => Boolean(row.primary_reference_share_available) && row.primary_reference_share !== null && Number(row.primary_reference_share || 0) >= 0.8).length,
+        concentration_top_five_share: concentrationTopFiveShare === null ? null : Number(concentrationTopFiveShare.toFixed(4)),
+        concentration_top_ten_share: concentrationTopTenShare === null ? null : Number(concentrationTopTenShare.toFixed(4)),
+        concentration_rest_share: concentrationRestShare === null ? null : Number(concentrationRestShare.toFixed(4)),
+        concentration_share_available: concentrationShareAvailable,
       }};
       const topExposure = details.slice(0, 10).map((row) => ({{
         company_name: row.company_name,
@@ -1921,6 +1952,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       const largestValue = document.getElementById("client-kpi-largest-value");
       const largestMeta = document.getElementById("client-kpi-largest-meta");
       const concentrated = document.getElementById("client-kpi-concentrated");
+      const topFiveShare = document.getElementById("client-kpi-top-five-share");
+      const topTenShare = document.getElementById("client-kpi-top-ten-share");
+      const restShare = document.getElementById("client-kpi-rest-share");
 
       count.textContent = formatNumber(clientMetrics.summary.clients_with_current_exposure || 0, 0);
       totalValue.textContent = clientMetrics.summary.total_current_reserved_value_available
@@ -1936,6 +1970,15 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         ? clientLabel({{ company_name: clientMetrics.summary.largest_client_company_name, client_id: clientMetrics.summary.largest_client_id }})
         : "No client activity recorded.";
       concentrated.textContent = formatNumber(clientMetrics.summary.clients_concentrated_in_one_reference || 0, 0);
+      if (clientMetrics.summary.concentration_share_available) {{
+        topFiveShare.textContent = formatPercent(clientMetrics.summary.concentration_top_five_share);
+        topTenShare.textContent = "Top 10: " + formatPercent(clientMetrics.summary.concentration_top_ten_share);
+        restShare.textContent = "Rest: " + formatPercent(clientMetrics.summary.concentration_rest_share);
+      }} else {{
+        topFiveShare.textContent = "No value concentration view";
+        topTenShare.textContent = "Top 10: unavailable for this range";
+        restShare.textContent = "Rest: unavailable for this range";
+      }}
     }}
 
     function renderClientCharts() {{
