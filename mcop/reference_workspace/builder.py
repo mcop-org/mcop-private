@@ -8,6 +8,7 @@ import pandas as pd
 RESERVATION_NOTE = (
     "Reservation completed means all products within the reservation have been released."
 )
+ACTION_QUEUE_NEAR_EXPIRY_DAYS = 7
 LANDED_AGING_BUCKETS = (
     ("0-30", 0, 30),
     ("31-60", 31, 60),
@@ -85,6 +86,20 @@ def _aging_bucket_for_days(days_since_landing: float | None) -> str:
 def _status_summary(parts: list[str]) -> str:
     cleaned = [part for part in parts if part]
     return "; ".join(cleaned) if cleaned else "Complete"
+
+
+def _action_bucket_and_priority(
+    is_breached: bool,
+    is_near_expiry: bool,
+    is_landed_not_released: bool,
+) -> tuple[str, str, int]:
+    if is_breached:
+        return "Breached", "P1 Breached", 1
+    if is_near_expiry:
+        return "Near Expiry", "P2 Near Expiry", 2
+    if is_landed_not_released:
+        return "Landed Not Released", "P3 Landed Not Released", 3
+    return "Open Exposure", "P4 Open Exposure", 4
 
 
 def _client_key(row: pd.Series) -> str:
@@ -805,6 +820,280 @@ def _build_client_intelligence(latest: pd.DataFrame) -> tuple[dict, list[dict], 
     return client_summary, detail_rows, top_clients, concentration_rows, client_activity_rows
 
 
+def _empty_action_queue_dataset(snapshot_date: str) -> dict:
+    return {
+        "summary": {
+            "as_of_date": snapshot_date,
+            "near_expiry_threshold_days": ACTION_QUEUE_NEAR_EXPIRY_DAYS,
+            "open_reservation_rows": 0,
+            "open_reserved_bags": 0.0,
+            "near_expiry_rows": 0,
+            "breached_rows": 0,
+            "landed_not_released_value_gbp": 0.0,
+            "landed_not_released_value_available": True,
+            "landed_not_released_value_status": "No landed open reservation rows.",
+            "action_now_rows": 0,
+        },
+        "action_bucket_counts": [
+            {"action_bucket": "Breached", "row_count": 0},
+            {"action_bucket": "Near Expiry", "row_count": 0},
+            {"action_bucket": "Landed Not Released", "row_count": 0},
+            {"action_bucket": "Open Exposure", "row_count": 0},
+        ],
+        "open_bags_by_expiry_bucket": [
+            {"expiry_bucket": "Breached", "open_bags": 0.0},
+            {"expiry_bucket": "0-7 days", "open_bags": 0.0},
+            {"expiry_bucket": "8+ days", "open_bags": 0.0},
+            {"expiry_bucket": "No expiry data", "open_bags": 0.0},
+        ],
+        "top_landed_references": {
+            "metric": "remaining_value_gbp",
+            "metric_label": "Landed Not Released Value",
+            "value_available": True,
+            "status": "No landed open reservation rows.",
+            "rows": [],
+        },
+        "details": [],
+    }
+
+
+def _build_reservation_action_queue(latest: pd.DataFrame, snapshot_date: str) -> dict:
+    if latest.empty:
+        return _empty_action_queue_dataset(snapshot_date)
+
+    rows = latest.copy()
+    rows["company_name"] = rows["company_name"].map(_clean_text)
+    rows["client_id"] = rows["client_id"].map(_clean_text)
+    rows["reservation_key"] = rows["reservation_key"].map(_clean_text)
+    rows["product_reference"] = rows["product_reference"].map(_clean_text)
+    rows["product_id"] = rows["product_id"].map(_clean_text)
+    rows["request_status"] = rows["request_status"].map(_clean_text).str.lower()
+    rows["approval_date"] = rows["approval_date"].map(_normalise_iso_date)
+    rows["landing_date"] = rows["landing_date"].map(_normalise_iso_date)
+    rows["landing_status"] = rows["landing_status"].map(_clean_text).str.lower()
+    rows["warehouse"] = rows["warehouse"].map(_clean_text)
+    rows["bags_remaining"] = pd.to_numeric(rows["bags_remaining"], errors="coerce").fillna(0.0)
+    if "bag_size_kg_raw" not in rows.columns:
+        rows["bag_size_kg_raw"] = _to_numeric_or_nan_series(rows, "bag_size_kg")
+    if "price_per_kg_raw" not in rows.columns:
+        rows["price_per_kg_raw"] = _to_numeric_or_nan_series(rows, "price_per_kg")
+    if "reservation_days_raw" not in rows.columns:
+        rows["reservation_days_raw"] = _to_numeric_or_nan_series(rows, "reservation_days")
+
+    rows = rows[rows["bags_remaining"] > 0].copy()
+    if rows.empty:
+        return _empty_action_queue_dataset(snapshot_date)
+
+    rows["approval_dt"] = pd.to_datetime(rows["approval_date"], errors="coerce", format="%Y-%m-%d")
+    rows["reservation_days_valid"] = rows["reservation_days_raw"].notna() & (rows["reservation_days_raw"] >= 0)
+    rows["expiry_available"] = rows["approval_dt"].notna() & rows["reservation_days_valid"]
+    rows["expiry_dt"] = pd.NaT
+    rows.loc[rows["expiry_available"], "expiry_dt"] = (
+        rows.loc[rows["expiry_available"], "approval_dt"]
+        + pd.to_timedelta(rows.loc[rows["expiry_available"], "reservation_days_raw"], unit="D")
+    )
+
+    snapshot_ts = pd.to_datetime(snapshot_date, errors="coerce", format="%Y-%m-%d")
+    rows["days_to_expiry"] = float("nan")
+    if not pd.isna(snapshot_ts):
+        rows.loc[rows["expiry_available"], "days_to_expiry"] = (
+            rows.loc[rows["expiry_available"], "expiry_dt"] - snapshot_ts
+        ).dt.days.astype("float64")
+
+    rows["is_breached"] = rows["expiry_available"] & rows["days_to_expiry"].notna() & (rows["days_to_expiry"] < 0)
+    rows["is_near_expiry"] = (
+        rows["expiry_available"]
+        & rows["days_to_expiry"].notna()
+        & (rows["days_to_expiry"] >= 0)
+        & (rows["days_to_expiry"] <= ACTION_QUEUE_NEAR_EXPIRY_DAYS)
+    )
+    rows["is_landed_not_released"] = rows["landing_status"] == "landed"
+    rows["kg_complete"] = rows["bag_size_kg_raw"].notna()
+    rows["remaining_kg_value"] = (rows["bags_remaining"] * rows["bag_size_kg_raw"]).where(rows["kg_complete"], 0.0)
+    rows["value_complete"] = rows["kg_complete"] & rows["price_per_kg_raw"].notna()
+    rows["remaining_value_gbp_value"] = (
+        rows["remaining_kg_value"] * rows["price_per_kg_raw"]
+    ).where(rows["value_complete"], 0.0)
+
+    labels = [
+        _action_bucket_and_priority(
+            bool(row["is_breached"]),
+            bool(row["is_near_expiry"]),
+            bool(row["is_landed_not_released"]),
+        )
+        for _, row in rows.iterrows()
+    ]
+    rows["action_bucket"] = [label[0] for label in labels]
+    rows["action_priority"] = [label[1] for label in labels]
+    rows["action_priority_rank"] = [label[2] for label in labels]
+    rows["action_now"] = rows["is_breached"] | rows["is_near_expiry"] | rows["is_landed_not_released"]
+
+    rows["data_status"] = [
+        _status_summary(
+            [
+                "Approval date unavailable" if not bool(row["approval_date"]) else "",
+                "Reservation days unavailable" if not bool(row["reservation_days_valid"]) else "",
+                "Remaining kg unavailable" if not bool(row["kg_complete"]) else "",
+                "Remaining value unavailable" if bool(row["kg_complete"]) and not bool(row["value_complete"]) else "",
+            ]
+        )
+        for _, row in rows.iterrows()
+    ]
+
+    landed_open_rows = rows[rows["is_landed_not_released"]].copy()
+    landed_not_released_value_available = bool(
+        landed_open_rows.empty or landed_open_rows["value_complete"].all()
+    )
+    if landed_open_rows.empty:
+        landed_not_released_value_status = "No landed open reservation rows."
+    elif landed_not_released_value_available:
+        landed_not_released_value_status = "Complete across all landed open reservation rows."
+    else:
+        landed_not_released_value_status = (
+            "Unavailable on one or more landed open reservation rows due to missing kg or price."
+        )
+
+    action_bucket_counts = []
+    for bucket in ("Breached", "Near Expiry", "Landed Not Released", "Open Exposure"):
+        action_bucket_counts.append(
+            {
+                "action_bucket": bucket,
+                "row_count": int((rows["action_bucket"] == bucket).sum()),
+            }
+        )
+
+    expiry_bucket_rows = [
+        {
+            "expiry_bucket": "Breached",
+            "open_bags": round(float(rows[rows["is_breached"]]["bags_remaining"].sum()), 4),
+        },
+        {
+            "expiry_bucket": "0-7 days",
+            "open_bags": round(float(rows[rows["is_near_expiry"]]["bags_remaining"].sum()), 4),
+        },
+        {
+            "expiry_bucket": "8+ days",
+            "open_bags": round(
+                float(
+                    rows[
+                        rows["expiry_available"]
+                        & rows["days_to_expiry"].notna()
+                        & (rows["days_to_expiry"] > ACTION_QUEUE_NEAR_EXPIRY_DAYS)
+                    ]["bags_remaining"].sum()
+                ),
+                4,
+            ),
+        },
+        {
+            "expiry_bucket": "No expiry data",
+            "open_bags": round(float(rows[~rows["expiry_available"]]["bags_remaining"].sum()), 4),
+        },
+    ]
+
+    top_ref_groups = (
+        landed_open_rows.groupby("product_reference", sort=True, as_index=False)[
+            ["bags_remaining", "remaining_kg_value", "remaining_value_gbp_value"]
+        ]
+        .sum()
+        .rename(
+            columns={
+                "bags_remaining": "open_bags",
+                "remaining_kg_value": "remaining_kg",
+                "remaining_value_gbp_value": "remaining_value_gbp",
+            }
+        )
+    )
+    top_ref_groups = top_ref_groups.sort_values(
+        ["remaining_value_gbp", "open_bags", "product_reference"],
+        ascending=[False, False, True],
+        kind="stable",
+    )
+    top_landed_reference_rows = [
+        {
+            "product_reference": _clean_text(row["product_reference"]) or "Unknown",
+            "open_bags": round(float(row["open_bags"]), 4),
+            "remaining_kg": round(float(row["remaining_kg"]), 4),
+            "remaining_value_gbp": round(float(row["remaining_value_gbp"]), 2),
+        }
+        for _, row in top_ref_groups.head(8).iterrows()
+        if _clean_text(row["product_reference"]) or float(row["open_bags"]) > 0
+    ]
+
+    rows = rows.sort_values(
+        [
+            "action_priority_rank",
+            "days_to_expiry",
+            "is_landed_not_released",
+            "bags_remaining",
+            "company_name",
+            "reservation_key",
+            "product_reference",
+            "product_id",
+        ],
+        ascending=[True, True, False, False, True, True, True, True],
+        kind="stable",
+        na_position="last",
+    )
+    detail_rows = [
+        {
+            "action_priority": _clean_text(row["action_priority"]),
+            "action_priority_rank": int(row["action_priority_rank"]),
+            "action_bucket": _clean_text(row["action_bucket"]),
+            "days_to_expiry": int(row["days_to_expiry"]) if pd.notna(row["days_to_expiry"]) else None,
+            "expiry_date": row["expiry_dt"].date().isoformat() if pd.notna(row["expiry_dt"]) else "",
+            "company_name": _clean_text(row["company_name"]),
+            "client_id": _clean_text(row["client_id"]),
+            "reservation_key": _clean_text(row["reservation_key"]),
+            "product_reference": _clean_text(row["product_reference"]),
+            "product_id": _clean_text(row["product_id"]),
+            "request_status": _clean_text(row["request_status"]).title(),
+            "approval_date": _clean_text(row["approval_date"]),
+            "reservation_days": (
+                int(float(row["reservation_days_raw"]))
+                if pd.notna(row["reservation_days_raw"]) and float(row["reservation_days_raw"]).is_integer()
+                else (round(float(row["reservation_days_raw"]), 4) if pd.notna(row["reservation_days_raw"]) else None)
+            ),
+            "bags_remaining": round(float(row["bags_remaining"]), 4),
+            "remaining_kg": round(float(row["remaining_kg_value"]), 4) if bool(row["kg_complete"]) else None,
+            "remaining_value_gbp": round(float(row["remaining_value_gbp_value"]), 2) if bool(row["value_complete"]) else None,
+            "landing_status": _clean_text(row["landing_status"]).title(),
+            "landing_date": _clean_text(row["landing_date"]),
+            "warehouse": _clean_text(row["warehouse"]),
+            "data_status": _clean_text(row["data_status"]),
+        }
+        for _, row in rows.iterrows()
+    ]
+
+    return {
+        "summary": {
+            "as_of_date": snapshot_date,
+            "near_expiry_threshold_days": ACTION_QUEUE_NEAR_EXPIRY_DAYS,
+            "open_reservation_rows": int(len(rows)),
+            "open_reserved_bags": round(float(rows["bags_remaining"].sum()), 4),
+            "near_expiry_rows": int(rows["is_near_expiry"].sum()),
+            "breached_rows": int(rows["is_breached"].sum()),
+            "landed_not_released_value_gbp": round(float(landed_open_rows["remaining_value_gbp_value"].sum()), 2),
+            "landed_not_released_value_available": landed_not_released_value_available,
+            "landed_not_released_value_status": landed_not_released_value_status,
+            "action_now_rows": int(rows["action_now"].sum()),
+        },
+        "action_bucket_counts": action_bucket_counts,
+        "open_bags_by_expiry_bucket": expiry_bucket_rows,
+        "top_landed_references": {
+            "metric": "remaining_value_gbp" if landed_not_released_value_available else "open_bags",
+            "metric_label": "Landed Not Released Value" if landed_not_released_value_available else "Landed Not Released Bags",
+            "value_available": landed_not_released_value_available,
+            "status": (
+                "Top references by landed not released value."
+                if landed_not_released_value_available
+                else "Value incomplete for one or more landed open reservation rows; showing bags instead."
+            ),
+            "rows": top_landed_reference_rows,
+        },
+        "details": detail_rows,
+    }
+
+
 def _empty_dataset(
     selector_refs: list[str],
     landed_selector_refs: list[str],
@@ -890,6 +1179,7 @@ def _empty_dataset(
         "client_top_exposure": [],
         "client_reference_concentration": [],
         "client_activity_rows": [],
+        "reservation_action_queue": _empty_action_queue_dataset(""),
     }
 
 
@@ -960,6 +1250,7 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         "request_date",
         "approval_date",
         "amendment_date",
+        "reservation_days",
     ):
         if column not in reservations.columns:
             reservations[column] = pd.NA
@@ -1203,6 +1494,7 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         client_reference_concentration,
         client_activity_rows,
     ) = _build_client_intelligence(latest)
+    reservation_action_queue = _build_reservation_action_queue(latest, snapshot_date)
 
     return {
         "snapshot_date": snapshot_date,
@@ -1225,4 +1517,5 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         "client_top_exposure": client_top_exposure,
         "client_reference_concentration": client_reference_concentration,
         "client_activity_rows": client_activity_rows,
+        "reservation_action_queue": reservation_action_queue,
     }

@@ -247,6 +247,70 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
                 "reserved_value_available": True,
             }
         ],
+        "reservation_action_queue": {
+            "summary": {
+                "as_of_date": "2026-03-07",
+                "near_expiry_threshold_days": 7,
+                "open_reservation_rows": 2,
+                "open_reserved_bags": 3.0,
+                "near_expiry_rows": 1,
+                "breached_rows": 0,
+                "landed_not_released_value_gbp": 250.0,
+                "landed_not_released_value_available": True,
+                "landed_not_released_value_status": "Complete across all landed open reservation rows.",
+                "action_now_rows": 2,
+            },
+            "action_bucket_counts": [
+                {"action_bucket": "Breached", "row_count": 0},
+                {"action_bucket": "Near Expiry", "row_count": 1},
+                {"action_bucket": "Landed Not Released", "row_count": 1},
+                {"action_bucket": "Open Exposure", "row_count": 0},
+            ],
+            "open_bags_by_expiry_bucket": [
+                {"expiry_bucket": "Breached", "open_bags": 0.0},
+                {"expiry_bucket": "0-7 days", "open_bags": 2.0},
+                {"expiry_bucket": "8+ days", "open_bags": 0.0},
+                {"expiry_bucket": "No expiry data", "open_bags": 1.0},
+            ],
+            "top_landed_references": {
+                "metric": "remaining_value_gbp",
+                "metric_label": "Landed Not Released Value",
+                "value_available": True,
+                "status": "Top references by landed not released value.",
+                "rows": [
+                    {
+                        "product_reference": "REF-1",
+                        "open_bags": 1.0,
+                        "remaining_kg": 20.0,
+                        "remaining_value_gbp": 250.0,
+                    }
+                ],
+            },
+            "details": [
+                {
+                    "action_priority": "P2 Near Expiry",
+                    "action_priority_rank": 2,
+                    "action_bucket": "Near Expiry",
+                    "days_to_expiry": 2,
+                    "expiry_date": "2026-03-09",
+                    "company_name": "Alpha Roasters",
+                    "client_id": "c-1",
+                    "reservation_key": "580.0",
+                    "product_reference": "REF-1",
+                    "product_id": "p-1",
+                    "request_status": "Approved",
+                    "approval_date": "2026-03-05",
+                    "reservation_days": 4,
+                    "bags_remaining": 2.0,
+                    "remaining_kg": 40.0,
+                    "remaining_value_gbp": 500.0,
+                    "landing_status": "Incoming",
+                    "landing_date": "2026-03-18",
+                    "warehouse": "Bristol",
+                    "data_status": "Complete",
+                }
+            ],
+        },
     }
     out = tmp_path / "reference_workspace.html"
 
@@ -271,19 +335,23 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="tab-product"' in first
     assert 'id="tab-client"' in first
     assert 'id="tab-landed"' in first
+    assert 'id="tab-action"' in first
     assert 'data-tab="reservation"' in first
     assert 'data-tab="product"' in first
     assert 'data-tab="client"' in first
     assert 'data-tab="landed"' in first
+    assert 'data-tab="action"' in first
     assert 'activeTab: "reservation"' in first
     assert 'id="reservation-view"' in first
     assert 'id="product-view" hidden' in first
     assert 'id="client-view" hidden' in first
     assert 'id="landed-view" hidden' in first
+    assert 'id="action-view" hidden' in first
     assert "Reservation Intelligence" in first
     assert "Product Reference Intelligence" in first
     assert "Client Intelligence" in first
     assert "Landed Stock Intelligence" in first
+    assert "Reservation Risk / Action Queue" in first
     assert "Shows reservation activity recorded in the system, excluding rejected reservations." in first
     assert "Request Date Filter" in first
     assert 'id="client-date-preset"' in first
@@ -363,10 +431,25 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="landed-aging-filter"' in first
     assert 'id="landed-status-filter"' in first
     assert 'id="landed-detail-body"' in first
+    assert 'id="action-kpi-open-rows"' in first
+    assert 'id="action-kpi-open-bags"' in first
+    assert 'id="action-kpi-near-expiry"' in first
+    assert 'id="action-kpi-breached"' in first
+    assert 'id="action-kpi-landed-value"' in first
+    assert 'id="action-kpi-action-now"' in first
+    assert 'id="action-bucket-chart"' in first
+    assert 'id="action-expiry-chart"' in first
+    assert 'id="action-reference-chart"' in first
+    assert 'id="action-table-filter"' in first
+    assert 'id="action-bucket-filter"' in first
+    assert 'id="action-landing-filter"' in first
+    assert 'id="action-data-filter"' in first
+    assert 'id="action-detail-body"' in first
     assert '"default_reference":"REF-1"' in first
     assert '"default_landed_reference":"REF-2"' in first
     assert '"landed_reference_options":[{"product_reference":"REF-2"}]' in first
     assert '"client_activity_rows":[' in first
+    assert '"reservation_action_queue":{' in first
     assert '"client_key":"c-1"' in first
     assert '"request_date":"2026-03-04"' in first
     assert '"request_date_available":true' in first
@@ -429,7 +512,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'const landedDetails = Array.isArray(data.landed_stock_details) ? data.landed_stock_details : [];' in first
     assert 'canonicalAgingBucket(row.aging_bucket) !== state.landedAgingBucket' in first
     assert 'renderBarChart("landed-aging-chart", "landed-aging-empty", landedAging, "aging_bucket", "unsold_bags", (value) => formatNumber(value, 0) + " bags", true);' in first
-    assert 'sharedSelectorPanel.hidden = landedActive || clientActive;' in first
+    assert 'sharedSelectorPanel.hidden = landedActive || clientActive || actionActive;' in first
     assert 'state.selectedReference = "";' in first
     assert 'state.filterText = "";' in first
     assert 'state.sortKey = "company_name";' in first
@@ -452,7 +535,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'return "Landing date not available for this reference.";' in first
     assert 'const selectedReference = currentSelectedReference() || "Select product";' in first
     assert 'const landingStatus = currentSelectedReference() ? (summary?.landing_status || "Unknown") : "Not selected";' in first
-    assert 'sharedSelectorPanel.hidden = landedActive || clientActive;' in first
+    assert 'sharedSelectorPanel.hidden = landedActive || clientActive || actionActive;' in first
     assert 'state.activeTab = button.dataset.tab || "reservation";' in first
     assert 'summaryByReference.get(state.selectedReference);' in first
     assert '"reference_profiles"' not in first

@@ -586,6 +586,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       <button class="tab-button" id="tab-product" type="button" data-tab="product" aria-pressed="false">Product Reference Intelligence</button>
       <button class="tab-button" id="tab-client" type="button" data-tab="client" aria-pressed="false">Client Intelligence</button>
       <button class="tab-button" id="tab-landed" type="button" data-tab="landed" aria-pressed="false">Landed Stock Intelligence</button>
+      <button class="tab-button" id="tab-action" type="button" data-tab="action" aria-pressed="false">Reservation Risk / Action Queue</button>
     </nav>
 
     <section class="workspace-view" id="reservation-view">
@@ -948,6 +949,123 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         </section>
       </div>
     </section>
+
+    <section class="workspace-view" id="action-view" hidden>
+      <div class="panel view-frame">
+        <div class="view-head">
+          <div>
+            <h2 class="view-title">Reservation Risk / Action Queue</h2>
+            <p class="view-copy">Operational queue for open reservation exposure, expiry risk, landed-not-released balances, and immediate commercial follow-up.</p>
+          </div>
+        </div>
+
+        <section class="kpi-grid" aria-label="Reservation Risk Action Queue KPIs">
+          <article class="kpi-card">
+            <div class="kpi-label">Open Reservation Rows</div>
+            <div class="kpi-value" id="action-kpi-open-rows">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Open Reserved Bags</div>
+            <div class="kpi-value" id="action-kpi-open-bags">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Near Expiry Rows</div>
+            <div class="kpi-value" id="action-kpi-near-expiry">-</div>
+            <div class="kpi-submeta" id="action-kpi-near-expiry-meta">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Breached Rows</div>
+            <div class="kpi-value" id="action-kpi-breached">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Landed Not Released Value</div>
+            <div class="kpi-value" id="action-kpi-landed-value">-</div>
+            <div class="kpi-submeta" id="action-kpi-landed-value-meta">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Action Now Rows</div>
+            <div class="kpi-value" id="action-kpi-action-now">-</div>
+          </article>
+        </section>
+
+        <section class="chart-grid" aria-label="Reservation Risk Action Queue Charts">
+          <article class="chart-card">
+            <h3 class="chart-title">Action Bucket Row Count</h3>
+            <p class="chart-copy">Shows where the active reservation queue currently sits by follow-up priority bucket.</p>
+            <div class="chart-list" id="action-bucket-chart"></div>
+            <div class="chart-empty" id="action-bucket-empty" hidden>No open reservation exposure to show.</div>
+          </article>
+          <article class="chart-card">
+            <h3 class="chart-title">Open Bags by Expiry Bucket</h3>
+            <p class="chart-copy">Shows trapped bags split between breached, near-expiry, longer-dated, and expiry-unknown open reservations.</p>
+            <div class="chart-list" id="action-expiry-chart"></div>
+            <div class="chart-empty" id="action-expiry-empty" hidden>No open reservation exposure to show.</div>
+          </article>
+          <article class="chart-card">
+            <h3 class="chart-title">Top References Not Released Yet</h3>
+            <p class="chart-copy" id="action-reference-chart-copy">Ranks landed open reservation references by trapped value where complete, otherwise by bags.</p>
+            <div class="chart-list" id="action-reference-chart"></div>
+            <div class="chart-empty" id="action-reference-empty" hidden>No landed open reservation references to show.</div>
+          </article>
+        </section>
+
+        <section class="table-shell">
+          <div class="table-topbar">
+            <div>
+              <h3 class="table-title">Action Queue Detail</h3>
+              <p class="table-subtitle">Default order is breached first, then near-expiry, then landed-not-released, then other open exposure.</p>
+            </div>
+            <div class="table-filters">
+              <div class="table-filter">
+                <label class="control-label" for="action-table-filter">Search action rows</label>
+                <input class="control-input" id="action-table-filter" type="search" autocomplete="off" placeholder="Filter by company, client ID, reference, reservation key, or warehouse">
+              </div>
+              <div class="table-filter compact">
+                <label class="control-label" for="action-bucket-filter">Action Bucket</label>
+                <select class="control-input" id="action-bucket-filter"></select>
+              </div>
+              <div class="table-filter compact">
+                <label class="control-label" for="action-landing-filter">Landing Status</label>
+                <select class="control-input" id="action-landing-filter"></select>
+              </div>
+              <div class="table-filter compact">
+                <label class="control-label" for="action-data-filter">Data Status</label>
+                <select class="control-input" id="action-data-filter"></select>
+              </div>
+            </div>
+          </div>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Action Priority</th>
+                  <th>Action Bucket</th>
+                  <th class="num">Days To Expiry</th>
+                  <th>Expiry Date</th>
+                  <th>Company</th>
+                  <th>Client ID</th>
+                  <th>Reservation Key</th>
+                  <th>Product Reference</th>
+                  <th>Product ID</th>
+                  <th>Reservation Status</th>
+                  <th>Approval Date</th>
+                  <th class="num">Reservation Days</th>
+                  <th class="num">Bags Remaining</th>
+                  <th class="num">Remaining KG</th>
+                  <th class="num">Remaining Value GBP</th>
+                  <th>Landing Status</th>
+                  <th>Landing Date</th>
+                  <th>Warehouse</th>
+                  <th>Data Status / Missing Fields</th>
+                </tr>
+              </thead>
+              <tbody id="action-detail-body"></tbody>
+            </table>
+          </div>
+          <div class="empty" id="action-detail-empty" hidden>No action rows match the current filters.</div>
+        </section>
+      </div>
+    </section>
   </main>
 
   <script id="workspace-data" type="application/json">{payload_json}</script>
@@ -983,12 +1101,19 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const landedWarehouseFilter = document.getElementById("landed-warehouse-filter");
     const landedAgingFilter = document.getElementById("landed-aging-filter");
     const landedStatusFilter = document.getElementById("landed-status-filter");
+    const actionDetailBody = document.getElementById("action-detail-body");
+    const actionDetailEmpty = document.getElementById("action-detail-empty");
+    const actionTableFilter = document.getElementById("action-table-filter");
+    const actionBucketFilter = document.getElementById("action-bucket-filter");
+    const actionLandingFilter = document.getElementById("action-landing-filter");
+    const actionDataFilter = document.getElementById("action-data-filter");
     const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
     const sortButtons = Array.from(document.querySelectorAll("[data-sort]"));
     const reservationView = document.getElementById("reservation-view");
     const productView = document.getElementById("product-view");
     const clientView = document.getElementById("client-view");
     const landedView = document.getElementById("landed-view");
+    const actionView = document.getElementById("action-view");
 
     const summaryByReference = new Map((data.reference_summary || []).map((row) => [row.product_reference, row]));
     const detailsByReference = new Map();
@@ -1000,6 +1125,12 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const landedWarehouseExposure = Array.isArray(data.landed_stock_warehouse_exposure) ? data.landed_stock_warehouse_exposure : [];
     const landedReferenceExposure = Array.isArray(data.landed_stock_reference_exposure) ? data.landed_stock_reference_exposure : [];
     const landedDetails = Array.isArray(data.landed_stock_details) ? data.landed_stock_details : [];
+    const actionQueue = data.reservation_action_queue || {{}};
+    const actionSummary = actionQueue.summary || {{}};
+    const actionBucketCounts = Array.isArray(actionQueue.action_bucket_counts) ? actionQueue.action_bucket_counts : [];
+    const actionExpiryBuckets = Array.isArray(actionQueue.open_bags_by_expiry_bucket) ? actionQueue.open_bags_by_expiry_bucket : [];
+    const actionTopReferences = actionQueue.top_landed_references || {{ rows: [] }};
+    const actionDetails = Array.isArray(actionQueue.details) ? actionQueue.details : [];
     const landedAgingByBucket = new Map(
       landedAgingRaw.map((row) => [String(row.aging_bucket || "").trim(), Number(row.unsold_bags || 0)])
     );
@@ -1036,6 +1167,10 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       clientDateTo: "",
       sortKey: "company_name",
       sortDirection: "asc",
+      actionFilterText: "",
+      actionBucket: "all",
+      actionLanding: "all",
+      actionDataStatus: "all",
       activeTab: "reservation",
     }};
 
@@ -2026,16 +2161,141 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       }}).join("");
     }}
 
+    function currentActionDetails() {{
+      const text = state.actionFilterText.trim().toLowerCase();
+      return actionDetails.filter((row) => {{
+        if (state.actionBucket !== "all" && String(row.action_bucket || "") !== state.actionBucket) {{
+          return false;
+        }}
+        if (state.actionLanding !== "all" && String(row.landing_status || "") !== state.actionLanding) {{
+          return false;
+        }}
+        const dataStatus = String(row.data_status || "").trim().toLowerCase();
+        if (state.actionDataStatus === "incomplete" && dataStatus === "complete") {{
+          return false;
+        }}
+        if (state.actionDataStatus === "complete" && dataStatus !== "complete") {{
+          return false;
+        }}
+        if (!text) {{
+          return true;
+        }}
+        const haystack = [
+          row.company_name,
+          row.client_id,
+          row.reservation_key,
+          row.product_reference,
+          row.product_id,
+          row.warehouse,
+        ].join(" ").toLowerCase();
+        return haystack.includes(text);
+      }});
+    }}
+
+    function renderActionFilters() {{
+      const bucketOptions = ["all", "Breached", "Near Expiry", "Landed Not Released", "Open Exposure"];
+      actionBucketFilter.innerHTML = bucketOptions.map((value) => {{
+        const label = value === "all" ? "All Buckets" : value;
+        return '<option value="' + escapeHtml(value) + '">' + escapeHtml(label) + '</option>';
+      }}).join("");
+      actionBucketFilter.value = bucketOptions.includes(state.actionBucket) ? state.actionBucket : "all";
+
+      const landingOptions = ["all", ...new Set(actionDetails.map((row) => String(row.landing_status || "").trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, "en", {{ sensitivity: "base" }})))];
+      actionLandingFilter.innerHTML = landingOptions.map((value) => {{
+        const label = value === "all" ? "All Landing Status" : value;
+        return '<option value="' + escapeHtml(value) + '">' + escapeHtml(label) + '</option>';
+      }}).join("");
+      actionLandingFilter.value = landingOptions.includes(state.actionLanding) ? state.actionLanding : "all";
+
+      actionDataFilter.innerHTML = [
+        ["all", "All Data Status"],
+        ["incomplete", "Incomplete Only"],
+        ["complete", "Complete Only"],
+      ].map((entry) => '<option value="' + escapeHtml(entry[0]) + '">' + escapeHtml(entry[1]) + '</option>').join("");
+      actionDataFilter.value = state.actionDataStatus;
+    }}
+
+    function renderActionKpis() {{
+      const openRows = document.getElementById("action-kpi-open-rows");
+      const openBags = document.getElementById("action-kpi-open-bags");
+      const nearExpiry = document.getElementById("action-kpi-near-expiry");
+      const nearExpiryMeta = document.getElementById("action-kpi-near-expiry-meta");
+      const breached = document.getElementById("action-kpi-breached");
+      const landedValue = document.getElementById("action-kpi-landed-value");
+      const landedValueMeta = document.getElementById("action-kpi-landed-value-meta");
+      const actionNow = document.getElementById("action-kpi-action-now");
+
+      openRows.textContent = formatNumber(actionSummary.open_reservation_rows || 0, 0);
+      openBags.textContent = formatBags(actionSummary.open_reserved_bags || 0);
+      nearExpiry.textContent = formatNumber(actionSummary.near_expiry_rows || 0, 0);
+      nearExpiryMeta.textContent = "Threshold: " + formatNumber(actionSummary.near_expiry_threshold_days || 0, 0) + " days to expiry.";
+      breached.textContent = formatNumber(actionSummary.breached_rows || 0, 0);
+      landedValue.textContent = actionSummary.landed_not_released_value_available
+        ? formatCompactMoney(actionSummary.landed_not_released_value_gbp)
+        : "Unavailable";
+      landedValueMeta.textContent = actionSummary.landed_not_released_value_status || "Unavailable";
+      actionNow.textContent = formatNumber(actionSummary.action_now_rows || 0, 0);
+    }}
+
+    function renderActionCharts() {{
+      renderBarChart("action-bucket-chart", "action-bucket-empty", actionBucketCounts, "action_bucket", "row_count", (value) => formatNumber(value, 0) + " rows", true);
+      renderBarChart("action-expiry-chart", "action-expiry-empty", actionExpiryBuckets, "expiry_bucket", "open_bags", (value) => formatNumber(value, 0) + " bags", true);
+      const chartCopy = document.getElementById("action-reference-chart-copy");
+      chartCopy.textContent = String(actionTopReferences.status || "").trim() || "No landed open reservation references to show.";
+      renderBarChart(
+        "action-reference-chart",
+        "action-reference-empty",
+        Array.isArray(actionTopReferences.rows) ? actionTopReferences.rows : [],
+        "product_reference",
+        actionTopReferences.metric === "open_bags" ? "open_bags" : "remaining_value_gbp",
+        (value) => actionTopReferences.metric === "open_bags" ? formatNumber(value, 0) + " bags" : formatCompactMoney(value)
+      );
+    }}
+
+    function renderActionTable() {{
+      const rows = currentActionDetails();
+      actionDetailEmpty.hidden = rows.length > 0;
+      actionDetailBody.innerHTML = rows.map((row) => {{
+        const daysToExpiry = row.days_to_expiry === null ? "Unavailable" : formatNumber(row.days_to_expiry, 0);
+        const reservationDays = row.reservation_days === null ? "Unavailable" : formatNumber(row.reservation_days, 0);
+        const remainingKg = row.remaining_kg === null ? "Unavailable" : formatKilos(row.remaining_kg);
+        const remainingValue = row.remaining_value_gbp === null ? "Unavailable" : formatCompactMoney(row.remaining_value_gbp);
+        return "<tr>" +
+          "<td><strong>" + escapeHtml(row.action_priority || "-") + "</strong></td>" +
+          "<td>" + renderStatusChip(row.action_bucket || "-") + "</td>" +
+          "<td class='num'>" + escapeHtml(daysToExpiry) + "</td>" +
+          "<td>" + escapeHtml(row.expiry_date || "-") + "</td>" +
+          "<td><strong>" + escapeHtml(row.company_name || "-") + "</strong></td>" +
+          "<td>" + escapeHtml(row.client_id || "-") + "</td>" +
+          "<td><span class='muted'>" + escapeHtml(formatReservationKey(row.reservation_key || "-")) + "</span></td>" +
+          "<td>" + escapeHtml(row.product_reference || "-") + "</td>" +
+          "<td>" + escapeHtml(row.product_id || "-") + "</td>" +
+          "<td>" + renderStatusChip(row.request_status || "-") + "</td>" +
+          "<td>" + escapeHtml(row.approval_date || "-") + "</td>" +
+          "<td class='num'>" + escapeHtml(reservationDays) + "</td>" +
+          "<td class='num'>" + escapeHtml(formatNumber(row.bags_remaining, 0)) + "</td>" +
+          "<td class='num'>" + escapeHtml(remainingKg) + "</td>" +
+          "<td class='num'>" + escapeHtml(remainingValue) + "</td>" +
+          "<td>" + renderStatusChip(row.landing_status || "-") + "</td>" +
+          "<td>" + escapeHtml(row.landing_date || "-") + "</td>" +
+          "<td>" + escapeHtml(row.warehouse || "-") + "</td>" +
+          "<td>" + escapeHtml(row.data_status || "-") + "</td>" +
+        "</tr>";
+      }}).join("");
+    }}
+
     function renderTabs() {{
       const reservationActive = state.activeTab === "reservation";
       const productActive = state.activeTab === "product";
       const clientActive = state.activeTab === "client";
       const landedActive = state.activeTab === "landed";
-      sharedSelectorPanel.hidden = landedActive || clientActive;
+      const actionActive = state.activeTab === "action";
+      sharedSelectorPanel.hidden = landedActive || clientActive || actionActive;
       reservationView.hidden = !reservationActive;
       productView.hidden = !productActive;
       clientView.hidden = !clientActive;
       landedView.hidden = !landedActive;
+      actionView.hidden = !actionActive;
       for (const button of tabButtons) {{
         const isActive = button.dataset.tab === state.activeTab;
         button.classList.toggle("is-active", isActive);
@@ -2059,6 +2319,10 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       renderLandedKpis();
       renderLandedCharts();
       renderLandedTable();
+      renderActionFilters();
+      renderActionKpis();
+      renderActionCharts();
+      renderActionTable();
       renderTabs();
     }}
 
@@ -2127,6 +2391,22 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     landedStatusFilter.addEventListener("change", () => {{
       state.landedStatus = landedStatusFilter.value;
       renderLandedTable();
+    }});
+    actionTableFilter.addEventListener("input", () => {{
+      state.actionFilterText = actionTableFilter.value;
+      renderActionTable();
+    }});
+    actionBucketFilter.addEventListener("change", () => {{
+      state.actionBucket = actionBucketFilter.value;
+      renderActionTable();
+    }});
+    actionLandingFilter.addEventListener("change", () => {{
+      state.actionLanding = actionLandingFilter.value;
+      renderActionTable();
+    }});
+    actionDataFilter.addEventListener("change", () => {{
+      state.actionDataStatus = actionDataFilter.value;
+      renderActionTable();
     }});
     sharedSelectorResetButton.addEventListener("click", () => {{
       resetSharedSelectorView();

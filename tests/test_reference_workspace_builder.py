@@ -976,3 +976,161 @@ def test_builder_client_activity_rows_keep_missing_request_date_for_default_clie
             "reserved_value_available": True,
         },
     ]
+
+
+def test_builder_reservation_action_queue_uses_strict_open_rows_and_safe_expiry_logic() -> None:
+    activity = pd.DataFrame(
+        [
+            {
+                "id_request": "r-1",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-01",
+                "approval_date": "2026-03-02",
+                "amendment_date": "2026-03-10",
+                "reservation_days": 7,
+                "client_id": "c-1",
+                "company_name": "Alpha Roasters",
+                "product_id": "p-1",
+                "product_reference": "REF-1",
+                "bags": 5,
+                "bags_remaining": 3,
+                "bag_size_kg": 30,
+                "price_per_kg": 10.0,
+                "landing_status": "landed",
+                "landing_date": "2026-03-08",
+                "warehouse": "London",
+            },
+            {
+                "id_request": "r-2",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-04",
+                "approval_date": "2026-03-05",
+                "amendment_date": "2026-03-10",
+                "reservation_days": 10,
+                "client_id": "c-2",
+                "company_name": "Bravo Coffee",
+                "product_id": "p-2",
+                "product_reference": "REF-2",
+                "bags": 4,
+                "bags_remaining": 2,
+                "bag_size_kg": 20,
+                "price_per_kg": 11.0,
+                "landing_status": "incoming",
+                "landing_date": "2026-03-18",
+                "warehouse": "Bristol",
+            },
+            {
+                "id_request": "r-3",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "completed",
+                "request_date": "2026-03-06",
+                "approval_date": "",
+                "amendment_date": "2026-03-10",
+                "reservation_days": "",
+                "client_id": "c-3",
+                "company_name": "Charlie Coffee",
+                "product_id": "p-3",
+                "product_reference": "REF-3",
+                "bags": 6,
+                "bags_remaining": 1,
+                "bag_size_kg": 25,
+                "price_per_kg": "",
+                "landing_status": "landed",
+                "landing_date": "2026-03-09",
+                "warehouse": "Antwerp",
+            },
+            {
+                "id_request": "r-4",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-07",
+                "approval_date": "2026-03-07",
+                "amendment_date": "2026-03-09",
+                "reservation_days": 5,
+                "client_id": "c-4",
+                "company_name": "Delta Coffee",
+                "product_id": "p-4",
+                "product_reference": "REF-4",
+                "bags": 2,
+                "bags_remaining": 0,
+                "bag_size_kg": 20,
+                "price_per_kg": 9.0,
+                "landing_status": "landed",
+                "landing_date": "2026-03-07",
+                "warehouse": "London",
+            },
+        ]
+    )
+    products = pd.DataFrame(
+        [
+            {"product_id": "p-1", "product_reference": "REF-1", "landing_status": "landed", "landing_date": "2026-03-08", "warehouse": "London", "bags": 5, "bag_size_kg": 30, "bags_available": 2},
+            {"product_id": "p-2", "product_reference": "REF-2", "landing_status": "incoming", "landing_date": "2026-03-18", "warehouse": "Bristol", "bags": 4, "bag_size_kg": 20, "bags_available": 2},
+            {"product_id": "p-3", "product_reference": "REF-3", "landing_status": "landed", "landing_date": "2026-03-09", "warehouse": "Antwerp", "bags": 6, "bag_size_kg": 25, "bags_available": 1},
+            {"product_id": "p-4", "product_reference": "REF-4", "landing_status": "landed", "landing_date": "2026-03-07", "warehouse": "London", "bags": 2, "bag_size_kg": 20, "bags_available": 0},
+        ]
+    )
+
+    dataset = build_reference_workspace_dataset(activity, products)
+    queue = dataset["reservation_action_queue"]
+
+    assert dataset["snapshot_date"] == "2026-03-10"
+    assert queue["summary"] == {
+        "as_of_date": "2026-03-10",
+        "near_expiry_threshold_days": 7,
+        "open_reservation_rows": 3,
+        "open_reserved_bags": 6.0,
+        "near_expiry_rows": 1,
+        "breached_rows": 1,
+        "landed_not_released_value_gbp": 900.0,
+        "landed_not_released_value_available": False,
+        "landed_not_released_value_status": "Unavailable on one or more landed open reservation rows due to missing kg or price.",
+        "action_now_rows": 3,
+    }
+    assert queue["action_bucket_counts"] == [
+        {"action_bucket": "Breached", "row_count": 1},
+        {"action_bucket": "Near Expiry", "row_count": 1},
+        {"action_bucket": "Landed Not Released", "row_count": 1},
+        {"action_bucket": "Open Exposure", "row_count": 0},
+    ]
+    assert queue["open_bags_by_expiry_bucket"] == [
+        {"expiry_bucket": "Breached", "open_bags": 3.0},
+        {"expiry_bucket": "0-7 days", "open_bags": 2.0},
+        {"expiry_bucket": "8+ days", "open_bags": 0.0},
+        {"expiry_bucket": "No expiry data", "open_bags": 1.0},
+    ]
+    assert queue["top_landed_references"] == {
+        "metric": "open_bags",
+        "metric_label": "Landed Not Released Bags",
+        "value_available": False,
+        "status": "Value incomplete for one or more landed open reservation rows; showing bags instead.",
+        "rows": [
+            {
+                "product_reference": "REF-1",
+                "open_bags": 3.0,
+                "remaining_kg": 90.0,
+                "remaining_value_gbp": 900.0,
+            },
+            {
+                "product_reference": "REF-3",
+                "open_bags": 1.0,
+                "remaining_kg": 25.0,
+                "remaining_value_gbp": 0.0,
+            },
+        ],
+    }
+    assert queue["details"][0]["action_priority"] == "P1 Breached"
+    assert queue["details"][0]["action_bucket"] == "Breached"
+    assert queue["details"][0]["days_to_expiry"] == -1
+    assert queue["details"][0]["remaining_value_gbp"] == 900.0
+    assert queue["details"][1]["action_priority"] == "P2 Near Expiry"
+    assert queue["details"][1]["days_to_expiry"] == 5
+    assert queue["details"][2]["action_priority"] == "P3 Landed Not Released"
+    assert queue["details"][2]["request_status"] == "Completed"
+    assert queue["details"][2]["remaining_value_gbp"] is None
+    assert queue["details"][2]["data_status"] == "Approval date unavailable; Reservation days unavailable; Remaining value unavailable"
