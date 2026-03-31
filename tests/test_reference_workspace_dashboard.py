@@ -786,7 +786,7 @@ def test_reference_workspace_client_concentration_contract_present() -> None:
     assert 'Rest: ' in html
 
 
-def test_reference_workspace_includes_client_geography_tab_and_defers_plotted_map_without_local_coordinates() -> None:
+def test_reference_workspace_includes_client_geography_tab_and_client_level_plotted_map() -> None:
     dataset = {
         "snapshot_date": "2026-03-07",
         "default_reference": "",
@@ -838,8 +838,11 @@ def test_reference_workspace_includes_client_geography_tab_and_defers_plotted_ma
             "duplicate_client_rows": 2,
             "matched_client_rows": 3,
             "unmatched_client_rows": 1,
-            "map_included": False,
-            "map_status": "Plotted map deferred: no deterministic local coordinate cache is included in v1.",
+            "resolved_map_clients": 1,
+            "unresolved_map_clients": 1,
+            "coordinate_conflicts": 0,
+            "map_included": True,
+            "map_status": "Plotting 1 deterministically resolved client markers; 1 mapped clients remain unplotted.",
         },
         "client_geography_locations": [
             {
@@ -872,6 +875,27 @@ def test_reference_workspace_includes_client_geography_tab_and_defers_plotted_ma
                 "reserved_bags": 1.0,
                 "reserved_kg": 15.0,
                 "reason": "Missing client_id on activity rows",
+            }
+        ],
+        "client_geography_map_clients": [
+            {
+                "marker_id": "c-1",
+                "company_name": "Alpha Roasters",
+                "client_id": "c-1",
+                "country": "United Kingdom",
+                "city": "Bristol",
+                "postcode": "BS1 4DJ",
+                "location_label": "Bristol, BS1 4DJ, United Kingdom",
+                "latitude": 51.4538,
+                "longitude": -2.5916,
+                "coordinate_match_level": "country_city_postcode",
+                "reserved_value_gbp": 600.0,
+                "reserved_value_available": True,
+                "reserved_bags": 2.0,
+                "reserved_kg": 60.0,
+                "has_exposure": True,
+                "distinct_reference_count": 1,
+                "primary_reference": "REF-1",
             }
         ],
         "reservation_action_queue": {
@@ -915,9 +939,20 @@ def test_reference_workspace_includes_client_geography_tab_and_defers_plotted_ma
     assert 'id="geography-country-filter"' in html
     assert 'id="geography-location-body"' in html
     assert 'id="geography-unmapped-body"' in html
-    assert "Plotted map deferred: no deterministic local coordinate cache is included in v1." in html
+    assert 'id="geography-map-canvas"' in html
+    assert 'id="geography-map-detail"' in html
+    assert 'id="geography-map-zoom-in"' in html
+    assert 'id="geography-map-zoom-out"' in html
+    assert 'id="geography-map-reset"' in html
+    assert "Plotting 1 deterministically resolved client markers; 1 mapped clients remain unplotted." in html
     assert "Billing `po_*` fields are excluded by default." in html
-    assert '"client_geography_summary":{"cities_covered":2,"countries_covered":2' in html
+    assert "client_geography_map_clients" in html
+    assert "Resolved Client Map" in html
+    assert "focused UK and Western/Central Europe extent" in html
+    assert "id='geography-map-viewport'" in html
+    assert "geo-map-land" in html
+    assert '"client_geography_summary":{' in html
+    assert '"resolved_map_clients":1' in html
     assert "geography-kpi-mapped-clients" in html
     assert "geography-country-chart" in html
     assert "geography-data-quality" in html

@@ -451,6 +451,189 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       color: var(--muted);
       font-size: 14px;
     }}
+    .geo-map-shell {{
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.8fr);
+      gap: 16px;
+      align-items: stretch;
+    }}
+    .geo-map-canvas {{
+      margin-top: 16px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--accent-soft) 34%, transparent), transparent 44%),
+        color-mix(in srgb, var(--panel-strong) 94%, transparent);
+      overflow: hidden;
+      position: relative;
+      min-height: 360px;
+      height: 420px;
+      cursor: grab;
+      touch-action: none;
+    }}
+    .geo-map-canvas.is-dragging {{
+      cursor: grabbing;
+    }}
+    .geo-map-svg {{
+      width: 100%;
+      height: 100%;
+      display: block;
+    }}
+    .geo-map-toolbar {{
+      margin-top: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }}
+    .geo-map-toolbar-copy {{
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }}
+    .geo-map-controls {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }}
+    .geo-map-control {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 40px;
+      padding: 10px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel-strong) 92%, transparent);
+      color: var(--label);
+      box-shadow: var(--shadow-md);
+      cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease;
+    }}
+    .geo-map-control:hover,
+    .geo-map-control:focus-visible {{
+      transform: translateY(-1px);
+      border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
+      outline: none;
+    }}
+    .geo-map-sea {{
+      fill: color-mix(in srgb, var(--accent-soft) 58%, var(--panel-strong));
+    }}
+    .geo-map-frame {{
+      fill: transparent;
+      stroke: color-mix(in srgb, var(--line-strong) 84%, transparent);
+      stroke-width: 1.2;
+      pointer-events: none;
+    }}
+    .geo-map-land {{
+      fill: color-mix(in srgb, var(--panel-strong) 82%, #d8d1bc);
+      stroke: color-mix(in srgb, var(--line-strong) 80%, #8e8775);
+      stroke-width: 1.15;
+      vector-effect: non-scaling-stroke;
+    }}
+    .geo-map-coastline {{
+      fill: none;
+      stroke: color-mix(in srgb, var(--line-strong) 72%, #8e8775);
+      stroke-width: 0.7;
+      stroke-dasharray: 3 5;
+      vector-effect: non-scaling-stroke;
+    }}
+    .geo-map-label {{
+      fill: color-mix(in srgb, var(--muted) 90%, var(--ink));
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      pointer-events: none;
+    }}
+    .geo-map-point {{
+      cursor: pointer;
+      stroke: color-mix(in srgb, var(--panel-strong) 94%, var(--ink));
+      stroke-width: 1.5;
+      transition: transform 120ms ease, opacity 120ms ease, stroke-width 120ms ease;
+      transform-box: fill-box;
+      transform-origin: center;
+      vector-effect: non-scaling-stroke;
+    }}
+    .geo-map-point:hover,
+    .geo-map-point.is-active {{
+      transform: scale(1.08);
+      stroke-width: 2.4;
+      opacity: 1;
+    }}
+    .geo-map-point.is-dimmed {{
+      opacity: 0.72;
+    }}
+    .geo-map-sidebar {{
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }}
+    .geo-map-legend,
+    .geo-map-detail {{
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: color-mix(in srgb, var(--panel-strong) 94%, transparent);
+      padding: 16px;
+    }}
+    .geo-map-legend {{
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px 14px;
+    }}
+    .geo-map-legend-item {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }}
+    .geo-map-legend-swatch {{
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      border: 1px solid color-mix(in srgb, var(--panel-strong) 94%, var(--ink));
+      flex: 0 0 auto;
+    }}
+    .geo-map-detail {{
+      display: grid;
+      gap: 10px;
+    }}
+    .geo-map-detail-title {{
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }}
+    .geo-map-detail-copy {{
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }}
+    .geo-map-stat-grid {{
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px 12px;
+    }}
+    .geo-map-stat {{
+      display: grid;
+      gap: 3px;
+    }}
+    .geo-map-stat-label {{
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }}
+    .geo-map-stat-value {{
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 700;
+    }}
     .bar-row {{
       display: grid;
       gap: 6px;
@@ -602,6 +785,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       .chart-grid {{
         grid-template-columns: 1fr;
       }}
+      .geo-map-shell {{
+        grid-template-columns: 1fr;
+      }}
     }}
     @media (max-width: 900px) {{
       .shell {{
@@ -636,6 +822,18 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       }}
       .kpi-grid {{
         grid-template-columns: 1fr;
+      }}
+      .geo-map-stat-grid {{
+        grid-template-columns: 1fr;
+      }}
+      .geo-map-toolbar {{
+        align-items: stretch;
+      }}
+      .geo-map-controls {{
+        width: 100%;
+      }}
+      .geo-map-control {{
+        flex: 1 1 0;
       }}
       th, td {{
         padding-left: 14px;
@@ -960,7 +1158,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         <div class="view-head">
           <div>
             <h2 class="view-title">Client Geography</h2>
-            <p class="view-copy">Delivery-geography analysis using `country`, `city`, and `postcode` from the client master. Billing `po_*` fields are excluded by default. Plotted map deferred in v1 because no deterministic local coordinate cache is included.</p>
+            <p class="view-copy">Delivery-geography analysis using `country`, `city`, and `postcode` from the client master. Billing `po_*` fields are excluded by default. The plotted map only includes deterministically resolved clients from the checked-in local coordinate cache.</p>
           </div>
         </div>
 
@@ -1011,6 +1209,33 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
             <div class="kpi-value" id="geography-kpi-exposed-locations">-</div>
             <div class="kpi-submeta" id="geography-kpi-map-status">-</div>
           </article>
+        </section>
+
+        <section class="geo-map-shell" aria-label="Client Geography Map">
+          <article class="chart-card">
+            <h3 class="chart-title">Resolved Client Map</h3>
+            <p class="chart-copy">Plots one marker per deterministically resolved client using delivery `country`, `city`, and `postcode` only. The embedded SVG map keeps a focused UK and Western/Central Europe extent without runtime basemap tiles. Clients without safe local coordinates remain in the supporting tables below.</p>
+            <div class="geo-map-toolbar">
+              <p class="geo-map-toolbar-copy">Drag to pan. Use zoom controls to inspect denser client clusters, then reset to the filtered default extent.</p>
+              <div class="geo-map-controls" role="group" aria-label="Map controls">
+                <button class="geo-map-control" id="geography-map-zoom-in" type="button" aria-label="Zoom in">+</button>
+                <button class="geo-map-control" id="geography-map-zoom-out" type="button" aria-label="Zoom out">-</button>
+                <button class="geo-map-control" id="geography-map-reset" type="button">Reset View</button>
+              </div>
+            </div>
+            <div class="geo-map-canvas" id="geography-map-canvas"></div>
+            <div class="chart-empty" id="geography-map-empty" hidden>No resolved client markers match the current geography filters.</div>
+          </article>
+          <aside class="geo-map-sidebar">
+            <div class="geo-map-legend" aria-label="Map Legend">
+              <span class="geo-map-legend-item"><span class="geo-map-legend-swatch" style="background:#215376;"></span>With current exposure</span>
+              <span class="geo-map-legend-item"><span class="geo-map-legend-swatch" style="background:#a96a3e;"></span>Zero exposure</span>
+            </div>
+            <div class="geo-map-detail" id="geography-map-detail">
+              <h3 class="geo-map-detail-title">Client Detail</h3>
+              <p class="geo-map-detail-copy">Select a plotted client marker to inspect the resolved delivery geography and reservation footprint.</p>
+            </div>
+          </aside>
         </section>
 
         <section class="chart-grid" aria-label="Client Geography Charts">
@@ -1354,6 +1579,12 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const geographyCountryFilter = document.getElementById("geography-country-filter");
     const geographyCityFilter = document.getElementById("geography-city-filter");
     const geographyExposureFilter = document.getElementById("geography-exposure-filter");
+    const geographyMapCanvas = document.getElementById("geography-map-canvas");
+    const geographyMapEmpty = document.getElementById("geography-map-empty");
+    const geographyMapDetail = document.getElementById("geography-map-detail");
+    const geographyMapZoomInButton = document.getElementById("geography-map-zoom-in");
+    const geographyMapZoomOutButton = document.getElementById("geography-map-zoom-out");
+    const geographyMapResetButton = document.getElementById("geography-map-reset");
     const geographyLocationBody = document.getElementById("geography-location-body");
     const geographyLocationEmpty = document.getElementById("geography-location-empty");
     const geographyUnmappedBody = document.getElementById("geography-unmapped-body");
@@ -1386,6 +1617,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const clientActivityRows = Array.isArray(data.client_activity_rows) ? data.client_activity_rows : [];
     const geographySummary = data.client_geography_summary || {{}};
     const geographyLocations = Array.isArray(data.client_geography_locations) ? data.client_geography_locations : [];
+    const geographyMapClients = Array.isArray(data.client_geography_map_clients) ? data.client_geography_map_clients : [];
     const geographyUnmappedClients = Array.isArray(data.client_geography_unmapped_clients) ? data.client_geography_unmapped_clients : [];
     const landedSummary = data.landed_stock_summary || {{}};
     const landedAgingRaw = Array.isArray(data.landed_stock_aging) ? data.landed_stock_aging : [];
@@ -1435,6 +1667,16 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       geographyCountry: "all",
       geographyCity: "all",
       geographyExposure: "all",
+      geographySelectedMarkerId: "",
+      geographyMapScale: 1,
+      geographyMapTranslateX: 0,
+      geographyMapTranslateY: 0,
+      geographyMapDragging: false,
+      geographyMapMoved: false,
+      geographyMapDragStartX: 0,
+      geographyMapDragStartY: 0,
+      geographyMapDragOriginX: 0,
+      geographyMapDragOriginY: 0,
       sortKey: "company_name",
       sortDirection: "asc",
       actionFilterText: "",
@@ -2208,6 +2450,290 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       }});
     }}
 
+    function currentGeographyMapClients() {{
+      return geographyMapClients.filter((row) => {{
+        if (state.geographyCountry !== "all" && String(row.country || "") !== state.geographyCountry) {{
+          return false;
+        }}
+        if (state.geographyCity !== "all" && String(row.city || "") !== state.geographyCity) {{
+          return false;
+        }}
+        if (state.geographyExposure === "exposed" && !Boolean(row.has_exposure)) {{
+          return false;
+        }}
+        if (state.geographyExposure === "no-exposure" && Boolean(row.has_exposure)) {{
+          return false;
+        }}
+        return true;
+      }});
+    }}
+
+    function geographyMapMarkerRadius(row, maxValue, maxBags) {{
+      if (Boolean(row.reserved_value_available) && Number(row.reserved_value_gbp || 0) > 0 && maxValue > 0) {{
+        return 5 + (Math.sqrt(Number(row.reserved_value_gbp || 0) / maxValue) * 13);
+      }}
+      if (Number(row.reserved_bags || 0) > 0 && maxBags > 0) {{
+        return 5 + (Math.sqrt(Number(row.reserved_bags || 0) / maxBags) * 9);
+      }}
+      return 5;
+    }}
+
+    const GEOGRAPHY_MAP_LAYOUT = Object.freeze({{ width: 880, height: 420, padding: 18, minScale: 1, maxScale: 6 }});
+    const GEOGRAPHY_MAP_ENVELOPE = Object.freeze({{ minLon: -11.5, maxLon: 30.5, minLat: 40.0, maxLat: 61.5 }});
+    const GEOGRAPHY_BASEMAP_SHAPES = Object.freeze([
+      {{
+        id: "great-britain",
+        points: [
+          [-5.85, 50.05], [-4.8, 50.18], [-3.95, 50.35], [-2.95, 50.52], [-1.55, 50.78], [-0.15, 50.9],
+          [1.15, 51.12], [1.55, 52.05], [1.22, 53.15], [0.52, 53.95], [-0.55, 54.62], [-1.45, 55.22],
+          [-2.7, 55.55], [-3.32, 56.18], [-4.55, 56.88], [-5.42, 57.72], [-5.2, 58.45], [-3.65, 58.92],
+          [-2.2, 58.28], [-1.45, 57.22], [-2.25, 56.2], [-3.4, 55.32], [-4.75, 54.82], [-5.55, 54.18],
+          [-4.88, 53.42], [-4.2, 52.72], [-4.85, 51.82], [-5.62, 50.92],
+        ],
+      }},
+      {{
+        id: "ireland",
+        points: [
+          [-10.7, 51.42], [-10.12, 52.18], [-9.42, 53.12], [-9.02, 54.08], [-8.3, 55.05], [-7.08, 55.32],
+          [-6.02, 54.92], [-5.62, 53.82], [-5.92, 52.72], [-6.48, 51.82], [-7.7, 51.32], [-9.15, 51.28],
+        ],
+      }},
+      {{
+        id: "iberia",
+        points: [
+          [-9.6, 43.74], [-8.22, 43.72], [-6.15, 43.62], [-3.22, 43.44], [-1.28, 43.42], [1.78, 42.92],
+          [3.25, 41.88], [2.6, 41.2], [1.18, 40.58], [-0.22, 39.62], [-0.72, 38.72], [-1.18, 37.72],
+          [-2.12, 36.88], [-4.1, 36.72], [-6.15, 36.96], [-7.28, 37.18], [-8.98, 38.62], [-9.42, 40.08],
+          [-9.22, 41.52], [-8.88, 42.18],
+        ],
+      }},
+      {{
+        id: "western-mainland",
+        points: [
+          [-5.22, 48.48], [-3.22, 47.72], [-1.42, 46.82], [0.82, 46.22], [2.52, 45.78], [4.62, 43.92],
+          [6.75, 43.65], [7.72, 44.62], [8.28, 45.6], [9.22, 46.28], [10.2, 46.78], [11.85, 47.52],
+          [13.72, 48.48], [15.52, 49.18], [17.92, 50.18], [18.82, 51.12], [15.88, 54.32], [12.28, 54.82],
+          [10.12, 53.88], [8.42, 53.62], [7.18, 53.18], [6.18, 52.68], [5.22, 52.12], [4.38, 51.72],
+          [3.18, 51.22], [2.02, 50.92], [1.12, 50.38], [0.22, 49.82], [-1.08, 49.58], [-1.9, 49.72],
+          [-3.32, 48.98],
+        ],
+      }},
+      {{
+        id: "italy",
+        points: [
+          [6.62, 45.12], [7.92, 44.82], [9.28, 44.62], [10.42, 43.88], [11.72, 43.12], [12.68, 42.08],
+          [13.58, 41.18], [14.82, 40.68], [16.28, 40.08], [17.28, 39.18], [17.98, 38.28], [16.72, 38.92],
+          [15.52, 39.6], [14.8, 40.82], [14.18, 41.88], [13.28, 42.82], [12.48, 43.68], [11.62, 44.45],
+          [10.22, 44.92], [8.72, 45.22], [7.18, 45.32],
+        ],
+      }},
+      {{
+        id: "balkans-romania",
+        points: [
+          [13.72, 45.62], [15.42, 45.92], [17.12, 46.12], [18.72, 46.08], [20.62, 46.22], [22.62, 46.08],
+          [24.32, 45.82], [26.42, 45.52], [28.48, 45.12], [29.52, 44.7], [28.72, 43.88], [27.18, 43.72],
+          [25.12, 43.62], [23.22, 43.72], [21.08, 43.9], [19.12, 44.18], [17.52, 44.6], [15.92, 45.02],
+        ],
+      }},
+    ]);
+    const GEOGRAPHY_BASEMAP_LABELS = Object.freeze([
+      {{ text: "United Kingdom", longitude: -2.25, latitude: 54.45 }},
+      {{ text: "Ireland", longitude: -8.1, latitude: 53.3 }},
+      {{ text: "France", longitude: 2.2, latitude: 47.15 }},
+      {{ text: "Benelux / Germany", longitude: 7.9, latitude: 51.15 }},
+      {{ text: "Iberia", longitude: -3.45, latitude: 40.82 }},
+      {{ text: "Italy", longitude: 12.35, latitude: 42.15 }},
+      {{ text: "Romania", longitude: 24.8, latitude: 45.05 }},
+    ]);
+
+    function clampValue(value, minValue, maxValue) {{
+      return Math.min(Math.max(value, minValue), maxValue);
+    }}
+
+    function geographyMapBounds(rows) {{
+      if (!rows.length) {{
+        return {{ ...GEOGRAPHY_MAP_ENVELOPE }};
+      }}
+      const longitudes = rows.map((row) => Number(row.longitude || 0));
+      const latitudes = rows.map((row) => Number(row.latitude || 0));
+      const lonSpan = clampValue((Math.max(...longitudes) - Math.min(...longitudes)) * 1.85, 16, GEOGRAPHY_MAP_ENVELOPE.maxLon - GEOGRAPHY_MAP_ENVELOPE.minLon);
+      const latSpan = clampValue((Math.max(...latitudes) - Math.min(...latitudes)) * 1.9, 10, GEOGRAPHY_MAP_ENVELOPE.maxLat - GEOGRAPHY_MAP_ENVELOPE.minLat);
+      const lonCenter = clampValue(
+        (Math.min(...longitudes) + Math.max(...longitudes)) / 2,
+        GEOGRAPHY_MAP_ENVELOPE.minLon + (lonSpan / 2),
+        GEOGRAPHY_MAP_ENVELOPE.maxLon - (lonSpan / 2),
+      );
+      const latCenter = clampValue(
+        (Math.min(...latitudes) + Math.max(...latitudes)) / 2,
+        GEOGRAPHY_MAP_ENVELOPE.minLat + (latSpan / 2),
+        GEOGRAPHY_MAP_ENVELOPE.maxLat - (latSpan / 2),
+      );
+      const minLon = lonCenter - (lonSpan / 2);
+      const maxLon = lonCenter + (lonSpan / 2);
+      const minLat = latCenter - (latSpan / 2);
+      const maxLat = latCenter + (latSpan / 2);
+      return {{ minLon, maxLon, minLat, maxLat }};
+    }}
+
+    function geographyProjectPoint(latitude, longitude, bounds, width, height, padding) {{
+      const usableWidth = width - (padding * 2);
+      const usableHeight = height - (padding * 2);
+      const x = padding + ((longitude - bounds.minLon) / Math.max(bounds.maxLon - bounds.minLon, 1)) * usableWidth;
+      const y = height - padding - ((latitude - bounds.minLat) / Math.max(bounds.maxLat - bounds.minLat, 1)) * usableHeight;
+      return {{ x, y }};
+    }}
+
+    function geographyPathFromPoints(points, bounds, width, height, padding) {{
+      return points.map((pair, index) => {{
+        const projected = geographyProjectPoint(Number(pair[1] || 0), Number(pair[0] || 0), bounds, width, height, padding);
+        return (index === 0 ? "M " : " L ") + formatNumber(projected.x, 2) + " " + formatNumber(projected.y, 2);
+      }}).join("") + " Z";
+    }}
+
+    function geographyBasemapMarkup(bounds, width, height, padding) {{
+      const land = GEOGRAPHY_BASEMAP_SHAPES.map((shape) => {{
+        return "<path class='geo-map-land' d='" + escapeHtml(geographyPathFromPoints(shape.points, bounds, width, height, padding)) + "'></path>";
+      }}).join("");
+      const labels = GEOGRAPHY_BASEMAP_LABELS.map((label) => {{
+        const point = geographyProjectPoint(label.latitude, label.longitude, bounds, width, height, padding);
+        return "<text class='geo-map-label' x='" + escapeHtml(formatNumber(point.x, 2)) + "' y='" + escapeHtml(formatNumber(point.y, 2)) + "' text-anchor='middle'>" + escapeHtml(label.text) + "</text>";
+      }}).join("");
+      const channelStart = geographyProjectPoint(49.8, -4.6, bounds, width, height, padding);
+      const channelEnd = geographyProjectPoint(50.9, 1.2, bounds, width, height, padding);
+      return land +
+        "<path class='geo-map-coastline' d='M " + escapeHtml(formatNumber(channelStart.x, 2)) + " " + escapeHtml(formatNumber(channelStart.y, 2)) + " L " + escapeHtml(formatNumber(channelEnd.x, 2)) + " " + escapeHtml(formatNumber(channelEnd.y, 2)) + "'></path>" +
+        labels;
+    }}
+
+    function geographyMapTransformString() {{
+      const centerX = GEOGRAPHY_MAP_LAYOUT.width / 2;
+      const centerY = GEOGRAPHY_MAP_LAYOUT.height / 2;
+      return "translate(" + formatNumber(centerX + state.geographyMapTranslateX, 2) + " " + formatNumber(centerY + state.geographyMapTranslateY, 2) + ") " +
+        "scale(" + formatNumber(state.geographyMapScale, 3) + ") " +
+        "translate(" + formatNumber(-centerX, 2) + " " + formatNumber(-centerY, 2) + ")";
+    }}
+
+    function clampGeographyMapView() {{
+      state.geographyMapScale = clampValue(state.geographyMapScale, GEOGRAPHY_MAP_LAYOUT.minScale, GEOGRAPHY_MAP_LAYOUT.maxScale);
+      const maxOffsetX = ((GEOGRAPHY_MAP_LAYOUT.width * (state.geographyMapScale - 1)) / 2) + 96;
+      const maxOffsetY = ((GEOGRAPHY_MAP_LAYOUT.height * (state.geographyMapScale - 1)) / 2) + 72;
+      state.geographyMapTranslateX = clampValue(state.geographyMapTranslateX, -maxOffsetX, maxOffsetX);
+      state.geographyMapTranslateY = clampValue(state.geographyMapTranslateY, -maxOffsetY, maxOffsetY);
+    }}
+
+    function applyGeographyMapTransform() {{
+      clampGeographyMapView();
+      const viewport = document.getElementById("geography-map-viewport");
+      if (viewport) {{
+        viewport.setAttribute("transform", geographyMapTransformString());
+      }}
+      geographyMapCanvas.classList.toggle("is-dragging", Boolean(state.geographyMapDragging));
+      geographyMapZoomInButton.disabled = state.geographyMapScale >= GEOGRAPHY_MAP_LAYOUT.maxScale;
+      geographyMapZoomOutButton.disabled = state.geographyMapScale <= GEOGRAPHY_MAP_LAYOUT.minScale;
+    }}
+
+    function resetGeographyMapView() {{
+      state.geographyMapScale = 1;
+      state.geographyMapTranslateX = 0;
+      state.geographyMapTranslateY = 0;
+      state.geographyMapDragging = false;
+      state.geographyMapMoved = false;
+      applyGeographyMapTransform();
+    }}
+
+    function adjustGeographyMapZoom(direction) {{
+      const zoomFactor = direction > 0 ? 1.25 : 0.8;
+      state.geographyMapScale = Number((state.geographyMapScale * zoomFactor).toFixed(3));
+      applyGeographyMapTransform();
+    }}
+
+    function renderGeographyMapDetail(row) {{
+      if (!row) {{
+        geographyMapDetail.innerHTML =
+          "<h3 class='geo-map-detail-title'>Client Detail</h3>" +
+          "<p class='geo-map-detail-copy'>Select a plotted client marker to inspect the resolved delivery geography and reservation footprint.</p>";
+        return;
+      }}
+      const reservationValue = row.reserved_value_available ? formatCompactMoney(row.reserved_value_gbp) : "Unavailable";
+      const primaryReference = String(row.primary_reference || "").trim() || "No current reservation reference";
+      geographyMapDetail.innerHTML =
+        "<h3 class='geo-map-detail-title'>" + escapeHtml(clientLabel(row)) + "</h3>" +
+        "<p class='geo-map-detail-copy'>" + escapeHtml([row.city, row.postcode, row.country].filter(Boolean).join(", ") || "Unknown delivery geography") + "</p>" +
+        "<div class='geo-map-stat-grid'>" +
+          "<div class='geo-map-stat'><span class='geo-map-stat-label'>Exposure</span><span class='geo-map-stat-value'>" + escapeHtml(row.has_exposure ? "With Current Exposure" : "Zero Exposure") + "</span></div>" +
+          "<div class='geo-map-stat'><span class='geo-map-stat-label'>Reservation Value</span><span class='geo-map-stat-value'>" + escapeHtml(reservationValue) + "</span></div>" +
+          "<div class='geo-map-stat'><span class='geo-map-stat-label'>Reserved Bags</span><span class='geo-map-stat-value'>" + escapeHtml(formatNumber(row.reserved_bags, 0)) + "</span></div>" +
+          "<div class='geo-map-stat'><span class='geo-map-stat-label'>Reserved KG</span><span class='geo-map-stat-value'>" + escapeHtml(formatKilos(row.reserved_kg)) + "</span></div>" +
+          "<div class='geo-map-stat'><span class='geo-map-stat-label'>Primary Reference</span><span class='geo-map-stat-value'>" + escapeHtml(primaryReference) + "</span></div>" +
+          "<div class='geo-map-stat'><span class='geo-map-stat-label'>Linked References</span><span class='geo-map-stat-value'>" + escapeHtml(formatNumber(row.distinct_reference_count || 0, 0)) + "</span></div>" +
+        "</div>";
+    }}
+
+    function renderGeographyMap() {{
+      const rows = currentGeographyMapClients();
+      geographyMapEmpty.hidden = rows.length > 0;
+      if (!rows.length) {{
+        geographyMapCanvas.innerHTML = "";
+        resetGeographyMapView();
+        renderGeographyMapDetail(null);
+        return;
+      }}
+
+      const activeMarkerId = rows.some((row) => String(row.marker_id || "") === state.geographySelectedMarkerId)
+        ? state.geographySelectedMarkerId
+        : String(rows[0].marker_id || "");
+      state.geographySelectedMarkerId = activeMarkerId;
+
+      const width = GEOGRAPHY_MAP_LAYOUT.width;
+      const height = GEOGRAPHY_MAP_LAYOUT.height;
+      const padding = GEOGRAPHY_MAP_LAYOUT.padding;
+      const bounds = geographyMapBounds(rows);
+      const maxValue = Math.max(...rows.filter((row) => Boolean(row.reserved_value_available)).map((row) => Number(row.reserved_value_gbp || 0)), 0);
+      const maxBags = Math.max(...rows.map((row) => Number(row.reserved_bags || 0)), 0);
+      const markerRows = [...rows].sort((left, right) => {{
+        if (String(left.marker_id || "") === activeMarkerId) {{
+          return 1;
+        }}
+        if (String(right.marker_id || "") === activeMarkerId) {{
+          return -1;
+        }}
+        const exposureDiff = Number(Boolean(left.has_exposure)) - Number(Boolean(right.has_exposure));
+        if (exposureDiff !== 0) {{
+          return exposureDiff;
+        }}
+        const valueDiff = Number(left.reserved_value_gbp || 0) - Number(right.reserved_value_gbp || 0);
+        if (valueDiff !== 0) {{
+          return valueDiff;
+        }}
+        return String(left.company_name || "").localeCompare(String(right.company_name || ""), "en", {{ sensitivity: "base" }});
+      }});
+
+      geographyMapCanvas.innerHTML =
+        "<svg class='geo-map-svg' viewBox='0 0 " + width + " " + height + "' role='img' aria-label='Resolved client geography map'>" +
+          "<rect class='geo-map-sea' x='0' y='0' width='" + width + "' height='" + height + "' rx='18' ry='18'></rect>" +
+          "<g id='geography-map-viewport' transform='" + escapeHtml(geographyMapTransformString()) + "'>" +
+            geographyBasemapMarkup(bounds, width, height, padding) +
+            markerRows.map((row) => {{
+              const point = geographyProjectPoint(Number(row.latitude || 0), Number(row.longitude || 0), bounds, width, height, padding);
+              const radius = geographyMapMarkerRadius(row, maxValue, maxBags);
+              const fill = row.has_exposure ? "#215376" : "#a96a3e";
+              const classes = [
+                "geo-map-point",
+                String(row.marker_id || "") === activeMarkerId ? "is-active" : "is-dimmed",
+              ].join(" ");
+              return "<circle class='" + escapeHtml(classes) + "' data-marker-id='" + escapeHtml(String(row.marker_id || "")) + "' cx='" + escapeHtml(formatNumber(point.x, 2)) + "' cy='" + escapeHtml(formatNumber(point.y, 2)) + "' r='" + escapeHtml(formatNumber(radius, 2)) + "' fill='" + escapeHtml(fill) + "'>" +
+                "<title>" + escapeHtml(clientLabel(row) + " | " + (row.location_label || "Unknown")) + "</title>" +
+              "</circle>";
+            }}).join("") +
+          "</g>" +
+          "<rect class='geo-map-frame' x='0.6' y='0.6' width='" + (width - 1.2) + "' height='" + (height - 1.2) + "' rx='18' ry='18'></rect>" +
+        "</svg>";
+
+      applyGeographyMapTransform();
+      const activeRow = rows.find((row) => String(row.marker_id || "") === activeMarkerId) || rows[0];
+      renderGeographyMapDetail(activeRow);
+    }}
+
     function aggregateGeographyChartRows(rows, groupKey, labelBuilder) {{
       const grouped = new Map();
       for (const row of rows) {{
@@ -2757,6 +3283,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       renderClientTable();
       renderGeographyFilters();
       renderGeographyKpis();
+      renderGeographyMap();
       renderGeographyCharts();
       renderGeographyTable();
       renderGeographyUnmappedTable();
@@ -2824,15 +3351,80 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     geographyCountryFilter.addEventListener("change", () => {{
       state.geographyCountry = geographyCountryFilter.value;
       state.geographyCity = "all";
+      resetGeographyMapView();
       render();
     }});
     geographyCityFilter.addEventListener("change", () => {{
       state.geographyCity = geographyCityFilter.value;
+      resetGeographyMapView();
       render();
     }});
     geographyExposureFilter.addEventListener("change", () => {{
       state.geographyExposure = geographyExposureFilter.value;
+      resetGeographyMapView();
       render();
+    }});
+    geographyMapZoomInButton.addEventListener("click", () => {{
+      adjustGeographyMapZoom(1);
+    }});
+    geographyMapZoomOutButton.addEventListener("click", () => {{
+      adjustGeographyMapZoom(-1);
+    }});
+    geographyMapResetButton.addEventListener("click", () => {{
+      resetGeographyMapView();
+    }});
+    geographyMapCanvas.addEventListener("pointerdown", (event) => {{
+      if (!event.target.closest("svg")) {{
+        return;
+      }}
+      state.geographyMapDragging = true;
+      state.geographyMapMoved = false;
+      state.geographyMapDragStartX = event.clientX;
+      state.geographyMapDragStartY = event.clientY;
+      state.geographyMapDragOriginX = state.geographyMapTranslateX;
+      state.geographyMapDragOriginY = state.geographyMapTranslateY;
+      geographyMapCanvas.setPointerCapture(event.pointerId);
+      applyGeographyMapTransform();
+    }});
+    geographyMapCanvas.addEventListener("pointermove", (event) => {{
+      if (!state.geographyMapDragging) {{
+        return;
+      }}
+      const deltaX = event.clientX - state.geographyMapDragStartX;
+      const deltaY = event.clientY - state.geographyMapDragStartY;
+      if (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3) {{
+        state.geographyMapMoved = true;
+      }}
+      state.geographyMapTranslateX = state.geographyMapDragOriginX + deltaX;
+      state.geographyMapTranslateY = state.geographyMapDragOriginY + deltaY;
+      applyGeographyMapTransform();
+    }});
+    geographyMapCanvas.addEventListener("pointerup", (event) => {{
+      if (!state.geographyMapDragging) {{
+        return;
+      }}
+      state.geographyMapDragging = false;
+      geographyMapCanvas.releasePointerCapture(event.pointerId);
+      applyGeographyMapTransform();
+    }});
+    geographyMapCanvas.addEventListener("pointercancel", (event) => {{
+      state.geographyMapDragging = false;
+      if (geographyMapCanvas.hasPointerCapture(event.pointerId)) {{
+        geographyMapCanvas.releasePointerCapture(event.pointerId);
+      }}
+      applyGeographyMapTransform();
+    }});
+    geographyMapCanvas.addEventListener("click", (event) => {{
+      if (state.geographyMapMoved) {{
+        state.geographyMapMoved = false;
+        return;
+      }}
+      const marker = event.target.closest("[data-marker-id]");
+      if (!marker) {{
+        return;
+      }}
+      state.geographySelectedMarkerId = String(marker.getAttribute("data-marker-id") || "");
+      renderGeographyMap();
     }});
     landedTableFilter.addEventListener("input", () => {{
       state.landedFilterText = landedTableFilter.value;

@@ -1,0 +1,220 @@
+[
+  {
+    "country": "France",
+    "city": "Paris",
+    "postcode": "75001",
+    "latitude": 48.8647,
+    "longitude": 2.3344
+  },
+  {
+    "country": "France",
+    "city": "Paris",
+    "postcode": "75002",
+    "latitude": 48.8686,
+    "longitude": 2.3444
+  },
+  {
+    "country": "Italy",
+    "city": "Milan",
+    "postcode": "20121",
+    "latitude": 45.4742,
+    "longitude": 9.1943
+  },
+  {
+    "country": "Netherlands",
+    "city": "Amsterdam",
+    "postcode": "1012 JS",
+    "latitude": 52.3731,
+    "longitude": 4.8922
+  },
+  {
+    "country": "Netherlands",
+    "city": "Rotterdam",
+    "postcode": "3011 AA",
+    "latitude": 51.9225,
+    "longitude": 4.4792
+  },
+  {
+    "country": "Romania",
+    "city": "Bucharest",
+    "postcode": "030167",
+    "latitude": 44.4328,
+    "longitude": 26.1043
+  },
+  {
+    "country": "Spain",
+    "city": "Barcelona",
+    "postcode": "08007",
+    "latitude": 41.3902,
+    "longitude": 2.1649
+  },
+  {
+    "country": "Spain",
+    "city": "Madrid",
+    "postcode": "",
+    "postcode_independent": true,
+    "latitude": 40.4168,
+    "longitude": -3.7038
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Belfast",
+    "postcode": "BT1 5GS",
+    "latitude": 54.5973,
+    "longitude": -5.9301
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Birmingham",
+    "postcode": "B1 1TB",
+    "latitude": 52.4786,
+    "longitude": -1.9085
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Bristol",
+    "postcode": "BS1 4DJ",
+    "latitude": 51.4538,
+    "longitude": -2.5916
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Bristol",
+    "postcode": "BS1 5AH",
+    "latitude": 51.4514,
+    "longitude": -2.5982
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Cambridge",
+    "postcode": "CB2 3AR",
+    "latitude": 52.2053,
+    "longitude": 0.1218
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Cardiff",
+    "postcode": "CF10 1EP",
+    "latitude": 51.4816,
+    "longitude": -3.1791
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Coventry",
+    "postcode": "CV1 2FL",
+    "latitude": 52.4081,
+    "longitude": -1.5106
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Edinburgh",
+    "postcode": "EH2 3AH",
+    "latitude": 55.9539,
+    "longitude": -3.1912
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Exeter",
+    "postcode": "EX1 1RS",
+    "latitude": 50.7224,
+    "longitude": -3.5339
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Glasgow",
+    "postcode": "G2 5QR",
+    "latitude": 55.8607,
+    "longitude": -4.2577
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Leeds",
+    "postcode": "LS1 4DY",
+    "latitude": 53.7997,
+    "longitude": -1.5492
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Leicester",
+    "postcode": "LE1 5YY",
+    "latitude": 52.6369,
+    "longitude": -1.1398
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Liverpool",
+    "postcode": "L2 3AB",
+    "latitude": 53.4078,
+    "longitude": -2.9916
+  },
+  {
+    "country": "United Kingdom",
+    "city": "London",
+    "postcode": "SE1 7AA",
+    "latitude": 51.5045,
+    "longitude": -0.0865
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Manchester",
+    "postcode": "M1 4BT",
+    "latitude": 53.4808,
+    "longitude": -2.2426
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Newcastle upon Tyne",
+    "postcode": "NE1 4ST",
+    "latitude": 54.97,
+    "longitude": -1.6125
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Norwich",
+    "postcode": "NR2 1TF",
+    "latitude": 52.6309,
+    "longitude": 1.2974
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Nottingham",
+    "postcode": "NG1 5FS",
+    "latitude": 52.9548,
+    "longitude": -1.1581
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Oxford",
+    "postcode": "OX1 1BP",
+    "latitude": 51.752,
+    "longitude": -1.2577
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Plymouth",
+    "postcode": "PL1 2AA",
+    "latitude": 50.3714,
+    "longitude": -4.1421
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Sheffield",
+    "postcode": "S1 2HE",
+    "latitude": 53.3808,
+    "longitude": -1.4701
+  },
+  {
+    "country": "United Kingdom",
+    "city": "Southampton",
+    "postcode": "SO14 7DZ",
+    "latitude": 50.9097,
+    "longitude": -1.4044
+  },
+  {
+    "country": "United Kingdom",
+    "city": "York",
+    "postcode": "YO1 7HB",
+    "latitude": 53.959,
+    "longitude": -1.0815
+  }
+]

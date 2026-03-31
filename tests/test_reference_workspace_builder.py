@@ -1402,8 +1402,11 @@ def test_builder_builds_client_geography_with_deterministic_duplicate_and_unmapp
         "duplicate_client_rows": 2,
         "matched_client_rows": 3,
         "unmatched_client_rows": 1,
-        "map_included": False,
-        "map_status": "Plotted map deferred: no deterministic local coordinate cache is included in v1.",
+        "resolved_map_clients": 2,
+        "unresolved_map_clients": 0,
+        "coordinate_conflicts": 0,
+        "map_included": True,
+        "map_status": "Plotting 2 deterministically resolved client markers; 0 mapped clients remain unplotted.",
     }
     assert dataset["client_geography_locations"] == [
         {
@@ -1453,6 +1456,46 @@ def test_builder_builds_client_geography_with_deterministic_duplicate_and_unmapp
             "reserved_bags": 1.0,
             "reserved_kg": 15.0,
             "reason": "Missing client_id on activity rows",
+        },
+    ]
+    assert dataset["client_geography_map_clients"] == [
+        {
+            "marker_id": "c-1",
+            "company_name": "Alpha Roasters",
+            "client_id": "c-1",
+            "country": "United Kingdom",
+            "city": "Bristol",
+            "postcode": "BS1 4DJ",
+            "location_label": "Bristol, BS1 4DJ, United Kingdom",
+            "latitude": 51.4538,
+            "longitude": -2.5916,
+            "coordinate_match_level": "country_city_postcode",
+            "reserved_value_gbp": 600.0,
+            "reserved_value_available": True,
+            "reserved_bags": 2.0,
+            "reserved_kg": 60.0,
+            "has_exposure": True,
+            "distinct_reference_count": 1,
+            "primary_reference": "REF-1",
+        },
+        {
+            "marker_id": "c-2",
+            "company_name": "Bravo Coffee",
+            "client_id": "c-2",
+            "country": "France",
+            "city": "Paris",
+            "postcode": "75001",
+            "location_label": "Paris, 75001, France",
+            "latitude": 48.8647,
+            "longitude": 2.3344,
+            "coordinate_match_level": "country_city_postcode",
+            "reserved_value_gbp": 240.0,
+            "reserved_value_available": True,
+            "reserved_bags": 1.0,
+            "reserved_kg": 20.0,
+            "has_exposure": True,
+            "distinct_reference_count": 1,
+            "primary_reference": "REF-2",
         },
     ]
 
@@ -1531,8 +1574,11 @@ def test_builder_includes_zero_exposure_international_clients_from_clients_maste
         "duplicate_client_rows": 0,
         "matched_client_rows": 2,
         "unmatched_client_rows": 0,
-        "map_included": False,
-        "map_status": "Plotted map deferred: no deterministic local coordinate cache is included in v1.",
+        "resolved_map_clients": 5,
+        "unresolved_map_clients": 0,
+        "coordinate_conflicts": 0,
+        "map_included": True,
+        "map_status": "Plotting 5 deterministically resolved client markers; 0 mapped clients remain unplotted.",
     }
     assert dataset["client_geography_locations"] == [
         {
@@ -1623,6 +1669,8 @@ def test_builder_includes_zero_exposure_international_clients_from_clients_maste
             "reason": "Missing delivery geography on clients master row",
         }
     ]
+    assert [row["marker_id"] for row in dataset["client_geography_map_clients"]] == ["c-1", "c-5", "c-3", "c-4", "c-2"]
+    assert next(row for row in dataset["client_geography_map_clients"] if row["marker_id"] == "c-3")["coordinate_match_level"] == "country_city"
 
 
 def test_builder_keeps_clients_master_geography_when_no_reservations_are_present() -> None:
@@ -1663,12 +1711,16 @@ def test_builder_keeps_clients_master_geography_when_no_reservations_are_present
         "duplicate_client_rows": 0,
         "matched_client_rows": 0,
         "unmatched_client_rows": 0,
-        "map_included": False,
-        "map_status": "Plotted map deferred: no deterministic local coordinate cache is included in v1.",
+        "resolved_map_clients": 3,
+        "unresolved_map_clients": 0,
+        "coordinate_conflicts": 0,
+        "map_included": True,
+        "map_status": "Plotting 3 deterministically resolved client markers; 0 mapped clients remain unplotted.",
     }
     assert [row["postcode"] for row in dataset["client_geography_locations"]] == ["75002", "20121", "28013"]
     assert all(row["reserved_value_gbp"] == 0.0 for row in dataset["client_geography_locations"])
     assert all(row["exposed_client_count"] == 0 for row in dataset["client_geography_locations"])
+    assert [row["marker_id"] for row in dataset["client_geography_map_clients"]] == ["c-2", "c-3", "c-1"]
     assert dataset["client_geography_unmapped_clients"] == [
         {
             "company_name": "No Map Coffee",
@@ -1678,5 +1730,126 @@ def test_builder_keeps_clients_master_geography_when_no_reservations_are_present
             "reserved_bags": 0.0,
             "reserved_kg": 0.0,
             "reason": "Missing delivery geography on clients master row",
+        }
+    ]
+
+
+def test_builder_keeps_unresolved_delivery_geography_clients_in_table_but_off_map() -> None:
+    activity = pd.DataFrame(
+        [
+            {
+                "id_request": "r-1",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-10",
+                "approval_date": "2026-03-11",
+                "amendment_date": "",
+                "client_id": "c-1",
+                "company_name": "Resolvable Coffee",
+                "product_id": "p-1",
+                "product_reference": "REF-1",
+                "bags": 2,
+                "bags_remaining": 2,
+                "bag_size_kg": 30,
+                "price_per_kg": 10.0,
+            },
+            {
+                "id_request": "r-2",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-10",
+                "approval_date": "2026-03-11",
+                "amendment_date": "",
+                "client_id": "c-2",
+                "company_name": "Unresolved Coffee",
+                "product_id": "p-2",
+                "product_reference": "REF-2",
+                "bags": 1,
+                "bags_remaining": 1,
+                "bag_size_kg": 20,
+                "price_per_kg": 12.0,
+            },
+        ]
+    )
+    products = pd.DataFrame(
+        [
+            {"product_id": "p-1", "product_reference": "REF-1", "landing_status": "incoming", "landing_date": "2026-03-20", "warehouse": "London", "bags": 2, "bag_size_kg": 30, "bags_available": 0},
+            {"product_id": "p-2", "product_reference": "REF-2", "landing_status": "incoming", "landing_date": "2026-03-21", "warehouse": "London", "bags": 1, "bag_size_kg": 20, "bags_available": 0},
+        ]
+    )
+    clients = pd.DataFrame(
+        [
+            {"client_id": "c-1", "company_name": "Resolvable Coffee", "country": "United Kingdom", "city": "Bristol", "postcode": "BS1 4DJ"},
+            {"client_id": "c-2", "company_name": "Unresolved Coffee", "country": "Germany", "city": "Berlin", "postcode": "10115"},
+        ]
+    )
+
+    dataset = build_reference_workspace_dataset(activity, products, clients)
+
+    assert [row["postcode"] for row in dataset["client_geography_locations"]] == ["BS1 4DJ", "10115"]
+    assert [row["marker_id"] for row in dataset["client_geography_map_clients"]] == ["c-1"]
+    assert dataset["client_geography_unmapped_clients"] == []
+    assert dataset["client_geography_summary"]["resolved_map_clients"] == 1
+    assert dataset["client_geography_summary"]["unresolved_map_clients"] == 1
+
+
+def test_builder_resolves_checked_in_exact_postcode_coordinates_for_current_client_footprint() -> None:
+    activity = pd.DataFrame(
+        [
+            {
+                "id_request": "r-1",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-10",
+                "approval_date": "2026-03-11",
+                "amendment_date": "",
+                "client_id": "c-1",
+                "company_name": "South Bank Coffee",
+                "product_id": "p-1",
+                "product_reference": "REF-1",
+                "bags": 2,
+                "bags_remaining": 2,
+                "bag_size_kg": 30,
+                "price_per_kg": 10.0,
+            },
+        ]
+    )
+    products = pd.DataFrame(
+        [
+            {"product_id": "p-1", "product_reference": "REF-1", "landing_status": "incoming", "landing_date": "2026-03-20", "warehouse": "London", "bags": 2, "bag_size_kg": 30, "bags_available": 0},
+        ]
+    )
+    clients = pd.DataFrame(
+        [
+            {"client_id": "c-1", "company_name": "South Bank Coffee", "country": "United Kingdom", "city": "London", "postcode": "SE1 7AA"},
+        ]
+    )
+
+    dataset = build_reference_workspace_dataset(activity, products, clients)
+
+    assert dataset["client_geography_summary"]["resolved_map_clients"] == 1
+    assert dataset["client_geography_summary"]["unresolved_map_clients"] == 0
+    assert dataset["client_geography_map_clients"] == [
+        {
+            "marker_id": "c-1",
+            "company_name": "South Bank Coffee",
+            "client_id": "c-1",
+            "country": "United Kingdom",
+            "city": "London",
+            "postcode": "SE1 7AA",
+            "location_label": "London, SE1 7AA, United Kingdom",
+            "latitude": 51.5045,
+            "longitude": -0.0865,
+            "coordinate_match_level": "country_city_postcode",
+            "reserved_value_gbp": 600.0,
+            "reserved_value_available": True,
+            "reserved_bags": 2.0,
+            "reserved_kg": 60.0,
+            "has_exposure": True,
+            "distinct_reference_count": 1,
+            "primary_reference": "REF-1",
         }
     ]
