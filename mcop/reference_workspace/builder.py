@@ -883,23 +883,72 @@ def _build_client_geography(
     latest: pd.DataFrame,
     clients: pd.DataFrame,
 ) -> tuple[dict, list[dict], list[dict], list[dict], list[dict]]:
-    client_rows = _build_client_intelligence_rows(latest)
     empty_summary = _empty_client_geography_summary()
-    if client_rows.empty:
-        return empty_summary, [], [], [], []
-
-    _client_summary, detail_rows, _top_clients, _concentration_rows = _build_client_intelligence_from_rows(client_rows)
     clients_master, metadata = _prepare_clients_master(clients)
     clients_lookup = {
         _clean_text(row["client_id"]): row
         for _, row in clients_master.iterrows()
         if _clean_text(row.get("client_id"))
     }
+    client_rows = _build_client_intelligence_rows(latest)
+    exposure_rows_by_client_id: dict[str, dict] = {}
+    if not client_rows.empty:
+        _client_summary, detail_rows, _top_clients, _concentration_rows = _build_client_intelligence_from_rows(client_rows)
+        exposure_rows_by_client_id = {
+            _clean_text(row["client_id"]): row
+            for row in detail_rows
+            if _clean_text(row.get("client_id"))
+        }
+    else:
+        detail_rows = []
+
+    if clients_master.empty and not detail_rows:
+        return empty_summary, [], [], [], []
 
     mapped_records: list[dict] = []
     unmapped_records: list[dict] = []
-    matched_client_rows = 0
+    matched_client_rows = int(len(exposure_rows_by_client_id))
     unmatched_client_rows = 0
+
+    for _, client_master in clients_master.iterrows():
+        client_id = _clean_text(client_master.get("client_id"))
+        company_name = _clean_text(client_master.get("company_name"))
+        exposure = exposure_rows_by_client_id.get(client_id)
+        reserved_value_gbp = round(float(exposure["reserved_value_gbp"]), 2) if exposure is not None else 0.0
+        reserved_value_available = bool(exposure["reserved_value_available"]) if exposure is not None else True
+        reserved_bags = round(float(exposure["reserved_bags"]), 4) if exposure is not None else 0.0
+        reserved_kg = round(float(exposure["reserved_kg"]), 4) if exposure is not None else 0.0
+        country = _clean_text(client_master.get("country"))
+        city = _clean_text(client_master.get("city"))
+        postcode = _clean_text(client_master.get("postcode"))
+        if not any((country, city, postcode)):
+            unmapped_records.append(
+                {
+                    "company_name": company_name,
+                    "client_id": client_id,
+                    "reserved_value_gbp": reserved_value_gbp,
+                    "reserved_value_available": reserved_value_available,
+                    "reserved_bags": reserved_bags,
+                    "reserved_kg": reserved_kg,
+                    "reason": "Missing delivery geography on clients master row",
+                }
+            )
+            continue
+
+        mapped_records.append(
+            {
+                "company_name": company_name,
+                "client_id": client_id,
+                "country": country,
+                "city": city,
+                "postcode": postcode,
+                "reserved_value_gbp": reserved_value_gbp,
+                "reserved_value_available": reserved_value_available,
+                "reserved_bags": reserved_bags,
+                "reserved_kg": reserved_kg,
+                "has_exposure": bool(reserved_bags > 0),
+            }
+        )
 
     for row in detail_rows:
         client_id = _clean_text(row["client_id"])
@@ -918,9 +967,7 @@ def _build_client_geography(
                 }
             )
             continue
-
-        client_master = clients_lookup.get(client_id)
-        if client_master is None:
+        if client_id not in clients_lookup:
             unmatched_client_rows += 1
             unmapped_records.append(
                 {
@@ -933,40 +980,6 @@ def _build_client_geography(
                     "reason": "No matching clients master row for client_id",
                 }
             )
-            continue
-
-        matched_client_rows += 1
-        country = _clean_text(client_master.get("country"))
-        city = _clean_text(client_master.get("city"))
-        postcode = _clean_text(client_master.get("postcode"))
-        if not any((country, city, postcode)):
-            unmapped_records.append(
-                {
-                    "company_name": company_name,
-                    "client_id": client_id,
-                    "reserved_value_gbp": round(float(row["reserved_value_gbp"]), 2),
-                    "reserved_value_available": bool(row["reserved_value_available"]),
-                    "reserved_bags": round(float(row["reserved_bags"]), 4),
-                    "reserved_kg": round(float(row["reserved_kg"]), 4),
-                    "reason": "Missing delivery geography on clients master row",
-                }
-            )
-            continue
-
-        mapped_records.append(
-            {
-                "company_name": company_name,
-                "client_id": client_id,
-                "country": country,
-                "city": city,
-                "postcode": postcode,
-                "reserved_value_gbp": round(float(row["reserved_value_gbp"]), 2),
-                "reserved_value_available": bool(row["reserved_value_available"]),
-                "reserved_bags": round(float(row["reserved_bags"]), 4),
-                "reserved_kg": round(float(row["reserved_kg"]), 4),
-                "has_exposure": bool(float(row["reserved_bags"]) > 0),
-            }
-        )
 
     mapped_clients = len(mapped_records)
     unmapped_clients = len(unmapped_records)
@@ -1588,6 +1601,18 @@ def build_reference_workspace_dataset(
         empty_dataset["landed_stock_warehouse_exposure"] = landed_warehouse
         empty_dataset["landed_stock_reference_exposure"] = landed_reference
         empty_dataset["landed_stock_details"] = landed_details
+        (
+            client_geography_summary,
+            client_geography_locations,
+            client_geography_top_countries,
+            client_geography_top_cities,
+            client_geography_unmapped_clients,
+        ) = _build_client_geography(pd.DataFrame(), clients_frame)
+        empty_dataset["client_geography_summary"] = client_geography_summary
+        empty_dataset["client_geography_locations"] = client_geography_locations
+        empty_dataset["client_geography_top_countries"] = client_geography_top_countries
+        empty_dataset["client_geography_top_cities"] = client_geography_top_cities
+        empty_dataset["client_geography_unmapped_clients"] = client_geography_unmapped_clients
         return empty_dataset
 
     reservations["request_type"] = (
@@ -1646,6 +1671,18 @@ def build_reference_workspace_dataset(
         empty_dataset["landed_stock_warehouse_exposure"] = landed_warehouse
         empty_dataset["landed_stock_reference_exposure"] = landed_reference
         empty_dataset["landed_stock_details"] = landed_details
+        (
+            client_geography_summary,
+            client_geography_locations,
+            client_geography_top_countries,
+            client_geography_top_cities,
+            client_geography_unmapped_clients,
+        ) = _build_client_geography(pd.DataFrame(), clients_frame)
+        empty_dataset["client_geography_summary"] = client_geography_summary
+        empty_dataset["client_geography_locations"] = client_geography_locations
+        empty_dataset["client_geography_top_countries"] = client_geography_top_countries
+        empty_dataset["client_geography_top_cities"] = client_geography_top_cities
+        empty_dataset["client_geography_unmapped_clients"] = client_geography_unmapped_clients
         return empty_dataset
 
     reservations["reservation_key"] = reservations["id_booking"].where(
