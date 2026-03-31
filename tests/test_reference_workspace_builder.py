@@ -1286,3 +1286,172 @@ def test_builder_splits_landed_not_approved_from_landed_not_released() -> None:
     assert queue["details"][0]["request_status"] == "Created"
     assert queue["details"][1]["action_bucket"] == "Landed Not Released"
     assert queue["details"][1]["action_priority"] == "P4 Landed Not Released"
+
+
+def test_builder_builds_client_geography_with_deterministic_duplicate_and_unmapped_handling() -> None:
+    activity = pd.DataFrame(
+        [
+            {
+                "id_request": "r-1",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-10",
+                "approval_date": "2026-03-11",
+                "amendment_date": "",
+                "client_id": "c-1",
+                "company_name": "Alpha Roasters",
+                "product_id": "p-1",
+                "product_reference": "REF-1",
+                "bags": 3,
+                "bags_remaining": 2,
+                "bag_size_kg": 30,
+                "price_per_kg": 10.0,
+                "landing_status": "incoming",
+                "landing_date": "2026-03-20",
+                "warehouse": "London",
+            },
+            {
+                "id_request": "r-2",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-10",
+                "approval_date": "2026-03-11",
+                "amendment_date": "",
+                "client_id": "c-2",
+                "company_name": "Bravo Coffee",
+                "product_id": "p-2",
+                "product_reference": "REF-2",
+                "bags": 2,
+                "bags_remaining": 1,
+                "bag_size_kg": 20,
+                "price_per_kg": 12.0,
+                "landing_status": "landed",
+                "landing_date": "2026-03-07",
+                "warehouse": "Bristol",
+            },
+            {
+                "id_request": "r-3",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-10",
+                "approval_date": "2026-03-11",
+                "amendment_date": "",
+                "client_id": "c-3",
+                "company_name": "Cinder Roastery",
+                "product_id": "p-3",
+                "product_reference": "REF-3",
+                "bags": 1,
+                "bags_remaining": 1,
+                "bag_size_kg": 25,
+                "price_per_kg": 11.0,
+                "landing_status": "incoming",
+                "landing_date": "2026-03-22",
+                "warehouse": "Antwerp",
+            },
+            {
+                "id_request": "r-4",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-10",
+                "approval_date": "2026-03-11",
+                "amendment_date": "",
+                "client_id": "",
+                "company_name": "No ID Coffee",
+                "product_id": "p-4",
+                "product_reference": "REF-4",
+                "bags": 1,
+                "bags_remaining": 1,
+                "bag_size_kg": 15,
+                "price_per_kg": 9.0,
+                "landing_status": "incoming",
+                "landing_date": "2026-03-24",
+                "warehouse": "London",
+            },
+        ]
+    )
+    products = pd.DataFrame(
+        [
+            {"product_id": "p-1", "product_reference": "REF-1", "landing_status": "incoming", "landing_date": "2026-03-20", "warehouse": "London", "bags": 3, "bag_size_kg": 30, "bags_available": 1},
+            {"product_id": "p-2", "product_reference": "REF-2", "landing_status": "landed", "landing_date": "2026-03-07", "warehouse": "Bristol", "bags": 2, "bag_size_kg": 20, "bags_available": 1},
+            {"product_id": "p-3", "product_reference": "REF-3", "landing_status": "incoming", "landing_date": "2026-03-22", "warehouse": "Antwerp", "bags": 1, "bag_size_kg": 25, "bags_available": 0},
+            {"product_id": "p-4", "product_reference": "REF-4", "landing_status": "incoming", "landing_date": "2026-03-24", "warehouse": "London", "bags": 1, "bag_size_kg": 15, "bags_available": 0},
+        ]
+    )
+    clients = pd.DataFrame(
+        [
+            {"client_id": "c-1", "company_name": "Alpha Roasters", "country": "United Kingdom", "city": "Bristol", "postcode": ""},
+            {"client_id": "c-1", "company_name": "Alpha Roasters", "country": "United Kingdom", "city": "Bristol", "postcode": "BS1 4DJ"},
+            {"client_id": "c-2", "company_name": "Bravo Coffee", "country": "France", "city": "Paris", "postcode": "75001"},
+            {"client_id": "c-3", "company_name": "Cinder Roastery", "country": "", "city": "", "postcode": ""},
+        ]
+    )
+
+    dataset = build_reference_workspace_dataset(activity, products, clients)
+
+    assert dataset["client_geography_summary"] == {
+        "mapped_clients": 2,
+        "unmapped_clients": 2,
+        "countries_covered": 2,
+        "cities_covered": 2,
+        "exposed_client_locations": 2,
+        "duplicate_client_ids": 1,
+        "duplicate_client_rows": 2,
+        "matched_client_rows": 3,
+        "unmatched_client_rows": 1,
+        "map_included": False,
+        "map_status": "Plotted map deferred: no deterministic local coordinate cache is included in v1.",
+    }
+    assert dataset["client_geography_locations"] == [
+        {
+            "country": "United Kingdom",
+            "city": "Bristol",
+            "postcode": "BS1 4DJ",
+            "location_label": "Bristol, BS1 4DJ, United Kingdom",
+            "client_count": 1,
+            "exposed_client_count": 1,
+            "reserved_bags": 2.0,
+            "reserved_kg": 60.0,
+            "reserved_value_gbp": 600.0,
+            "reserved_value_available": True,
+            "top_client_company_name": "Alpha Roasters",
+            "top_client_id": "c-1",
+        },
+        {
+            "country": "France",
+            "city": "Paris",
+            "postcode": "75001",
+            "location_label": "Paris, 75001, France",
+            "client_count": 1,
+            "exposed_client_count": 1,
+            "reserved_bags": 1.0,
+            "reserved_kg": 20.0,
+            "reserved_value_gbp": 240.0,
+            "reserved_value_available": True,
+            "top_client_company_name": "Bravo Coffee",
+            "top_client_id": "c-2",
+        },
+    ]
+    assert dataset["client_geography_unmapped_clients"] == [
+        {
+            "company_name": "Cinder Roastery",
+            "client_id": "c-3",
+            "reserved_value_gbp": 275.0,
+            "reserved_value_available": True,
+            "reserved_bags": 1.0,
+            "reserved_kg": 25.0,
+            "reason": "Missing delivery geography on clients master row",
+        },
+        {
+            "company_name": "No ID Coffee",
+            "client_id": "",
+            "reserved_value_gbp": 135.0,
+            "reserved_value_available": True,
+            "reserved_bags": 1.0,
+            "reserved_kg": 15.0,
+            "reason": "Missing client_id on activity rows",
+        },
+    ]

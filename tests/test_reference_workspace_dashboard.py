@@ -358,11 +358,13 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="tab-reservation"' in first
     assert 'id="tab-product"' in first
     assert 'id="tab-client"' in first
+    assert 'id="tab-geography"' in first
     assert 'id="tab-landed"' in first
     assert 'id="tab-action"' in first
     assert 'data-tab="reservation"' in first
     assert 'data-tab="product"' in first
     assert 'data-tab="client"' in first
+    assert 'data-tab="geography"' in first
     assert 'data-tab="landed"' in first
     assert 'data-tab="action"' in first
     assert 'class="module-nav-button is-active"' in first
@@ -370,11 +372,13 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="reservation-view"' in first
     assert 'id="product-view" hidden' in first
     assert 'id="client-view" hidden' in first
+    assert 'id="geography-view" hidden' in first
     assert 'id="landed-view" hidden' in first
     assert 'id="action-view" hidden' in first
     assert "Reservation Intelligence" in first
     assert "Product Reference Intelligence" in first
     assert "Client Intelligence" in first
+    assert "Client Geography" in first
     assert "Landed Stock Intelligence" in first
     assert "Reservation Risk / Action Queue" in first
     assert "Reservation activity view, excluding rejected reservations." in first
@@ -560,7 +564,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'const landedDetails = Array.isArray(data.landed_stock_details) ? data.landed_stock_details : [];' in first
     assert 'canonicalAgingBucket(row.aging_bucket) !== state.landedAgingBucket' in first
     assert 'renderBarChart("landed-aging-chart", "landed-aging-empty", landedAging, "aging_bucket", "unsold_bags", (value) => formatNumber(value, 0) + " bags", true);' in first
-    assert 'sharedSelectorPanel.hidden = landedActive || clientActive || actionActive;' in first
+    assert 'sharedSelectorPanel.hidden = landedActive || clientActive || geographyActive || actionActive;' in first
     assert 'state.selectedReference = "";' in first
     assert 'state.filterText = "";' in first
     assert 'state.sortKey = "company_name";' in first
@@ -583,7 +587,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'return "Landing date not available for this reference.";' in first
     assert 'const selectedReference = currentSelectedReference() || "Select product";' in first
     assert 'const landingStatus = currentSelectedReference() ? (summary?.landing_status || "Unknown") : "Not selected";' in first
-    assert 'sharedSelectorPanel.hidden = landedActive || clientActive || actionActive;' in first
+    assert 'sharedSelectorPanel.hidden = landedActive || clientActive || geographyActive || actionActive;' in first
     assert 'state.activeTab = button.dataset.tab || "reservation";' in first
     assert 'const tabButtons = Array.from(document.querySelectorAll(".module-nav-button"));' in first
     assert 'summaryByReference.get(state.selectedReference);' in first
@@ -780,3 +784,140 @@ def test_reference_workspace_client_concentration_contract_present() -> None:
     assert 'concentration: clientReferenceConcentration,' not in html
     assert 'Top 10: ' in html
     assert 'Rest: ' in html
+
+
+def test_reference_workspace_includes_client_geography_tab_and_defers_plotted_map_without_local_coordinates() -> None:
+    dataset = {
+        "snapshot_date": "2026-03-07",
+        "default_reference": "",
+        "default_landed_reference": "",
+        "notes": [],
+        "reference_options": [],
+        "landed_reference_options": [],
+        "reference_summary": [],
+        "reservation_details": [],
+        "product_reference_summary": [],
+        "product_landing_profile": [],
+        "landed_stock_summary": {
+            "as_of_date": "",
+            "landed_bags": 0.0,
+            "unsold_landed_bags": 0.0,
+            "unsold_landed_kg": 0.0,
+            "unsold_landed_kg_available": True,
+            "aged_180_plus_bags": 0.0,
+            "warehouses_exposed": 0,
+            "unsold_landed_value_gbp": 0.0,
+            "unsold_landed_value_available": True,
+            "value_completeness_status": "",
+        },
+        "landed_stock_aging": [],
+        "landed_stock_warehouse_exposure": [],
+        "landed_stock_reference_exposure": [],
+        "landed_stock_details": [],
+        "client_summary": {
+            "clients_with_current_exposure": 0,
+            "total_current_reserved_value_gbp": 0.0,
+            "total_current_reserved_value_available": True,
+            "largest_client_company_name": "",
+            "largest_client_id": "",
+            "largest_client_reserved_value_gbp": 0.0,
+            "largest_client_reserved_value_available": True,
+            "clients_concentrated_in_one_reference": 0,
+        },
+        "client_details": [],
+        "client_top_exposure": [],
+        "client_reference_concentration": [],
+        "client_activity_rows": [],
+        "client_geography_summary": {
+            "mapped_clients": 2,
+            "unmapped_clients": 1,
+            "countries_covered": 2,
+            "cities_covered": 2,
+            "exposed_client_locations": 2,
+            "duplicate_client_ids": 1,
+            "duplicate_client_rows": 2,
+            "matched_client_rows": 3,
+            "unmatched_client_rows": 1,
+            "map_included": False,
+            "map_status": "Plotted map deferred: no deterministic local coordinate cache is included in v1.",
+        },
+        "client_geography_locations": [
+            {
+                "country": "United Kingdom",
+                "city": "Bristol",
+                "postcode": "BS1 4DJ",
+                "location_label": "Bristol, BS1 4DJ, United Kingdom",
+                "client_count": 1,
+                "exposed_client_count": 1,
+                "reserved_bags": 2.0,
+                "reserved_kg": 60.0,
+                "reserved_value_gbp": 600.0,
+                "reserved_value_available": True,
+                "top_client_company_name": "Alpha Roasters",
+                "top_client_id": "c-1",
+            }
+        ],
+        "client_geography_top_countries": [
+            {"country": "United Kingdom", "client_count": 1, "reserved_bags": 2.0, "reserved_kg": 60.0, "reserved_value_gbp": 600.0}
+        ],
+        "client_geography_top_cities": [
+            {"city_label": "Bristol, United Kingdom", "country": "United Kingdom", "city": "Bristol", "client_count": 1, "reserved_bags": 2.0, "reserved_kg": 60.0, "reserved_value_gbp": 600.0}
+        ],
+        "client_geography_unmapped_clients": [
+            {
+                "company_name": "No ID Coffee",
+                "client_id": "",
+                "reserved_value_gbp": 135.0,
+                "reserved_value_available": True,
+                "reserved_bags": 1.0,
+                "reserved_kg": 15.0,
+                "reason": "Missing client_id on activity rows",
+            }
+        ],
+        "reservation_action_queue": {
+            "summary": {
+                "as_of_date": "",
+                "near_expiry_threshold_days": 7,
+                "open_reservation_rows": 0,
+                "open_reservations": 0,
+                "open_reserved_bags": 0.0,
+                "open_reserved_bags_landed": 0.0,
+                "open_reserved_bags_incoming": 0.0,
+                "open_reserved_value_gbp": 0.0,
+                "open_reserved_value_available": True,
+                "open_reserved_value_landed_gbp": 0.0,
+                "open_reserved_value_landed_available": True,
+                "open_reserved_value_incoming_gbp": 0.0,
+                "open_reserved_value_incoming_available": True,
+                "near_expiry_rows": 0,
+                "near_expiry_reservations": 0,
+                "breached_rows": 0,
+                "breached_reservations": 0,
+                "landed_not_released_value_gbp": 0.0,
+                "landed_not_released_value_available": True,
+                "landed_not_released_value_status": "",
+                "action_now_rows": 0,
+                "action_now_reservations": 0,
+                "open_exposure_reservations": 0,
+            },
+            "action_bucket_counts": [],
+            "open_bags_by_expiry_bucket": [],
+            "top_landed_references": {"metric": "remaining_value_gbp", "metric_label": "Landed Not Released Value", "value_available": True, "status": "", "rows": []},
+            "details": [],
+        },
+    }
+
+    html = render_html(dataset)
+
+    assert "Client Geography" in html
+    assert 'id="tab-geography"' in html
+    assert 'id="geography-view"' in html
+    assert 'id="geography-country-filter"' in html
+    assert 'id="geography-location-body"' in html
+    assert 'id="geography-unmapped-body"' in html
+    assert "Plotted map deferred: no deterministic local coordinate cache is included in v1." in html
+    assert "Billing `po_*` fields are excluded by default." in html
+    assert '"client_geography_summary":{"cities_covered":2,"countries_covered":2' in html
+    assert "geography-kpi-mapped-clients" in html
+    assert "geography-country-chart" in html
+    assert "geography-data-quality" in html

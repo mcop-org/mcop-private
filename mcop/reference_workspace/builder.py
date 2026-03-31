@@ -125,6 +125,22 @@ def _empty_client_summary() -> dict:
     }
 
 
+def _empty_client_geography_summary() -> dict:
+    return {
+        "mapped_clients": 0,
+        "unmapped_clients": 0,
+        "countries_covered": 0,
+        "cities_covered": 0,
+        "exposed_client_locations": 0,
+        "duplicate_client_ids": 0,
+        "duplicate_client_rows": 0,
+        "matched_client_rows": 0,
+        "unmatched_client_rows": 0,
+        "map_included": False,
+        "map_status": "Plotted map deferred: no deterministic local coordinate cache is included in v1.",
+    }
+
+
 def _available_bags_by_reference(products: pd.DataFrame) -> dict[str, float]:
     if products.empty or "bags_available" not in products.columns:
         return {}
@@ -823,6 +839,286 @@ def _build_client_intelligence(latest: pd.DataFrame) -> tuple[dict, list[dict], 
     return client_summary, detail_rows, top_clients, concentration_rows, client_activity_rows
 
 
+def _prepare_clients_master(clients: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    metadata = {
+        "duplicate_client_ids": 0,
+        "duplicate_client_rows": 0,
+    }
+    if clients.empty:
+        return pd.DataFrame(), metadata
+
+    master = clients.copy()
+    for column in ("client_id", "company_name", "country", "city", "postcode"):
+        if column not in master.columns:
+            master[column] = pd.NA
+
+    for column in ("client_id", "company_name", "country", "city", "postcode"):
+        master[column] = master[column].map(_clean_text)
+
+    master = master[master["client_id"] != ""].copy()
+    if master.empty:
+        return master, metadata
+
+    duplicate_counts = master["client_id"].value_counts(dropna=False)
+    duplicate_counts = duplicate_counts[duplicate_counts > 1]
+    metadata["duplicate_client_ids"] = int(len(duplicate_counts))
+    metadata["duplicate_client_rows"] = int(duplicate_counts.sum()) if not duplicate_counts.empty else 0
+
+    master["delivery_geo_score"] = (
+        master["country"].ne("").astype(int)
+        + master["city"].ne("").astype(int)
+        + master["postcode"].ne("").astype(int)
+    )
+    master = master.sort_values(
+        ["client_id", "delivery_geo_score", "company_name", "country", "city", "postcode"],
+        ascending=[True, False, True, True, True, True],
+        kind="stable",
+        na_position="last",
+    )
+    master = master.groupby("client_id", sort=True, as_index=False).head(1).copy()
+    return master, metadata
+
+
+def _build_client_geography(
+    latest: pd.DataFrame,
+    clients: pd.DataFrame,
+) -> tuple[dict, list[dict], list[dict], list[dict], list[dict]]:
+    client_rows = _build_client_intelligence_rows(latest)
+    empty_summary = _empty_client_geography_summary()
+    if client_rows.empty:
+        return empty_summary, [], [], [], []
+
+    _client_summary, detail_rows, _top_clients, _concentration_rows = _build_client_intelligence_from_rows(client_rows)
+    clients_master, metadata = _prepare_clients_master(clients)
+    clients_lookup = {
+        _clean_text(row["client_id"]): row
+        for _, row in clients_master.iterrows()
+        if _clean_text(row.get("client_id"))
+    }
+
+    mapped_records: list[dict] = []
+    unmapped_records: list[dict] = []
+    matched_client_rows = 0
+    unmatched_client_rows = 0
+
+    for row in detail_rows:
+        client_id = _clean_text(row["client_id"])
+        company_name = _clean_text(row["company_name"])
+        if not client_id:
+            unmatched_client_rows += 1
+            unmapped_records.append(
+                {
+                    "company_name": company_name,
+                    "client_id": client_id,
+                    "reserved_value_gbp": round(float(row["reserved_value_gbp"]), 2),
+                    "reserved_value_available": bool(row["reserved_value_available"]),
+                    "reserved_bags": round(float(row["reserved_bags"]), 4),
+                    "reserved_kg": round(float(row["reserved_kg"]), 4),
+                    "reason": "Missing client_id on activity rows",
+                }
+            )
+            continue
+
+        client_master = clients_lookup.get(client_id)
+        if client_master is None:
+            unmatched_client_rows += 1
+            unmapped_records.append(
+                {
+                    "company_name": company_name,
+                    "client_id": client_id,
+                    "reserved_value_gbp": round(float(row["reserved_value_gbp"]), 2),
+                    "reserved_value_available": bool(row["reserved_value_available"]),
+                    "reserved_bags": round(float(row["reserved_bags"]), 4),
+                    "reserved_kg": round(float(row["reserved_kg"]), 4),
+                    "reason": "No matching clients master row for client_id",
+                }
+            )
+            continue
+
+        matched_client_rows += 1
+        country = _clean_text(client_master.get("country"))
+        city = _clean_text(client_master.get("city"))
+        postcode = _clean_text(client_master.get("postcode"))
+        if not any((country, city, postcode)):
+            unmapped_records.append(
+                {
+                    "company_name": company_name,
+                    "client_id": client_id,
+                    "reserved_value_gbp": round(float(row["reserved_value_gbp"]), 2),
+                    "reserved_value_available": bool(row["reserved_value_available"]),
+                    "reserved_bags": round(float(row["reserved_bags"]), 4),
+                    "reserved_kg": round(float(row["reserved_kg"]), 4),
+                    "reason": "Missing delivery geography on clients master row",
+                }
+            )
+            continue
+
+        mapped_records.append(
+            {
+                "company_name": company_name,
+                "client_id": client_id,
+                "country": country,
+                "city": city,
+                "postcode": postcode,
+                "reserved_value_gbp": round(float(row["reserved_value_gbp"]), 2),
+                "reserved_value_available": bool(row["reserved_value_available"]),
+                "reserved_bags": round(float(row["reserved_bags"]), 4),
+                "reserved_kg": round(float(row["reserved_kg"]), 4),
+                "has_exposure": bool(float(row["reserved_bags"]) > 0),
+            }
+        )
+
+    mapped_clients = len(mapped_records)
+    unmapped_clients = len(unmapped_records)
+
+    location_groups: dict[tuple[str, str, str], list[dict]] = {}
+    for row in mapped_records:
+        key = (row["country"], row["city"], row["postcode"])
+        location_groups.setdefault(key, []).append(row)
+
+    location_rows: list[dict] = []
+    for key in sorted(location_groups):
+        rows = location_groups[key]
+        country, city, postcode = key
+        value_available = all(bool(item["reserved_value_available"]) for item in rows)
+        top_client = sorted(
+            rows,
+            key=lambda item: (
+                -float(item["reserved_value_gbp"]),
+                _clean_text(item["company_name"]).lower(),
+                _clean_text(item["client_id"]).lower(),
+            ),
+        )[0]
+        location_rows.append(
+            {
+                "country": country,
+                "city": city,
+                "postcode": postcode,
+                "location_label": ", ".join([part for part in (city, postcode, country) if part]) or "Unknown",
+                "client_count": int(len(rows)),
+                "exposed_client_count": int(sum(1 for item in rows if bool(item["has_exposure"]))),
+                "reserved_bags": round(sum(float(item["reserved_bags"]) for item in rows), 4),
+                "reserved_kg": round(sum(float(item["reserved_kg"]) for item in rows), 4),
+                "reserved_value_gbp": round(sum(float(item["reserved_value_gbp"]) for item in rows), 2),
+                "reserved_value_available": value_available,
+                "top_client_company_name": _clean_text(top_client["company_name"]),
+                "top_client_id": _clean_text(top_client["client_id"]),
+            }
+        )
+
+    location_rows = sorted(
+        location_rows,
+        key=lambda row: (
+            -float(row["reserved_value_gbp"]),
+            -int(row["client_count"]),
+            _clean_text(row["country"]).lower(),
+            _clean_text(row["city"]).lower(),
+            _clean_text(row["postcode"]).lower(),
+        ),
+    )
+
+    country_rows: list[dict] = []
+    city_rows: list[dict] = []
+    if mapped_records:
+        mapped_frame = pd.DataFrame(mapped_records)
+        country_groups = (
+            mapped_frame.groupby("country", sort=True, as_index=False)[
+                ["client_id", "reserved_bags", "reserved_kg", "reserved_value_gbp"]
+            ]
+            .agg(
+                {
+                    "client_id": "nunique",
+                    "reserved_bags": "sum",
+                    "reserved_kg": "sum",
+                    "reserved_value_gbp": "sum",
+                }
+            )
+            .rename(columns={"client_id": "client_count"})
+        )
+        country_rows = [
+            {
+                "country": _clean_text(row["country"]) or "Unknown",
+                "client_count": int(row["client_count"]),
+                "reserved_bags": round(float(row["reserved_bags"]), 4),
+                "reserved_kg": round(float(row["reserved_kg"]), 4),
+                "reserved_value_gbp": round(float(row["reserved_value_gbp"]), 2),
+            }
+            for _, row in country_groups.sort_values(
+                ["reserved_value_gbp", "client_count", "country"],
+                ascending=[False, False, True],
+                kind="stable",
+            ).head(8).iterrows()
+        ]
+
+        city_groups = (
+            mapped_frame.assign(city_label=mapped_frame.apply(
+                lambda row: ", ".join([part for part in (_clean_text(row["city"]), _clean_text(row["country"])) if part]),
+                axis=1,
+            ))
+            .groupby(["city_label", "country", "city"], sort=True, as_index=False)[
+                ["client_id", "reserved_bags", "reserved_kg", "reserved_value_gbp"]
+            ]
+            .agg(
+                {
+                    "client_id": "nunique",
+                    "reserved_bags": "sum",
+                    "reserved_kg": "sum",
+                    "reserved_value_gbp": "sum",
+                }
+            )
+            .rename(columns={"client_id": "client_count"})
+        )
+        city_rows = [
+            {
+                "city_label": _clean_text(row["city_label"]) or "Unknown",
+                "country": _clean_text(row["country"]),
+                "city": _clean_text(row["city"]),
+                "client_count": int(row["client_count"]),
+                "reserved_bags": round(float(row["reserved_bags"]), 4),
+                "reserved_kg": round(float(row["reserved_kg"]), 4),
+                "reserved_value_gbp": round(float(row["reserved_value_gbp"]), 2),
+            }
+            for _, row in city_groups.sort_values(
+                ["reserved_value_gbp", "client_count", "city_label"],
+                ascending=[False, False, True],
+                kind="stable",
+            ).head(8).iterrows()
+        ]
+
+    unmapped_records = sorted(
+        unmapped_records,
+        key=lambda row: (
+            -float(row["reserved_value_gbp"]),
+            _clean_text(row["company_name"]).lower(),
+            _clean_text(row["client_id"]).lower(),
+            _clean_text(row["reason"]).lower(),
+        ),
+    )
+
+    summary = {
+        "mapped_clients": int(mapped_clients),
+        "unmapped_clients": int(unmapped_clients),
+        "countries_covered": int(len({row["country"] for row in mapped_records if _clean_text(row["country"])})),
+        "cities_covered": int(
+            len(
+                {
+                    (_clean_text(row["country"]), _clean_text(row["city"]))
+                    for row in mapped_records
+                    if _clean_text(row["city"])
+                }
+            )
+        ),
+        "exposed_client_locations": int(sum(1 for row in location_rows if int(row["exposed_client_count"]) > 0)),
+        "duplicate_client_ids": int(metadata["duplicate_client_ids"]),
+        "duplicate_client_rows": int(metadata["duplicate_client_rows"]),
+        "matched_client_rows": int(matched_client_rows),
+        "unmatched_client_rows": int(unmatched_client_rows),
+        "map_included": False,
+        "map_status": "Plotted map deferred: no deterministic local coordinate cache is included in v1.",
+    }
+    return summary, location_rows, country_rows, city_rows, unmapped_records
+
+
 def _empty_action_queue_dataset(snapshot_date: str) -> dict:
     return {
         "summary": {
@@ -1237,11 +1533,23 @@ def _empty_dataset(
         "client_top_exposure": [],
         "client_reference_concentration": [],
         "client_activity_rows": [],
+        "client_geography_summary": {
+            **_empty_client_geography_summary(),
+        },
+        "client_geography_locations": [],
+        "client_geography_top_countries": [],
+        "client_geography_top_cities": [],
+        "client_geography_unmapped_clients": [],
         "reservation_action_queue": _empty_action_queue_dataset(""),
     }
 
 
-def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataFrame) -> dict:
+def build_reference_workspace_dataset(
+    activity: pd.DataFrame,
+    products: pd.DataFrame,
+    clients: pd.DataFrame | None = None,
+) -> dict:
+    clients_frame = clients.copy() if clients is not None else pd.DataFrame()
     product_ref_by_id, landing_status_by_reference = _product_reference_fallbacks(products)
     available_bags_by_reference = _available_bags_by_reference(products)
 
@@ -1552,6 +1860,13 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         client_reference_concentration,
         client_activity_rows,
     ) = _build_client_intelligence(latest)
+    (
+        client_geography_summary,
+        client_geography_locations,
+        client_geography_top_countries,
+        client_geography_top_cities,
+        client_geography_unmapped_clients,
+    ) = _build_client_geography(latest, clients_frame)
     reservation_action_queue = _build_reservation_action_queue(latest, snapshot_date)
 
     return {
@@ -1575,5 +1890,10 @@ def build_reference_workspace_dataset(activity: pd.DataFrame, products: pd.DataF
         "client_top_exposure": client_top_exposure,
         "client_reference_concentration": client_reference_concentration,
         "client_activity_rows": client_activity_rows,
+        "client_geography_summary": client_geography_summary,
+        "client_geography_locations": client_geography_locations,
+        "client_geography_top_countries": client_geography_top_countries,
+        "client_geography_top_cities": client_geography_top_cities,
+        "client_geography_unmapped_clients": client_geography_unmapped_clients,
         "reservation_action_queue": reservation_action_queue,
     }

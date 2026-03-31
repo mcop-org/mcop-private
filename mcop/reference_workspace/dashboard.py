@@ -670,6 +670,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
           <button class="module-nav-button is-active" id="tab-reservation" type="button" data-tab="reservation" aria-pressed="true">Reservation Intelligence</button>
           <button class="module-nav-button" id="tab-product" type="button" data-tab="product" aria-pressed="false">Product Reference Intelligence</button>
           <button class="module-nav-button" id="tab-client" type="button" data-tab="client" aria-pressed="false">Client Intelligence</button>
+          <button class="module-nav-button" id="tab-geography" type="button" data-tab="geography" aria-pressed="false">Client Geography</button>
           <button class="module-nav-button" id="tab-landed" type="button" data-tab="landed" aria-pressed="false">Landed Stock Intelligence</button>
           <button class="module-nav-button" id="tab-action" type="button" data-tab="action" aria-pressed="false">Reservation Risk / Action Queue</button>
         </nav>
@@ -954,6 +955,139 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       </div>
     </section>
 
+    <section class="workspace-view" id="geography-view" hidden>
+      <div class="panel view-frame">
+        <div class="view-head">
+          <div>
+            <h2 class="view-title">Client Geography</h2>
+            <p class="view-copy">Delivery-geography analysis using `country`, `city`, and `postcode` from the client master. Billing `po_*` fields are excluded by default. Plotted map deferred in v1 because no deterministic local coordinate cache is included.</p>
+          </div>
+        </div>
+
+        <section class="table-shell" aria-label="Client Geography Filters">
+          <div class="table-topbar">
+            <div>
+              <h3 class="table-title">Geography Filters</h3>
+              <p class="table-subtitle">Applies to mapped client locations only. Unmapped clients remain separately visible for review.</p>
+            </div>
+            <div class="table-filters">
+              <div class="table-filter compact">
+                <label class="control-label" for="geography-country-filter">Country</label>
+                <select class="control-input" id="geography-country-filter"></select>
+              </div>
+              <div class="table-filter compact">
+                <label class="control-label" for="geography-city-filter">City</label>
+                <select class="control-input" id="geography-city-filter"></select>
+              </div>
+              <div class="table-filter compact">
+                <label class="control-label" for="geography-exposure-filter">Exposure Status</label>
+                <select class="control-input" id="geography-exposure-filter"></select>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="kpi-grid" aria-label="Client Geography KPIs">
+          <article class="kpi-card">
+            <div class="kpi-label">Mapped Clients</div>
+            <div class="kpi-value" id="geography-kpi-mapped-clients">-</div>
+            <div class="kpi-submeta" id="geography-kpi-mapped-meta">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Unmapped Clients</div>
+            <div class="kpi-value" id="geography-kpi-unmapped-clients">-</div>
+            <div class="kpi-submeta" id="geography-kpi-unmapped-meta">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Countries Covered</div>
+            <div class="kpi-value" id="geography-kpi-countries">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Cities Covered</div>
+            <div class="kpi-value" id="geography-kpi-cities">-</div>
+          </article>
+          <article class="kpi-card">
+            <div class="kpi-label">Exposed Client Locations</div>
+            <div class="kpi-value" id="geography-kpi-exposed-locations">-</div>
+            <div class="kpi-submeta" id="geography-kpi-map-status">-</div>
+          </article>
+        </section>
+
+        <section class="chart-grid" aria-label="Client Geography Charts">
+          <article class="chart-card">
+            <h3 class="chart-title">Top Countries</h3>
+            <p class="chart-copy">Ranks mapped countries by recorded reservation value where available, otherwise the table still retains bags and client counts for review.</p>
+            <div class="chart-list" id="geography-country-chart"></div>
+            <div class="chart-empty" id="geography-country-empty" hidden>No mapped country rows in the current view.</div>
+          </article>
+          <article class="chart-card">
+            <h3 class="chart-title">Top Cities</h3>
+            <p class="chart-copy">Shows which delivery cities currently matter most in the mapped client footprint.</p>
+            <div class="chart-list" id="geography-city-chart"></div>
+            <div class="chart-empty" id="geography-city-empty" hidden>No mapped city rows in the current view.</div>
+          </article>
+          <article class="chart-card">
+            <h3 class="chart-title">Data Quality Status</h3>
+            <p class="chart-copy">Keeps unmatched or duplicate client-master conditions explicit instead of guessing locations or coordinates.</p>
+            <div class="chart-list" id="geography-data-quality"></div>
+          </article>
+        </section>
+
+        <section class="table-shell">
+          <div class="table-topbar">
+            <div>
+              <h3 class="table-title">Location-Level Geography Table</h3>
+              <p class="table-subtitle">Delivery geography only. Default order shows highest recorded reservation value first, then larger client counts.</p>
+            </div>
+          </div>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Country</th>
+                  <th>City</th>
+                  <th>Postcode</th>
+                  <th class="num">Client Count</th>
+                  <th class="num">Exposed Client Count</th>
+                  <th class="num">Reserved Bags Recorded</th>
+                  <th class="num">Reserved KG Recorded</th>
+                  <th class="num">Reserved Value GBP Recorded</th>
+                  <th>Top Client</th>
+                </tr>
+              </thead>
+              <tbody id="geography-location-body"></tbody>
+            </table>
+          </div>
+          <div class="empty" id="geography-location-empty" hidden>No mapped client locations match the current filters.</div>
+        </section>
+
+        <section class="table-shell">
+          <div class="table-topbar">
+            <div>
+              <h3 class="table-title">Unmapped Clients</h3>
+              <p class="table-subtitle">Clients with reservation activity that could not be safely placed into delivery geography.</p>
+            </div>
+          </div>
+          <div style="overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Company</th>
+                  <th>Client ID</th>
+                  <th class="num">Reserved Bags Recorded</th>
+                  <th class="num">Reserved KG Recorded</th>
+                  <th class="num">Reserved Value GBP Recorded</th>
+                  <th>Reason</th>
+                </tr>
+              </thead>
+              <tbody id="geography-unmapped-body"></tbody>
+            </table>
+          </div>
+          <div class="empty" id="geography-unmapped-empty" hidden>No unmapped clients in the current dataset.</div>
+        </section>
+      </div>
+    </section>
+
     <section class="workspace-view" id="landed-view" hidden>
       <div class="panel view-frame">
         <div class="view-head">
@@ -1217,6 +1351,13 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const clientDateToShell = document.getElementById("client-date-to-shell");
     const clientDateFrom = document.getElementById("client-date-from");
     const clientDateTo = document.getElementById("client-date-to");
+    const geographyCountryFilter = document.getElementById("geography-country-filter");
+    const geographyCityFilter = document.getElementById("geography-city-filter");
+    const geographyExposureFilter = document.getElementById("geography-exposure-filter");
+    const geographyLocationBody = document.getElementById("geography-location-body");
+    const geographyLocationEmpty = document.getElementById("geography-location-empty");
+    const geographyUnmappedBody = document.getElementById("geography-unmapped-body");
+    const geographyUnmappedEmpty = document.getElementById("geography-unmapped-empty");
     const landedDetailBody = document.getElementById("landed-detail-body");
     const landedDetailEmpty = document.getElementById("landed-detail-empty");
     const landedTableFilter = document.getElementById("landed-table-filter");
@@ -1234,6 +1375,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const reservationView = document.getElementById("reservation-view");
     const productView = document.getElementById("product-view");
     const clientView = document.getElementById("client-view");
+    const geographyView = document.getElementById("geography-view");
     const landedView = document.getElementById("landed-view");
     const actionView = document.getElementById("action-view");
 
@@ -1242,6 +1384,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const productSummaryByReference = new Map((data.product_reference_summary || []).map((row) => [row.product_reference, row]));
     const productDetailsByReference = new Map();
     const clientActivityRows = Array.isArray(data.client_activity_rows) ? data.client_activity_rows : [];
+    const geographySummary = data.client_geography_summary || {{}};
+    const geographyLocations = Array.isArray(data.client_geography_locations) ? data.client_geography_locations : [];
+    const geographyUnmappedClients = Array.isArray(data.client_geography_unmapped_clients) ? data.client_geography_unmapped_clients : [];
     const landedSummary = data.landed_stock_summary || {{}};
     const landedAgingRaw = Array.isArray(data.landed_stock_aging) ? data.landed_stock_aging : [];
     const landedWarehouseExposure = Array.isArray(data.landed_stock_warehouse_exposure) ? data.landed_stock_warehouse_exposure : [];
@@ -1287,6 +1432,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       clientDatePreset: "all",
       clientDateFrom: "",
       clientDateTo: "",
+      geographyCountry: "all",
+      geographyCity: "all",
+      geographyExposure: "all",
       sortKey: "company_name",
       sortDirection: "asc",
       actionFilterText: "",
@@ -2042,6 +2190,155 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       }});
     }}
 
+    function currentGeographyLocations() {{
+      return geographyLocations.filter((row) => {{
+        if (state.geographyCountry !== "all" && String(row.country || "") !== state.geographyCountry) {{
+          return false;
+        }}
+        if (state.geographyCity !== "all" && String(row.city || "") !== state.geographyCity) {{
+          return false;
+        }}
+        if (state.geographyExposure === "exposed" && Number(row.exposed_client_count || 0) <= 0) {{
+          return false;
+        }}
+        if (state.geographyExposure === "no-exposure" && Number(row.exposed_client_count || 0) > 0) {{
+          return false;
+        }}
+        return true;
+      }});
+    }}
+
+    function aggregateGeographyChartRows(rows, groupKey, labelBuilder) {{
+      const grouped = new Map();
+      for (const row of rows) {{
+        const key = String(row[groupKey] || "").trim() || "Unknown";
+        if (!grouped.has(key)) {{
+          grouped.set(key, {{
+            label: labelBuilder(row),
+            client_count: 0,
+            reserved_value_gbp: 0,
+          }});
+        }}
+        const entry = grouped.get(key);
+        entry.client_count += Number(row.client_count || 0);
+        entry.reserved_value_gbp += Number(row.reserved_value_gbp || 0);
+      }}
+      return [...grouped.values()].sort((left, right) => {{
+        const valueDiff = Number(right.reserved_value_gbp || 0) - Number(left.reserved_value_gbp || 0);
+        if (valueDiff !== 0) {{
+          return valueDiff;
+        }}
+        const clientDiff = Number(right.client_count || 0) - Number(left.client_count || 0);
+        if (clientDiff !== 0) {{
+          return clientDiff;
+        }}
+        return String(left.label || "").localeCompare(String(right.label || ""), "en", {{ sensitivity: "base" }});
+      }}).slice(0, 8);
+    }}
+
+    function renderGeographyFilters() {{
+      const countryOptions = ["all", ...new Set(geographyLocations.map((row) => String(row.country || "").trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, "en", {{ sensitivity: "base" }})))];
+      geographyCountryFilter.innerHTML = countryOptions.map((value) => {{
+        const label = value === "all" ? "All Countries" : value;
+        return '<option value="' + escapeHtml(value) + '">' + escapeHtml(label) + '</option>';
+      }}).join("");
+      geographyCountryFilter.value = countryOptions.includes(state.geographyCountry) ? state.geographyCountry : "all";
+
+      const citySourceRows = state.geographyCountry === "all"
+        ? geographyLocations
+        : geographyLocations.filter((row) => String(row.country || "") === state.geographyCountry);
+      const cityOptions = ["all", ...new Set(citySourceRows.map((row) => String(row.city || "").trim()).filter(Boolean).sort((a, b) => a.localeCompare(b, "en", {{ sensitivity: "base" }})))];
+      geographyCityFilter.innerHTML = cityOptions.map((value) => {{
+        const label = value === "all" ? "All Cities" : value;
+        return '<option value="' + escapeHtml(value) + '">' + escapeHtml(label) + '</option>';
+      }}).join("");
+      geographyCityFilter.value = cityOptions.includes(state.geographyCity) ? state.geographyCity : "all";
+
+      geographyExposureFilter.innerHTML = [
+        ["all", "All Locations"],
+        ["exposed", "Exposed Only"],
+        ["no-exposure", "No Exposure Only"],
+      ].map((entry) => '<option value="' + escapeHtml(entry[0]) + '">' + escapeHtml(entry[1]) + '</option>').join("");
+      geographyExposureFilter.value = state.geographyExposure;
+    }}
+
+    function renderGeographyKpis() {{
+      const rows = currentGeographyLocations();
+      const mappedClients = rows.reduce((sum, row) => sum + Number(row.client_count || 0), 0);
+      const countries = new Set(rows.map((row) => String(row.country || "").trim()).filter(Boolean));
+      const cities = new Set(rows.map((row) => [String(row.country || "").trim(), String(row.city || "").trim()].join("||")).filter((value) => !value.endsWith("||")));
+      const exposedLocations = rows.filter((row) => Number(row.exposed_client_count || 0) > 0).length;
+
+      document.getElementById("geography-kpi-mapped-clients").textContent = formatNumber(mappedClients, 0);
+      document.getElementById("geography-kpi-mapped-meta").textContent = formatNumber(rows.length, 0) + " mapped delivery locations in the current filter view.";
+      document.getElementById("geography-kpi-unmapped-clients").textContent = formatNumber(geographySummary.unmapped_clients || 0, 0);
+      document.getElementById("geography-kpi-unmapped-meta").textContent = formatNumber(geographySummary.unmatched_client_rows || 0, 0) + " unmatched client rows; " + formatNumber(geographySummary.duplicate_client_ids || 0, 0) + " duplicate client IDs reviewed deterministically.";
+      document.getElementById("geography-kpi-countries").textContent = formatNumber(countries.size, 0);
+      document.getElementById("geography-kpi-cities").textContent = formatNumber(cities.size, 0);
+      document.getElementById("geography-kpi-exposed-locations").textContent = formatNumber(exposedLocations, 0);
+      document.getElementById("geography-kpi-map-status").textContent = String(geographySummary.map_status || "").trim() || "No plotted map in v1.";
+    }}
+
+    function renderGeographyCharts() {{
+      const rows = currentGeographyLocations();
+      const countryRows = aggregateGeographyChartRows(rows, "country", (row) => String(row.country || "").trim() || "Unknown");
+      const cityRows = aggregateGeographyChartRows(rows, "city", (row) => {{
+        const city = String(row.city || "").trim();
+        const country = String(row.country || "").trim();
+        return [city, country].filter(Boolean).join(", ") || "Unknown";
+      }});
+      renderBarChart("geography-country-chart", "geography-country-empty", countryRows, "label", "reserved_value_gbp", (value) => formatCompactMoney(value));
+      renderBarChart("geography-city-chart", "geography-city-empty", cityRows, "label", "reserved_value_gbp", (value) => formatCompactMoney(value));
+      document.getElementById("geography-data-quality").innerHTML =
+        "<div class='bar-row'>" +
+          "<div class='bar-head'><span class='bar-label'>Matched client rows</span><span class='bar-value'>" + escapeHtml(formatNumber(geographySummary.matched_client_rows || 0, 0)) + "</span></div>" +
+        "</div>" +
+        "<div class='bar-row'>" +
+          "<div class='bar-head'><span class='bar-label'>Unmatched client rows</span><span class='bar-value'>" + escapeHtml(formatNumber(geographySummary.unmatched_client_rows || 0, 0)) + "</span></div>" +
+        "</div>" +
+        "<div class='bar-row'>" +
+          "<div class='bar-head'><span class='bar-label'>Duplicate client IDs</span><span class='bar-value'>" + escapeHtml(formatNumber(geographySummary.duplicate_client_ids || 0, 0)) + "</span></div>" +
+        "</div>" +
+        "<div class='bar-row'>" +
+          "<div class='bar-head'><span class='bar-label'>Duplicate client rows</span><span class='bar-value'>" + escapeHtml(formatNumber(geographySummary.duplicate_client_rows || 0, 0)) + "</span></div>" +
+        "</div>";
+    }}
+
+    function renderGeographyTable() {{
+      const rows = currentGeographyLocations();
+      geographyLocationEmpty.hidden = rows.length > 0;
+      geographyLocationBody.innerHTML = rows.map((row) => {{
+        const reservedValue = row.reserved_value_available ? formatCompactMoney(row.reserved_value_gbp) : "Unavailable";
+        const topClient = clientLabel({{ company_name: row.top_client_company_name, client_id: row.top_client_id }});
+        return "<tr>" +
+          "<td><strong>" + escapeHtml(row.country || "-") + "</strong></td>" +
+          "<td>" + escapeHtml(row.city || "-") + "</td>" +
+          "<td>" + escapeHtml(row.postcode || "-") + "</td>" +
+          "<td class='num'>" + escapeHtml(formatNumber(row.client_count, 0)) + "</td>" +
+          "<td class='num'>" + escapeHtml(formatNumber(row.exposed_client_count, 0)) + "</td>" +
+          "<td class='num'>" + escapeHtml(formatNumber(row.reserved_bags, 0)) + "</td>" +
+          "<td class='num'>" + escapeHtml(formatKilos(row.reserved_kg)) + "</td>" +
+          "<td class='num'>" + escapeHtml(reservedValue) + "</td>" +
+          "<td>" + escapeHtml(topClient) + "</td>" +
+        "</tr>";
+      }}).join("");
+    }}
+
+    function renderGeographyUnmappedTable() {{
+      geographyUnmappedEmpty.hidden = geographyUnmappedClients.length > 0;
+      geographyUnmappedBody.innerHTML = geographyUnmappedClients.map((row) => {{
+        const reservedValue = row.reserved_value_available ? formatCompactMoney(row.reserved_value_gbp) : "Unavailable";
+        return "<tr>" +
+          "<td><strong>" + escapeHtml(row.company_name || "-") + "</strong></td>" +
+          "<td>" + escapeHtml(row.client_id || "-") + "</td>" +
+          "<td class='num'>" + escapeHtml(formatNumber(row.reserved_bags, 0)) + "</td>" +
+          "<td class='num'>" + escapeHtml(formatKilos(row.reserved_kg)) + "</td>" +
+          "<td class='num'>" + escapeHtml(reservedValue) + "</td>" +
+          "<td>" + escapeHtml(row.reason || "-") + "</td>" +
+        "</tr>";
+      }}).join("");
+    }}
+
     function currentLandedDetails() {{
       const text = state.landedFilterText.trim().toLowerCase();
       return landedDetails.filter((row) => {{
@@ -2429,12 +2726,14 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       const reservationActive = state.activeTab === "reservation";
       const productActive = state.activeTab === "product";
       const clientActive = state.activeTab === "client";
+      const geographyActive = state.activeTab === "geography";
       const landedActive = state.activeTab === "landed";
       const actionActive = state.activeTab === "action";
-      sharedSelectorPanel.hidden = landedActive || clientActive || actionActive;
+      sharedSelectorPanel.hidden = landedActive || clientActive || geographyActive || actionActive;
       reservationView.hidden = !reservationActive;
       productView.hidden = !productActive;
       clientView.hidden = !clientActive;
+      geographyView.hidden = !geographyActive;
       landedView.hidden = !landedActive;
       actionView.hidden = !actionActive;
       for (const button of tabButtons) {{
@@ -2456,6 +2755,11 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       renderClientKpis();
       renderClientCharts();
       renderClientTable();
+      renderGeographyFilters();
+      renderGeographyKpis();
+      renderGeographyCharts();
+      renderGeographyTable();
+      renderGeographyUnmappedTable();
       renderLandedFilters();
       renderLandedKpis();
       renderLandedCharts();
@@ -2515,6 +2819,19 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }});
     clientDateTo.addEventListener("change", () => {{
       state.clientDateTo = normaliseIsoDate(clientDateTo.value);
+      render();
+    }});
+    geographyCountryFilter.addEventListener("change", () => {{
+      state.geographyCountry = geographyCountryFilter.value;
+      state.geographyCity = "all";
+      render();
+    }});
+    geographyCityFilter.addEventListener("change", () => {{
+      state.geographyCity = geographyCityFilter.value;
+      render();
+    }});
+    geographyExposureFilter.addEventListener("change", () => {{
+      state.geographyExposure = geographyExposureFilter.value;
       render();
     }});
     landedTableFilter.addEventListener("input", () => {{

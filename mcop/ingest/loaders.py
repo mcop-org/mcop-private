@@ -131,7 +131,20 @@ class Inputs:
     costs: pd.DataFrame
     cash_position: pd.DataFrame
     activity: pd.DataFrame
+    clients: pd.DataFrame
     xero_sidecar: XeroSidecar | None
+
+
+def _read_optional_input(data_dir: Path, logical_name: str) -> tuple[pd.DataFrame, str | None]:
+    xlsx_path = data_dir / f"{logical_name}.xlsx"
+    if xlsx_path.exists():
+        return _read_xlsx(xlsx_path), "xlsx"
+
+    csv_path = data_dir / f"{logical_name}.csv"
+    if csv_path.exists():
+        return _read_csv(csv_path), "csv"
+
+    return pd.DataFrame(), None
 
 
 def load_inputs(data_dir: Path, xero_snapshot_path: Path | None = None) -> Inputs:
@@ -139,6 +152,7 @@ def load_inputs(data_dir: Path, xero_snapshot_path: Path | None = None) -> Input
     costs_df, costs_source = _read_input(data_dir, "product_costs_protected")
     cash_df, cash_source = _read_input(data_dir, "cash_position")
     activity_df, activity_source = _read_input(data_dir, "activity")
+    clients_df, clients_source = _read_optional_input(data_dir, "clients")
     xero_sidecar = None
     if xero_snapshot_path is not None and xero_snapshot_path.exists():
         xero_sidecar = load_xero_snapshot(xero_snapshot_path)
@@ -163,6 +177,11 @@ def load_inputs(data_dir: Path, xero_snapshot_path: Path | None = None) -> Input
             _normalise_columns(activity_df),
             DATE_COLUMNS_BY_INPUT["activity"],
             activity_source,
+        ),
+        clients=(
+            _normalise_columns(clients_df)
+            if clients_source is not None
+            else pd.DataFrame()
         ),
         xero_sidecar=xero_sidecar,
     )
