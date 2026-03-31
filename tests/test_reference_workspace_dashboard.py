@@ -338,7 +338,17 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert '<html lang="en" data-theme="light">' in first
     assert "<title>MCOP Reference Workspace v1</title>" in first
     assert "Reference Workspace" in first
+    assert 'class="topbar-brand"' in first
+    assert 'class="brand-mark"' in first
+    assert 'class="brand-logo brand-logo-light"' in first
+    assert 'class="brand-logo brand-logo-dark"' in first
+    assert "data:image/png;base64," in first
     assert 'id="theme-toggle"' in first
+    assert 'class="workspace-shell"' in first
+    assert 'class="workspace-sidebar panel"' in first
+    assert 'class="workspace-main"' in first
+    assert "Workspace navigation" in first
+    assert "Modules" in first
     assert 'id="shared-selector-panel"' in first
     assert 'id="reference-search"' in first
     assert 'id="selected-reference-chip"' in first
@@ -355,6 +365,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'data-tab="client"' in first
     assert 'data-tab="landed"' in first
     assert 'data-tab="action"' in first
+    assert 'class="module-nav-button is-active"' in first
     assert 'activeTab: "reservation"' in first
     assert 'id="reservation-view"' in first
     assert 'id="product-view" hidden' in first
@@ -491,9 +502,11 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'productView.hidden = !productActive;' in first
     assert 'landedView.hidden = !landedActive;' in first
     assert "grid-template-columns: repeat(5, minmax(0, 1fr));" in first
+    assert "grid-template-columns: 228px minmax(0, 1fr);" in first
     assert ".action-kpi-grid {" in first
     assert "grid-template-columns: repeat(4, minmax(0, 1fr));" in first
     assert "@media (max-width: 1280px)" in first
+    assert "@media (max-width: 900px)" in first
     assert ".pill.status-warm" in first
     assert ".pill.status-good" in first
     assert ".pill.status-bad" in first
@@ -572,6 +585,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'const landingStatus = currentSelectedReference() ? (summary?.landing_status || "Unknown") : "Not selected";' in first
     assert 'sharedSelectorPanel.hidden = landedActive || clientActive || actionActive;' in first
     assert 'state.activeTab = button.dataset.tab || "reservation";' in first
+    assert 'const tabButtons = Array.from(document.querySelectorAll(".module-nav-button"));' in first
     assert 'summaryByReference.get(state.selectedReference);' in first
     assert '"reference_profiles"' not in first
     assert "Reference Intelligence Workspace" not in first
