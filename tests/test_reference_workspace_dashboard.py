@@ -377,8 +377,8 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert "Client Intelligence" in first
     assert "Landed Stock Intelligence" in first
     assert "Reservation Risk / Action Queue" in first
-    assert "Shows reservation activity recorded in the system, excluding rejected reservations." in first
-    assert "Request Date Filter" in first
+    assert "Reservation activity view, excluding rejected reservations." in first
+    assert "Request Date" in first
     assert 'id="client-date-preset"' in first
     assert 'id="client-date-from-shell" hidden' in first
     assert 'id="client-date-to-shell" hidden' in first
@@ -388,18 +388,18 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert "Last 30 days" in first
     assert "Last 90 days" in first
     assert "Month to date" in first
-    assert "Financial Year to Date" in first
+    assert "Financial year to date" in first
     assert "Custom range" in first
     assert "Quarter to date" not in first
     assert "Clients With Reservation Activity" in first
-    assert "Reservation Value Recorded" in first
+    assert "Recorded Reservation Value" in first
     assert "Largest Recorded Reservation Value" in first
     assert "Clients Concentrated In One Reference" in first
     assert "Client Concentration" in first
-    assert "Top Clients by Reservation Value Recorded" in first
-    assert "Reservation Value Recorded by Client and Reference" in first
-    assert "Ranks clients by reservation value recorded during the selected request-date period." in first
-    assert "Shows how recorded reservation value is distributed across product references during the selected period." in first
+    assert "Top Clients by Recorded Reservation Value" in first
+    assert "Recorded Reservation Value by Client and Reference" in first
+    assert "Ranks clients by recorded reservation value for the selected request-date range." in first
+    assert "Shows how recorded reservation value is distributed across product references for the selected date range." in first
     assert "Reserved Bags Recorded" in first
     assert "Reserved KG Recorded" in first
     assert "Reserved Value GBP Recorded" in first
@@ -513,7 +513,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'if (status === "landed not approved" || status === "p3 landed not approved" || status === "breached" || status === "p1 breached")' in first
     assert 'if (status === "incoming" || status === "created")' in first
     assert 'if (status === "landed" || status === "completed")' in first
-    assert "Default order is breached first, then near-expiry, then landed-not-approved, then landed-not-released, then other open exposure." in first
+    assert "Default order shows breached first, then near-expiry, then landed-not-approved, then landed-not-released, then other open exposure." in first
     assert 'const bucketOptions = ["all", "Breached", "Near Expiry", "Landed Not Approved", "Landed Not Released", "Open Exposure"];' in first
     assert 'openReservations.textContent = formatNumber(actionSummary.open_reservations || 0, 0);' in first
     assert 'openBagsLanded.textContent = "Landed: " + formatBags(actionSummary.open_reserved_bags_landed || 0);' in first
@@ -603,13 +603,13 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="product-kpi-clients-meta"' not in first
     assert 'id="product-clients-list"' not in first
     assert "Stock and client linkage shown here come only from the approved safe product and reservation fields." not in first
-    assert "Current Stock Exposure by Lot/Warehouse" in first
+    assert "Stock Details by Lot / Warehouse" in first
     assert "Days Since Landing / Not landed" in first
     assert 'state.landedSelectedReference' not in first
     assert 'function currentOptionRows()' not in first
     assert "Landed Available" in first
     assert "Stock Health" in first
-    assert "Landed Available Exposure" in first
+    assert "Landed Exposure Details" in first
     assert "Aging Exposure" in first
     assert "Warehouse Exposure" in first
     assert "Largest Unsold References" in first
@@ -627,7 +627,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'topFiveShare.textContent = formatPercent(clientMetrics.summary.concentration_top_five_share);' in first
     assert 'topTenShare.textContent = "Top 10: " + formatPercent(clientMetrics.summary.concentration_top_ten_share);' in first
     assert 'restShare.textContent = "Rest: " + formatPercent(clientMetrics.summary.concentration_rest_share);' in first
-    assert 'topFiveShare.textContent = "No value concentration view";' in first
+    assert 'topFiveShare.textContent = "No concentration view";' in first
     assert 'topTenShare.textContent = "Top 10: unavailable for this range";' in first
     assert 'restShare.textContent = "Rest: unavailable for this range";' in first
     assert 'concentration_share_available: false,' in first

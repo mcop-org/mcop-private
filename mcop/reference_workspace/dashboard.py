@@ -682,12 +682,12 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
               <div class="control-head">
                 <div>
                   <p class="control-label">Reference Selector</p>
-                  <h2 class="control-title">Choose product reference</h2>
+                  <h2 class="control-title">Choose Product Reference</h2>
                 </div>
                 <div class="toolbar-chip" id="selected-reference-chip"></div>
               </div>
               <div>
-                <label class="control-label" for="reference-search">Search product reference</label>
+                <label class="control-label" for="reference-search">Product Reference</label>
                 <input class="control-input" id="reference-search" list="reference-options" autocomplete="off" placeholder="Search or select a product reference">
                 <datalist id="reference-options"></datalist>
               </div>
@@ -696,7 +696,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
                   <span class="control-label" style="margin:0;">Selected Reference</span>
                   <p class="selected-reference-value" id="selected-reference-value">Select product</p>
                 </div>
-                <button class="reset-button" id="shared-selector-reset" type="button">Reset Selector</button>
+                <button class="reset-button" id="shared-selector-reset" type="button">Reset</button>
               </div>
             </section>
           </div>
@@ -737,7 +737,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         <section class="table-shell">
           <div class="table-topbar">
             <div>
-              <h3 class="table-title">Reservation detail</h3>
+              <h3 class="table-title">Reservation Details</h3>
             </div>
             <div class="table-filter">
               <label class="control-label" for="table-filter">Search reservation rows</label>
@@ -762,7 +762,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
               <tbody id="reservation-table-body"></tbody>
             </table>
           </div>
-          <div class="empty" id="reservation-empty" hidden>No reservation rows match the current reference and search.</div>
+          <div class="empty" id="reservation-empty" hidden>No reservation rows match the current filters.</div>
         </section>
       </div>
     </section>
@@ -802,8 +802,8 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         <section class="table-shell">
           <div class="table-topbar">
             <div>
-              <h3 class="table-title">Current Stock Exposure by Lot/Warehouse</h3>
-              <p class="table-subtitle">Most concerning landed-available rows appear first, followed by other landed rows, then incoming rows.</p>
+              <h3 class="table-title">Stock Details by Lot / Warehouse</h3>
+              <p class="table-subtitle">Default order shows landed available rows first, then other landed rows, then incoming rows.</p>
             </div>
           </div>
           <div style="overflow:auto;">
@@ -822,7 +822,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
               <tbody id="product-detail-body"></tbody>
             </table>
           </div>
-          <div class="empty" id="product-detail-empty" hidden>No product rows match the current reference.</div>
+          <div class="empty" id="product-detail-empty" hidden>No product rows match the selected reference.</div>
         </section>
       </div>
     </section>
@@ -832,15 +832,15 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         <div class="view-head">
           <div>
             <h2 class="view-title">Client Intelligence</h2>
-            <p class="view-copy">Shows reservation activity recorded in the system, excluding rejected reservations.</p>
+            <p class="view-copy">Reservation activity view, excluding rejected reservations.</p>
           </div>
         </div>
 
         <section class="table-shell" aria-label="Client Intelligence Filters">
           <div class="table-topbar">
             <div>
-              <h3 class="table-title">Request Date Filter</h3>
-              <p class="table-subtitle">Applies only to Client Intelligence and is anchored to the workspace snapshot date.</p>
+              <h3 class="table-title">Request Date</h3>
+              <p class="table-subtitle">Applies to Client Intelligence only and uses the workspace snapshot date.</p>
             </div>
             <div class="table-filters">
               <div class="table-filter compact">
@@ -850,7 +850,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
                   <option value="last-30">Last 30 days</option>
                   <option value="last-90">Last 90 days</option>
                   <option value="month-to-date">Month to date</option>
-                  <option value="financial-year-to-date">Financial Year to Date</option>
+                  <option value="financial-year-to-date">Financial year to date</option>
                   <option value="custom">Custom range</option>
                 </select>
               </div>
@@ -872,7 +872,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
             <div class="kpi-value" id="client-kpi-count">-</div>
           </article>
           <article class="kpi-card">
-            <div class="kpi-label">Reservation Value Recorded</div>
+            <div class="kpi-label">Recorded Reservation Value</div>
             <div class="kpi-value" id="client-kpi-total-value">-</div>
             <div class="kpi-submeta" id="client-kpi-total-value-meta">-</div>
           </article>
@@ -896,28 +896,28 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 
         <section class="chart-grid" aria-label="Client Intelligence Charts">
           <article class="chart-card">
-            <h3 class="chart-title">Top Clients by Reservation Value Recorded</h3>
-            <p class="chart-copy">Ranks clients by reservation value recorded during the selected request-date period.</p>
+            <h3 class="chart-title">Top Clients by Recorded Reservation Value</h3>
+            <p class="chart-copy">Ranks clients by recorded reservation value for the selected request-date range.</p>
             <div class="chart-list" id="client-exposure-chart"></div>
-            <div class="chart-empty" id="client-exposure-empty" hidden>No client activity to show for this request-date range.</div>
+            <div class="chart-empty" id="client-exposure-empty" hidden>No client activity for the selected date range.</div>
           </article>
           <article class="chart-card" style="grid-column: span 2;">
-            <h3 class="chart-title">Reservation Value Recorded by Client and Reference</h3>
-            <p class="chart-copy">Shows how recorded reservation value is distributed across product references during the selected period.</p>
+            <h3 class="chart-title">Recorded Reservation Value by Client and Reference</h3>
+            <p class="chart-copy">Shows how recorded reservation value is distributed across product references for the selected date range.</p>
             <div class="stacked-chart-list" id="client-concentration-chart"></div>
-            <div class="chart-empty" id="client-concentration-empty" hidden>No client concentration data to show for this request-date range.</div>
+            <div class="chart-empty" id="client-concentration-empty" hidden>No client concentration data for the selected date range.</div>
           </article>
         </section>
 
         <section class="table-shell">
           <div class="table-topbar">
             <div>
-              <h3 class="table-title">Client Activity Detail</h3>
-              <p class="table-subtitle">Default order is highest recorded reservation value first for the selected request-date period.</p>
+              <h3 class="table-title">Client Activity Details</h3>
+              <p class="table-subtitle">Default order shows highest recorded reservation value first for the selected date range.</p>
             </div>
             <div class="table-filters">
               <div class="table-filter">
-                <label class="control-label" for="client-table-filter">Search clients</label>
+                <label class="control-label" for="client-table-filter">Search client rows</label>
                 <input class="control-input" id="client-table-filter" type="search" autocomplete="off" placeholder="Filter by company, client ID, or reference">
               </div>
               <div class="table-filter compact">
@@ -959,9 +959,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         <div class="view-head">
           <div>
             <h2 class="view-title">Landed Stock Intelligence</h2>
-            <p class="view-copy">Landed-only operational view of unsold stock, aging exposure, and where current warehouse concentration sits.</p>
+            <p class="view-copy">Landed-only operational view of unsold stock, aging exposure, and current warehouse concentration.</p>
           </div>
-          <button class="reset-button" id="landed-reset" type="button">Reset View</button>
+          <button class="reset-button" id="landed-reset" type="button">Reset</button>
         </div>
 
         <section class="kpi-grid" aria-label="Landed Stock Intelligence KPIs">
@@ -997,31 +997,31 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
             <h3 class="chart-title">Aging Exposure</h3>
             <p class="chart-copy">Unsold landed bags by aging bucket. This isolates aging risk without mixing in incoming stock or reservation state.</p>
             <div class="chart-list" id="landed-aging-chart"></div>
-            <div class="chart-empty" id="landed-aging-empty" hidden>No landed unsold rows with valid landing dates.</div>
+            <div class="chart-empty" id="landed-aging-empty" hidden>No landed aging exposure in the current view.</div>
           </article>
           <article class="chart-card">
             <h3 class="chart-title">Warehouse Exposure</h3>
             <p class="chart-copy">Current unsold landed bags by warehouse, so operational follow-up can focus where exposure is sitting now.</p>
             <div class="chart-list" id="landed-warehouse-chart"></div>
-            <div class="chart-empty" id="landed-warehouse-empty" hidden>No warehouse exposure to show.</div>
+            <div class="chart-empty" id="landed-warehouse-empty" hidden>No warehouse exposure in the current view.</div>
           </article>
           <article class="chart-card">
             <h3 class="chart-title">Largest Unsold References</h3>
             <p class="chart-copy">Shows which references currently hold the largest landed available exposure.</p>
             <div class="chart-list" id="landed-reference-chart"></div>
-            <div class="chart-empty" id="landed-reference-empty" hidden>No reference exposure to show.</div>
+            <div class="chart-empty" id="landed-reference-empty" hidden>No reference exposure in the current view.</div>
           </article>
         </section>
 
         <section class="table-shell">
           <div class="table-topbar">
             <div>
-              <h3 class="table-title">Landed Available Exposure</h3>
-              <p class="table-subtitle">Landed rows with unsold exposure or incomplete availability data. Default order is oldest landed exposure first.</p>
+              <h3 class="table-title">Landed Exposure Details</h3>
+              <p class="table-subtitle">Landed rows with unsold exposure or incomplete availability data. Default order shows oldest landed exposure first.</p>
             </div>
             <div class="table-filters">
               <div class="table-filter">
-                <label class="control-label" for="landed-table-filter">Search landed rows</label>
+                <label class="control-label" for="landed-table-filter">Search landed exposure</label>
                 <input class="control-input" id="landed-table-filter" type="search" autocomplete="off" placeholder="Filter by reference, product ID, warehouse, or status">
               </div>
               <div class="table-filter compact">
@@ -1068,7 +1068,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         <div class="view-head">
           <div>
             <h2 class="view-title">Reservation Risk / Action Queue</h2>
-            <p class="view-copy">Operational queue for open reservation exposure, expiry risk, landed-not-released balances, and immediate commercial follow-up.</p>
+            <p class="view-copy">Operational queue for open reservation exposure, expiry risk, landed-not-released balances, and follow-up priority.</p>
           </div>
         </div>
 
@@ -1084,7 +1084,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
             <div class="kpi-submeta" id="action-kpi-open-bags-incoming">-</div>
           </article>
           <article class="kpi-card">
-            <div class="kpi-label">Near Expiry Reservations</div>
+            <div class="kpi-label">Near-Expiry Reservations</div>
             <div class="kpi-value" id="action-kpi-near-expiry-reservations">-</div>
             <div class="kpi-submeta" id="action-kpi-near-expiry-meta">-</div>
           </article>
@@ -1110,30 +1110,30 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 
         <section class="chart-grid" aria-label="Reservation Risk Action Queue Charts">
           <article class="chart-card">
-            <h3 class="chart-title">Action Bucket Row Count</h3>
-            <p class="chart-copy">Shows where the active reservation queue currently sits by follow-up priority bucket.</p>
+            <h3 class="chart-title">Action Bucket Rows</h3>
+            <p class="chart-copy">Shows the active reservation queue by follow-up priority bucket.</p>
             <div class="chart-list" id="action-bucket-chart"></div>
-            <div class="chart-empty" id="action-bucket-empty" hidden>No open reservation exposure to show.</div>
+            <div class="chart-empty" id="action-bucket-empty" hidden>No open reservation exposure in the current view.</div>
           </article>
           <article class="chart-card">
             <h3 class="chart-title">Open Bags by Expiry Bucket</h3>
-            <p class="chart-copy">Shows trapped bags split between breached, near-expiry, longer-dated, and expiry-unknown open reservations.</p>
+            <p class="chart-copy">Shows open bags split between breached, near-expiry, longer-dated, and expiry-unknown reservations.</p>
             <div class="chart-list" id="action-expiry-chart"></div>
-            <div class="chart-empty" id="action-expiry-empty" hidden>No open reservation exposure to show.</div>
+            <div class="chart-empty" id="action-expiry-empty" hidden>No open reservation exposure in the current view.</div>
           </article>
           <article class="chart-card">
             <h3 class="chart-title">Top References Not Released Yet</h3>
-            <p class="chart-copy" id="action-reference-chart-copy">Ranks landed open reservation references by trapped value where complete, otherwise by bags.</p>
+            <p class="chart-copy" id="action-reference-chart-copy">Ranks landed open reservation references by value where complete, otherwise by bags.</p>
             <div class="chart-list" id="action-reference-chart"></div>
-            <div class="chart-empty" id="action-reference-empty" hidden>No landed open reservation references to show.</div>
+            <div class="chart-empty" id="action-reference-empty" hidden>No landed open reservation references in the current view.</div>
           </article>
         </section>
 
         <section class="table-shell">
           <div class="table-topbar">
             <div>
-              <h3 class="table-title">Action Queue Detail</h3>
-              <p class="table-subtitle">Default order is breached first, then near-expiry, then landed-not-approved, then landed-not-released, then other open exposure.</p>
+              <h3 class="table-title">Action Queue Details</h3>
+              <p class="table-subtitle">Default order shows breached first, then near-expiry, then landed-not-approved, then landed-not-released, then other open exposure.</p>
             </div>
             <div class="table-filters">
               <div class="table-filter">
@@ -2150,13 +2150,13 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 
       const agingOptions = ["all", ...LANDED_AGING_BUCKETS, "Date unavailable"];
       landedAgingFilter.innerHTML = agingOptions.map((value) => {{
-        const label = value === "all" ? "All Aging" : value;
+        const label = value === "all" ? "All Aging Buckets" : value;
         return '<option value="' + escapeHtml(value) + '">' + escapeHtml(label) + '</option>';
       }}).join("");
       landedAgingFilter.value = agingOptions.includes(state.landedAgingBucket) ? state.landedAgingBucket : "all";
 
       landedStatusFilter.innerHTML = [
-        ['all', 'All Status'],
+        ['all', 'All Data Status'],
         ['incomplete', 'Incomplete Only'],
         ['complete', 'Complete Only'],
       ].map((entry) => '<option value="' + escapeHtml(entry[0]) + '">' + escapeHtml(entry[1]) + '</option>').join("");
@@ -2215,14 +2215,14 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         : "Unavailable";
       largestMeta.textContent = clientMetrics.summary.largest_client_company_name
         ? clientLabel({{ company_name: clientMetrics.summary.largest_client_company_name, client_id: clientMetrics.summary.largest_client_id }})
-        : "No client activity recorded.";
+        : "No client activity in the selected date range.";
       concentrated.textContent = formatNumber(clientMetrics.summary.clients_concentrated_in_one_reference || 0, 0);
       if (clientMetrics.summary.concentration_share_available) {{
         topFiveShare.textContent = formatPercent(clientMetrics.summary.concentration_top_five_share);
         topTenShare.textContent = "Top 10: " + formatPercent(clientMetrics.summary.concentration_top_ten_share);
         restShare.textContent = "Rest: " + formatPercent(clientMetrics.summary.concentration_rest_share);
       }} else {{
-        topFiveShare.textContent = "No value concentration view";
+        topFiveShare.textContent = "No concentration view";
         topTenShare.textContent = "Top 10: unavailable for this range";
         restShare.textContent = "Rest: unavailable for this range";
       }}
@@ -2382,7 +2382,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       renderBarChart("action-bucket-chart", "action-bucket-empty", actionBucketCounts, "action_bucket", "row_count", (value) => formatNumber(value, 0) + " rows", true);
       renderBarChart("action-expiry-chart", "action-expiry-empty", actionExpiryBuckets, "expiry_bucket", "open_bags", (value) => formatNumber(value, 0) + " bags", true);
       const chartCopy = document.getElementById("action-reference-chart-copy");
-      chartCopy.textContent = String(actionTopReferences.status || "").trim() || "No landed open reservation references to show.";
+      chartCopy.textContent = String(actionTopReferences.status || "").trim() || "No landed open reservation references in the current view.";
       renderBarChart(
         "action-reference-chart",
         "action-reference-empty",
