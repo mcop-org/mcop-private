@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 from pathlib import Path
 
@@ -13,9 +14,17 @@ def _safe_json(value: object) -> str:
     )
 
 
+def _logo_data_uri(filename: str) -> str:
+    asset_path = Path(__file__).with_name("assets") / filename
+    encoded = base64.b64encode(asset_path.read_bytes()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
 def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     payload_json = _safe_json(dataset)
     snapshot_date = str(dataset.get("snapshot_date") or "-")
+    logo_light = _logo_data_uri("logo-light.png")
+    logo_dark = _logo_data_uri("logo-dark.png")
     html = f"""<!DOCTYPE html>
 <html lang="en" data-theme="light">
 <head>
@@ -78,7 +87,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     button, input {{ font: inherit; }}
     [hidden] {{ display: none !important; }}
     .shell {{
-      width: min(1340px, calc(100vw - 32px));
+      width: min(1520px, calc(100vw - 32px));
       margin: 22px auto 34px;
     }}
     .panel {{
@@ -100,9 +109,45 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       box-shadow: var(--shadow-md);
       backdrop-filter: blur(16px);
     }}
+    .topbar-brand {{
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-width: 0;
+    }}
+    .brand-mark {{
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 104px;
+      height: 52px;
+      padding: 7px 12px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel-strong) 90%, transparent);
+      box-shadow: var(--shadow-md);
+      overflow: hidden;
+      flex: 0 0 auto;
+    }}
+    .brand-logo {{
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }}
+    .brand-logo-dark {{
+      display: none;
+    }}
+    html[data-theme="dark"] .brand-logo-light {{
+      display: none;
+    }}
+    html[data-theme="dark"] .brand-logo-dark {{
+      display: block;
+    }}
     .topbar-copy {{
       display: grid;
       gap: 2px;
+      min-width: 0;
     }}
     .topbar-title {{
       margin: 0;
@@ -116,7 +161,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       gap: 10px;
       flex-wrap: wrap;
     }}
-    .toolbar-chip, .theme-toggle, .tab-button {{
+    .toolbar-chip, .theme-toggle, .module-nav-button {{
       display: inline-flex;
       align-items: center;
       gap: 8px;
@@ -131,14 +176,14 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       color: var(--ink);
       font-weight: 700;
     }}
-    .theme-toggle, .tab-button, .sort-button, .reset-button {{
+    .theme-toggle, .module-nav-button, .sort-button, .reset-button {{
       cursor: pointer;
       transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease;
     }}
     .theme-toggle:hover,
     .theme-toggle:focus-visible,
-    .tab-button:hover,
-    .tab-button:focus-visible,
+    .module-nav-button:hover,
+    .module-nav-button:focus-visible,
     .sort-button:hover,
     .sort-button:focus-visible,
     .reset-button:hover,
@@ -147,13 +192,47 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
       outline: none;
     }}
-    .tab-button.is-active {{
+    .module-nav-button.is-active {{
       color: var(--accent);
       border-color: color-mix(in srgb, var(--accent) 34%, var(--line));
       background: color-mix(in srgb, var(--accent-soft) 74%, var(--panel-strong));
     }}
-    .hero {{
+    .workspace-shell {{
       margin-top: 18px;
+      display: grid;
+      grid-template-columns: 228px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }}
+    .workspace-sidebar {{
+      position: sticky;
+      top: 22px;
+      padding: 14px;
+    }}
+    .sidebar-label {{
+      margin: 0 0 12px;
+      padding: 0 6px;
+      color: var(--muted);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+    }}
+    .module-nav {{
+      display: grid;
+      gap: 8px;
+    }}
+    .module-nav-button {{
+      width: 100%;
+      justify-content: flex-start;
+      text-align: left;
+      border-radius: 18px;
+      white-space: normal;
+      line-height: 1.35;
+    }}
+    .workspace-main {{
+      min-width: 0;
+    }}
+    .hero {{
       padding: 28px;
       background:
         linear-gradient(145deg, color-mix(in srgb, var(--accent-soft) 65%, transparent), transparent 44%),
@@ -236,12 +315,6 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       font-size: 16px;
       line-height: 1;
       letter-spacing: -0.02em;
-    }}
-    .tab-strip {{
-      margin-top: 18px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
     }}
     .workspace-view {{
       margin-top: 18px;
@@ -520,6 +593,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       }}
     }}
     @media (max-width: 1120px) {{
+      .workspace-shell {{
+        grid-template-columns: 208px minmax(0, 1fr);
+      }}
       .kpi-grid {{
         grid-template-columns: repeat(2, minmax(0, 1fr));
       }}
@@ -529,15 +605,34 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     }}
     @media (max-width: 900px) {{
       .shell {{
-        width: min(100vw - 18px, 1340px);
+        width: min(100vw - 18px, 1520px);
       }}
       .topbar {{
         align-items: flex-start;
+      }}
+      .workspace-shell {{
+        grid-template-columns: 1fr;
+      }}
+      .workspace-sidebar {{
+        position: static;
+        padding: 12px;
+      }}
+      .module-nav {{
+        grid-template-columns: repeat(2, minmax(0, 1fr));
       }}
     }}
     @media (max-width: 720px) {{
       .hero, .view-frame {{
         padding: 18px;
+      }}
+      .topbar-brand {{
+        width: 100%;
+      }}
+      .topbar-actions {{
+        width: 100%;
+      }}
+      .module-nav {{
+        grid-template-columns: 1fr;
       }}
       .kpi-grid {{
         grid-template-columns: 1fr;
@@ -552,9 +647,15 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
 <body>
   <main class="shell">
     <header class="topbar">
-      <div class="topbar-copy">
-        <p class="muted" style="margin:0;">MCOP Reference Workspace v1</p>
-        <h1 class="topbar-title">Reference Workspace</h1>
+      <div class="topbar-brand">
+        <div class="brand-mark" aria-hidden="true">
+          <img class="brand-logo brand-logo-light" src="{logo_light}" alt="">
+          <img class="brand-logo brand-logo-dark" src="{logo_dark}" alt="">
+        </div>
+        <div class="topbar-copy">
+          <p class="muted" style="margin:0;">MCOP Reference Workspace v1</p>
+          <h1 class="topbar-title">Reference Workspace</h1>
+        </div>
       </div>
       <div class="topbar-actions">
         <div class="toolbar-chip">Snapshot: <strong>{snapshot_date}</strong></div>
@@ -562,41 +663,46 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       </div>
     </header>
 
-    <section class="hero panel" id="shared-selector-panel">
-      <div class="control-grid">
-        <section class="control-panel panel">
-          <div class="control-head">
-            <div>
-              <p class="control-label">Reference Selector</p>
-              <h2 class="control-title">Choose product reference</h2>
-            </div>
-            <div class="toolbar-chip" id="selected-reference-chip"></div>
-          </div>
-          <div>
-            <label class="control-label" for="reference-search">Search product reference</label>
-            <input class="control-input" id="reference-search" list="reference-options" autocomplete="off" placeholder="Search or select a product reference">
-            <datalist id="reference-options"></datalist>
-          </div>
-          <div class="selected-reference-inline">
-            <div>
-              <span class="control-label" style="margin:0;">Selected Reference</span>
-              <p class="selected-reference-value" id="selected-reference-value">Select product</p>
-            </div>
-            <button class="reset-button" id="shared-selector-reset" type="button">Reset Selector</button>
+    <div class="workspace-shell">
+      <aside class="workspace-sidebar panel">
+        <p class="sidebar-label">Modules</p>
+        <nav class="module-nav" aria-label="Workspace navigation">
+          <button class="module-nav-button is-active" id="tab-reservation" type="button" data-tab="reservation" aria-pressed="true">Reservation Intelligence</button>
+          <button class="module-nav-button" id="tab-product" type="button" data-tab="product" aria-pressed="false">Product Reference Intelligence</button>
+          <button class="module-nav-button" id="tab-client" type="button" data-tab="client" aria-pressed="false">Client Intelligence</button>
+          <button class="module-nav-button" id="tab-landed" type="button" data-tab="landed" aria-pressed="false">Landed Stock Intelligence</button>
+          <button class="module-nav-button" id="tab-action" type="button" data-tab="action" aria-pressed="false">Reservation Risk / Action Queue</button>
+        </nav>
+      </aside>
+
+      <div class="workspace-main">
+        <section class="hero panel" id="shared-selector-panel">
+          <div class="control-grid">
+            <section class="control-panel panel">
+              <div class="control-head">
+                <div>
+                  <p class="control-label">Reference Selector</p>
+                  <h2 class="control-title">Choose product reference</h2>
+                </div>
+                <div class="toolbar-chip" id="selected-reference-chip"></div>
+              </div>
+              <div>
+                <label class="control-label" for="reference-search">Search product reference</label>
+                <input class="control-input" id="reference-search" list="reference-options" autocomplete="off" placeholder="Search or select a product reference">
+                <datalist id="reference-options"></datalist>
+              </div>
+              <div class="selected-reference-inline">
+                <div>
+                  <span class="control-label" style="margin:0;">Selected Reference</span>
+                  <p class="selected-reference-value" id="selected-reference-value">Select product</p>
+                </div>
+                <button class="reset-button" id="shared-selector-reset" type="button">Reset Selector</button>
+              </div>
+            </section>
           </div>
         </section>
-      </div>
-    </section>
 
-    <nav class="tab-strip" aria-label="Workspace tabs">
-      <button class="tab-button is-active" id="tab-reservation" type="button" data-tab="reservation" aria-pressed="true">Reservation Intelligence</button>
-      <button class="tab-button" id="tab-product" type="button" data-tab="product" aria-pressed="false">Product Reference Intelligence</button>
-      <button class="tab-button" id="tab-client" type="button" data-tab="client" aria-pressed="false">Client Intelligence</button>
-      <button class="tab-button" id="tab-landed" type="button" data-tab="landed" aria-pressed="false">Landed Stock Intelligence</button>
-      <button class="tab-button" id="tab-action" type="button" data-tab="action" aria-pressed="false">Reservation Risk / Action Queue</button>
-    </nav>
-
-    <section class="workspace-view" id="reservation-view">
+        <section class="workspace-view" id="reservation-view">
       <div class="panel view-frame">
         <div class="view-head">
           <h2 class="view-title">Reservation Intelligence</h2>
@@ -1080,6 +1186,8 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
         </section>
       </div>
     </section>
+      </div>
+    </div>
   </main>
 
   <script id="workspace-data" type="application/json">{payload_json}</script>
@@ -1121,7 +1229,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const actionBucketFilter = document.getElementById("action-bucket-filter");
     const actionLandingFilter = document.getElementById("action-landing-filter");
     const actionDataFilter = document.getElementById("action-data-filter");
-    const tabButtons = Array.from(document.querySelectorAll(".tab-button"));
+    const tabButtons = Array.from(document.querySelectorAll(".module-nav-button"));
     const sortButtons = Array.from(document.querySelectorAll("[data-sort]"));
     const reservationView = document.getElementById("reservation-view");
     const productView = document.getElementById("product-view");
