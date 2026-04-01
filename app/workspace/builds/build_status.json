@@ -1,0 +1,11 @@
+{
+  "artifacts": {
+    "action_queue": "action_queue.json",
+    "client_geography": "client_geography.json",
+    "product_reference_intelligence": "product_reference_intelligence.json",
+    "reservation_intelligence": "reservation_intelligence.json"
+  },
+  "message": "Build completed successfully.",
+  "snapshot_date": "2026-03-09",
+  "state": "ready"
+}

@@ -1,0 +1,157 @@
+import { useEffect, useMemo, useState } from "react";
+import { ClientGeographyDetailPanel } from "../components/geography/ClientGeographyDetailPanel";
+import { ClientGeographyFilters } from "../components/geography/ClientGeographyFilters";
+import { ClientGeographyLocationTable } from "../components/geography/ClientGeographyLocationTable";
+import { ClientGeographyMap } from "../components/geography/ClientGeographyMap";
+import { ClientGeographySummaryCards } from "../components/geography/ClientGeographySummaryCards";
+import { ClientGeographyUnmappedTable } from "../components/geography/ClientGeographyUnmappedTable";
+import type {
+  ClientGeographyLocationRow,
+  ClientGeographyMapClientRow,
+} from "../lib/contracts";
+import { getClientGeographyReadModel } from "../lib/api";
+import { useAsyncData } from "../lib/query";
+
+function matchesFilters<T extends { country: string; city: string }>(
+  row: T,
+  country: string,
+  city: string,
+) {
+  if (country && row.country !== country) {
+    return false;
+  }
+  if (city && row.city !== city) {
+    return false;
+  }
+  return true;
+}
+
+function matchesExposureOnLocation(row: ClientGeographyLocationRow, exposure: string) {
+  if (exposure === "exposed") {
+    return Number(row.exposed_client_count || 0) > 0;
+  }
+  if (exposure === "no-exposure") {
+    return Number(row.exposed_client_count || 0) <= 0;
+  }
+  return true;
+}
+
+function matchesExposureOnClient(row: ClientGeographyMapClientRow, exposure: string) {
+  if (exposure === "exposed") {
+    return Boolean(row.has_exposure);
+  }
+  if (exposure === "no-exposure") {
+    return !row.has_exposure;
+  }
+  return true;
+}
+
+export function ClientGeographyPage() {
+  const { data, error, loading } = useAsyncData(getClientGeographyReadModel, []);
+  const [country, setCountry] = useState("");
+  const [city, setCity] = useState("");
+  const [exposure, setExposure] = useState("all");
+  const [selectedMarkerId, setSelectedMarkerId] = useState("");
+
+  const locations = data?.locations || [];
+  const mapClients = data?.map_clients || [];
+  const unmappedClients = data?.unmapped_clients || [];
+
+  const cityOptions = useMemo(() => {
+    const sourceRows = country ? locations.filter((row) => row.country === country) : locations;
+    return [...new Set(sourceRows.map((row) => row.city).filter(Boolean))].sort((left, right) =>
+      left.localeCompare(right, "en", { sensitivity: "base" }),
+    );
+  }, [country, locations]);
+
+  const filteredLocations = useMemo(
+    () =>
+      locations.filter(
+        (row) =>
+          matchesFilters(row, country, city) &&
+          matchesExposureOnLocation(row, exposure),
+      ),
+    [city, country, exposure, locations],
+  );
+
+  const filteredMapClients = useMemo(
+    () =>
+      mapClients.filter(
+        (row) =>
+          matchesFilters(row, country, city) &&
+          matchesExposureOnClient(row, exposure),
+      ),
+    [city, country, exposure, mapClients],
+  );
+
+  useEffect(() => {
+    if (!filteredMapClients.length) {
+      if (selectedMarkerId !== "") {
+        setSelectedMarkerId("");
+      }
+      return;
+    }
+    if (filteredMapClients.some((row) => row.marker_id === selectedMarkerId)) {
+      return;
+    }
+    setSelectedMarkerId(filteredMapClients[0].marker_id);
+  }, [filteredMapClients, selectedMarkerId]);
+
+  const selectedClient =
+    filteredMapClients.find((row) => row.marker_id === selectedMarkerId) || null;
+
+  function handleResetFilters() {
+    setCountry("");
+    setCity("");
+    setExposure("all");
+    setSelectedMarkerId("");
+  }
+
+  return (
+    <section className="page">
+      <div className="page-header">
+        <h3>Client Geography</h3>
+        <p>
+          Analytical delivery geography view over trusted client mapping outputs, with unresolved clients kept explicit.
+        </p>
+      </div>
+      {loading ? <div className="card">Loading client geography read-model...</div> : null}
+      {error ? <div className="banner error">{error}</div> : null}
+      {data ? (
+        <>
+          <ClientGeographyFilters
+            countries={data.filters.countries}
+            cities={cityOptions}
+            country={country}
+            city={city}
+            exposure={exposure}
+            onCountryChange={(value) => {
+              setCountry(value);
+              setCity("");
+            }}
+            onCityChange={setCity}
+            onExposureChange={setExposure}
+            onReset={handleResetFilters}
+          />
+          <ClientGeographySummaryCards
+            summary={data.summary}
+            filteredLocations={filteredLocations}
+          />
+          <div className="card-grid geography-map-layout">
+            <ClientGeographyMap
+              rows={filteredMapClients}
+              selectedMarkerId={selectedMarkerId}
+              onSelectMarker={setSelectedMarkerId}
+            />
+            <ClientGeographyDetailPanel selectedClient={selectedClient} />
+          </div>
+          <ClientGeographyLocationTable
+            rows={filteredLocations}
+            selectedClient={selectedClient}
+          />
+          <ClientGeographyUnmappedTable rows={unmappedClients} />
+        </>
+      ) : null}
+    </section>
+  );
+}
