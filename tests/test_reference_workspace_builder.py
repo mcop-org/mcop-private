@@ -1218,6 +1218,145 @@ def test_builder_action_queue_kpis_count_unique_reservations_by_reservation_key(
     assert summary["open_exposure_reservations"] == 0
 
 
+def test_builder_prepares_expired_reservation_drafts_grouped_by_client_and_flags_missing_email() -> None:
+    activity = pd.DataFrame(
+        [
+            {
+                "id_request": "r-1",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-01",
+                "approval_date": "2026-03-01",
+                "amendment_date": "",
+                "reservation_days": 5,
+                "client_id": "c-1",
+                "company_name": "Alpha Roasters",
+                "product_id": "p-1",
+                "product_reference": "REF-1",
+                "bags": 3,
+                "bags_remaining": 2,
+                "bag_size_kg": 30,
+                "price_per_kg": 10.0,
+                "landing_status": "incoming",
+                "landing_date": "2026-03-20",
+                "warehouse": "London",
+            },
+            {
+                "id_request": "r-2",
+                "id_booking": "booking-2",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-02",
+                "approval_date": "2026-03-02",
+                "amendment_date": "",
+                "reservation_days": 6,
+                "client_id": "c-1",
+                "company_name": "Alpha Roasters",
+                "product_id": "p-2",
+                "product_reference": "REF-2",
+                "bags": 2,
+                "bags_remaining": 1,
+                "bag_size_kg": 20,
+                "price_per_kg": "",
+                "landing_status": "landed",
+                "landing_date": "2026-03-03",
+                "warehouse": "Bristol",
+            },
+            {
+                "id_request": "r-3",
+                "id_booking": "",
+                "request_type": "reservation",
+                "request_status": "approved",
+                "request_date": "2026-03-03",
+                "approval_date": "2026-03-03",
+                "amendment_date": "",
+                "reservation_days": 4,
+                "client_id": "c-2",
+                "company_name": "Bravo Coffee",
+                "product_id": "p-3",
+                "product_reference": "REF-3",
+                "bags": 1,
+                "bags_remaining": 1,
+                "bag_size_kg": 25,
+                "price_per_kg": 11.0,
+                "landing_status": "incoming",
+                "landing_date": "2026-03-18",
+                "warehouse": "Antwerp",
+            },
+        ]
+    )
+    products = pd.DataFrame(
+        [
+            {"product_id": "p-1", "product_reference": "REF-1", "landing_status": "incoming", "landing_date": "2026-03-20", "warehouse": "London", "bags": 3, "bag_size_kg": 30, "bags_available": 1},
+            {"product_id": "p-2", "product_reference": "REF-2", "landing_status": "landed", "landing_date": "2026-03-03", "warehouse": "Bristol", "bags": 2, "bag_size_kg": 20, "bags_available": 1},
+            {"product_id": "p-3", "product_reference": "REF-3", "landing_status": "incoming", "landing_date": "2026-03-18", "warehouse": "Antwerp", "bags": 1, "bag_size_kg": 25, "bags_available": 0},
+        ]
+    )
+    clients = pd.DataFrame(
+        [
+            {
+                "client_id": "c-1",
+                "company_name": "Alpha Roasters",
+                "contact_first_name": "Ava",
+                "contact_last_name": "Stone",
+                "contact_email": "ava@alpha.test",
+                "add_contact_email": "ops@alpha.test",
+                "add_contact_include_email": "1",
+            },
+            {
+                "client_id": "c-2",
+                "company_name": "Bravo Coffee",
+                "contact_first_name": "",
+                "contact_last_name": "",
+                "contact_email": "",
+                "add_contact_email": "cc@bravo.test",
+                "add_contact_include_email": "0",
+            },
+        ]
+    )
+
+    dataset = build_reference_workspace_dataset(activity, products, clients)
+    workflow = dataset["reservation_action_queue"]["expired_draft_workflow"]
+
+    assert workflow["summary"] == {
+        "as_of_date": "2026-03-03",
+        "breached_rows": 0,
+        "breached_reservations": 0,
+        "draft_client_count": 0,
+        "drafts_missing_primary_email": 0,
+        "status": "No expired reservation draft candidates in the current workspace snapshot.",
+    }
+
+    updated_activity = activity.copy()
+    updated_activity.loc[:, "amendment_date"] = "2026-03-12"
+    dataset = build_reference_workspace_dataset(updated_activity, products, clients)
+    workflow = dataset["reservation_action_queue"]["expired_draft_workflow"]
+
+    assert workflow["summary"] == {
+        "as_of_date": "2026-03-12",
+        "breached_rows": 3,
+        "breached_reservations": 3,
+        "draft_client_count": 2,
+        "drafts_missing_primary_email": 1,
+        "status": "Prepared 2 grouped draft reminder(s) from breached reservations only. Manual review required before any external send.",
+    }
+    assert workflow["drafts"][0]["company_name"] == "Alpha Roasters"
+    assert workflow["drafts"][0]["to_emails"] == ["ava@alpha.test"]
+    assert workflow["drafts"][0]["cc_emails"] == ["ops@alpha.test"]
+    assert workflow["drafts"][0]["missing_primary_email"] is False
+    assert workflow["drafts"][0]["greeting_name"] == "Ava"
+    assert workflow["drafts"][0]["breached_reservation_count"] == 2
+    assert [item["reservation_key"] for item in workflow["drafts"][0]["line_items"]] == ["r-1", "booking-2"]
+    assert workflow["drafts"][0]["line_items"][1]["remaining_value_gbp"] is None
+    assert "- Reservation booking-2 | REF-2 | 1 bags remaining | expired on 2026-03-08 | 4 days expired | 20 kg remaining" in workflow["drafts"][0]["body"]
+    assert workflow["drafts"][1]["company_name"] == "Bravo Coffee"
+    assert workflow["drafts"][1]["to_emails"] == []
+    assert workflow["drafts"][1]["cc_emails"] == []
+    assert workflow["drafts"][1]["missing_primary_email"] is True
+    assert workflow["drafts"][1]["greeting_name"] == "Bravo Coffee team"
+
+
 def test_builder_splits_landed_not_approved_from_landed_not_released() -> None:
     activity = pd.DataFrame(
         [

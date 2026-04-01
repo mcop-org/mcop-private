@@ -324,6 +324,17 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
                     "data_status": "Complete",
                 }
             ],
+            "expired_draft_workflow": {
+                "summary": {
+                    "as_of_date": "2026-03-07",
+                    "breached_rows": 0,
+                    "breached_reservations": 0,
+                    "draft_client_count": 0,
+                    "drafts_missing_primary_email": 0,
+                    "status": "No expired reservation draft candidates in the current workspace snapshot.",
+                },
+                "drafts": [],
+            },
         },
     }
     out = tmp_path / "reference_workspace.html"
@@ -381,6 +392,7 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert "Client Geography" in first
     assert "Landed Stock Intelligence" in first
     assert "Reservation Risk / Action Queue" in first
+    assert "Expired Reservation Draft Review" in first
     assert "Reservation activity view, excluding rejected reservations." in first
     assert "Request Date" in first
     assert 'id="client-date-preset"' in first
@@ -479,6 +491,8 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'id="action-landing-filter"' in first
     assert 'id="action-data-filter"' in first
     assert 'id="action-detail-body"' in first
+    assert 'id="expired-draft-list"' in first
+    assert 'id="expired-draft-kpi-clients"' in first
     assert '"default_reference":"REF-1"' in first
     assert '"default_landed_reference":"REF-2"' in first
     assert '"landed_reference_options":[{"product_reference":"REF-2"}]' in first
@@ -529,6 +543,8 @@ def test_reference_workspace_html_is_deterministic_and_keeps_safe_tabbed_shell(t
     assert 'actionSummary.open_reserved_value_incoming_available' in first
     assert 'openExposure.textContent = formatNumber(actionSummary.open_exposure_reservations || 0, 0);' in first
     assert 'actionNow.textContent = formatNumber(actionSummary.action_now_reservations || 0, 0);' in first
+    assert 'function renderExpiredDraftReview()' in first
+    assert 'Primary recipient email missing. Draft retained for internal review only.' in first
     assert 'selectedReferenceChipEl.innerHTML =' in first
     assert 'landingStatus.innerHTML = renderStatusChip(summary.landing_status || "-");' in first
     assert '"<td>" + renderStatusChip(row.landing_status || "-") + "</td>" +' in first
@@ -927,6 +943,17 @@ def test_reference_workspace_includes_client_geography_tab_and_client_level_plot
             "action_bucket_counts": [],
             "open_bags_by_expiry_bucket": [],
             "top_landed_references": {"metric": "remaining_value_gbp", "metric_label": "Landed Not Released Value", "value_available": True, "status": "", "rows": []},
+            "expired_draft_workflow": {
+                "summary": {
+                    "as_of_date": "",
+                    "breached_rows": 0,
+                    "breached_reservations": 0,
+                    "draft_client_count": 0,
+                    "drafts_missing_primary_email": 0,
+                    "status": "No expired reservation draft candidates in the current workspace snapshot.",
+                },
+                "drafts": [],
+            },
             "details": [],
         },
     }

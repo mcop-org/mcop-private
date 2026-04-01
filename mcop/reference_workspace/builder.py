@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+import json
+from pathlib import Path
 
 import pandas as pd
 
@@ -17,12 +19,36 @@ LANDED_AGING_BUCKETS = (
     ("181-270", 181, 270),
     ("270+", 271, None),
 )
+CLIENT_GEOGRAPHY_COORDINATE_CACHE = Path(__file__).with_name("client_geography_coordinates.json")
 
 
 def _clean_text(value: object) -> str:
     if value is None or pd.isna(value):
         return ""
     return str(value).strip()
+
+
+def _normalise_geo_part(value: object) -> str:
+    return " ".join(_clean_text(value).split()).casefold()
+
+
+def _client_geography_exact_key(country: object, city: object, postcode: object) -> str:
+    return "||".join(
+        [
+            _normalise_geo_part(country),
+            _normalise_geo_part(city),
+            _normalise_geo_part(postcode),
+        ]
+    )
+
+
+def _client_geography_city_key(country: object, city: object) -> str:
+    return "||".join(
+        [
+            _normalise_geo_part(country),
+            _normalise_geo_part(city),
+        ]
+    )
 
 
 def _to_float_series(frame: pd.DataFrame, column: str) -> pd.Series:
@@ -136,9 +162,86 @@ def _empty_client_geography_summary() -> dict:
         "duplicate_client_rows": 0,
         "matched_client_rows": 0,
         "unmatched_client_rows": 0,
-        "map_included": False,
-        "map_status": "Plotted map deferred: no deterministic local coordinate cache is included in v1.",
+        "resolved_map_clients": 0,
+        "unresolved_map_clients": 0,
+        "coordinate_conflicts": 0,
+        "map_included": True,
+        "map_status": "No deterministically resolved client coordinates are available for plotting.",
     }
+
+
+def _load_client_geography_coordinate_cache() -> dict[str, object]:
+    if not CLIENT_GEOGRAPHY_COORDINATE_CACHE.exists():
+        return {"exact": {}, "city": {}, "conflicts": set()}
+
+    raw = json.loads(CLIENT_GEOGRAPHY_COORDINATE_CACHE.read_text(encoding="utf-8"))
+    exact_candidates: dict[str, list[dict]] = {}
+    city_candidates: dict[str, list[dict]] = {}
+
+    entries = raw if isinstance(raw, list) else []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+        country = _clean_text(entry.get("country"))
+        city = _clean_text(entry.get("city"))
+        postcode = _clean_text(entry.get("postcode"))
+        try:
+            latitude = round(float(entry.get("latitude")), 6)
+            longitude = round(float(entry.get("longitude")), 6)
+        except (TypeError, ValueError):
+            continue
+        if not country or not city:
+            continue
+
+        record = {
+            "country": country,
+            "city": city,
+            "postcode": postcode,
+            "latitude": latitude,
+            "longitude": longitude,
+            "match_level": "country_city" if bool(entry.get("postcode_independent")) and not postcode else "country_city_postcode",
+        }
+        if postcode:
+            exact_candidates.setdefault(_client_geography_exact_key(country, city, postcode), []).append(record)
+        elif bool(entry.get("postcode_independent")):
+            city_candidates.setdefault(_client_geography_city_key(country, city), []).append(record)
+
+    conflicts: set[str] = set()
+    exact: dict[str, dict] = {}
+    city: dict[str, dict] = {}
+    for key, records in exact_candidates.items():
+        if len(records) == 1:
+            exact[key] = records[0]
+        else:
+            conflicts.add(key)
+    for key, records in city_candidates.items():
+        if len(records) == 1:
+            city[key] = records[0]
+        else:
+            conflicts.add(key)
+    return {"exact": exact, "city": city, "conflicts": conflicts}
+
+
+def _resolve_client_geography_coordinate(
+    country: str,
+    city: str,
+    postcode: str,
+    cache: dict[str, object],
+) -> tuple[dict | None, str]:
+    exact_key = _client_geography_exact_key(country, city, postcode)
+    exact_cache = cache.get("exact", {})
+    if exact_key in exact_cache:
+        return exact_cache[exact_key], ""
+    if exact_key in cache.get("conflicts", set()):
+        return None, "Coordinate cache conflict on exact delivery geography key"
+
+    city_key = _client_geography_city_key(country, city)
+    city_cache = cache.get("city", {})
+    if city_key in city_cache:
+        return city_cache[city_key], ""
+    if city_key in cache.get("conflicts", set()):
+        return None, "Coordinate cache conflict on postcode-independent delivery geography key"
+    return None, "No deterministic coordinate cache match for delivery geography"
 
 
 def _available_bags_by_reference(products: pd.DataFrame) -> dict[str, float]:
@@ -879,11 +982,263 @@ def _prepare_clients_master(clients: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     return master, metadata
 
 
+def _prepare_client_contact_master(clients: pd.DataFrame) -> pd.DataFrame:
+    if clients.empty:
+        return pd.DataFrame()
+
+    master = clients.copy()
+    for column in (
+        "client_id",
+        "company_name",
+        "contact_first_name",
+        "contact_last_name",
+        "contact_email",
+        "add_contact_email",
+        "add_contact_include_email",
+    ):
+        if column not in master.columns:
+            master[column] = pd.NA
+        master[column] = master[column].map(_clean_text)
+
+    master = master[master["client_id"] != ""].copy()
+    if master.empty:
+        return master
+
+    master["primary_email_present"] = master["contact_email"].ne("")
+    master["primary_name_present"] = master["contact_first_name"].ne("") | master["contact_last_name"].ne("")
+    master["additional_email_allowed"] = (
+        master["add_contact_include_email"].eq("1") & master["add_contact_email"].ne("")
+    )
+    master = master.sort_values(
+        [
+            "client_id",
+            "primary_email_present",
+            "primary_name_present",
+            "additional_email_allowed",
+            "company_name",
+            "contact_email",
+            "add_contact_email",
+        ],
+        ascending=[True, False, False, False, True, True, True],
+        kind="stable",
+        na_position="last",
+    )
+    return master.groupby("client_id", sort=True, as_index=False).head(1).copy()
+
+
+def _empty_expired_draft_workflow(snapshot_date: str) -> dict:
+    return {
+        "summary": {
+            "as_of_date": snapshot_date,
+            "breached_rows": 0,
+            "breached_reservations": 0,
+            "draft_client_count": 0,
+            "drafts_missing_primary_email": 0,
+            "status": "No expired reservation draft candidates in the current workspace snapshot.",
+        },
+        "drafts": [],
+    }
+
+
+def _build_expired_reservation_draft_workflow(
+    latest: pd.DataFrame,
+    clients: pd.DataFrame,
+    snapshot_date: str,
+) -> dict:
+    if latest.empty:
+        return _empty_expired_draft_workflow(snapshot_date)
+
+    rows = latest.copy()
+    rows["company_name"] = rows["company_name"].map(_clean_text)
+    rows["client_id"] = rows["client_id"].map(_clean_text)
+    rows["reservation_key"] = rows["reservation_key"].map(_clean_text)
+    rows["product_reference"] = rows["product_reference"].map(_clean_text)
+    rows["approval_date"] = rows["approval_date"].map(_normalise_iso_date)
+    rows["bags_remaining"] = pd.to_numeric(rows["bags_remaining"], errors="coerce").fillna(0.0)
+    if "bag_size_kg_raw" not in rows.columns:
+        rows["bag_size_kg_raw"] = _to_numeric_or_nan_series(rows, "bag_size_kg")
+    if "price_per_kg_raw" not in rows.columns:
+        rows["price_per_kg_raw"] = _to_numeric_or_nan_series(rows, "price_per_kg")
+    if "reservation_days_raw" not in rows.columns:
+        rows["reservation_days_raw"] = _to_numeric_or_nan_series(rows, "reservation_days")
+
+    rows = rows[rows["bags_remaining"] > 0].copy()
+    if rows.empty:
+        return _empty_expired_draft_workflow(snapshot_date)
+
+    rows["approval_dt"] = pd.to_datetime(rows["approval_date"], errors="coerce", format="%Y-%m-%d")
+    rows["reservation_days_valid"] = rows["reservation_days_raw"].notna() & (rows["reservation_days_raw"] >= 0)
+    rows["expiry_available"] = rows["approval_dt"].notna() & rows["reservation_days_valid"]
+    rows["expiry_dt"] = pd.NaT
+    rows.loc[rows["expiry_available"], "expiry_dt"] = (
+        rows.loc[rows["expiry_available"], "approval_dt"]
+        + pd.to_timedelta(rows.loc[rows["expiry_available"], "reservation_days_raw"], unit="D")
+    )
+
+    snapshot_ts = pd.to_datetime(snapshot_date, errors="coerce", format="%Y-%m-%d")
+    rows["days_to_expiry"] = float("nan")
+    if not pd.isna(snapshot_ts):
+        rows.loc[rows["expiry_available"], "days_to_expiry"] = (
+            rows.loc[rows["expiry_available"], "expiry_dt"] - snapshot_ts
+        ).dt.days.astype("float64")
+
+    rows["is_breached"] = rows["expiry_available"] & rows["days_to_expiry"].notna() & (rows["days_to_expiry"] < 0)
+    rows = rows[rows["is_breached"]].copy()
+    if rows.empty:
+        return _empty_expired_draft_workflow(snapshot_date)
+
+    rows["remaining_kg_value"] = (rows["bags_remaining"] * rows["bag_size_kg_raw"]).where(
+        rows["bag_size_kg_raw"].notna(),
+        0.0,
+    )
+    rows["value_complete"] = rows["bag_size_kg_raw"].notna() & rows["price_per_kg_raw"].notna()
+    rows["remaining_value_gbp_value"] = (
+        rows["remaining_kg_value"] * rows["price_per_kg_raw"]
+    ).where(rows["value_complete"], 0.0)
+    rows["days_expired"] = rows["days_to_expiry"].abs().astype("int64")
+    rows = rows.sort_values(
+        ["company_name", "client_id", "days_expired", "reservation_key", "product_reference"],
+        ascending=[True, True, False, True, True],
+        kind="stable",
+        na_position="last",
+    )
+
+    contact_master = _prepare_client_contact_master(clients)
+    contact_lookup = {
+        _clean_text(row["client_id"]): row
+        for _, row in contact_master.iterrows()
+        if _clean_text(row.get("client_id"))
+    }
+
+    def _unique_reservation_count(frame: pd.DataFrame) -> int:
+        if frame.empty:
+            return 0
+        return int(frame["reservation_key"].replace("", pd.NA).dropna().nunique())
+
+    drafts: list[dict] = []
+    for client_key, group in rows.groupby(["company_name", "client_id"], sort=True, dropna=False):
+        company_name, client_id = client_key
+        company_name = _clean_text(company_name)
+        client_id = _clean_text(client_id)
+        contact_row = contact_lookup.get(client_id)
+        contact_first_name = _clean_text(contact_row.get("contact_first_name")) if contact_row is not None else ""
+        contact_last_name = _clean_text(contact_row.get("contact_last_name")) if contact_row is not None else ""
+        contact_email = _clean_text(contact_row.get("contact_email")) if contact_row is not None else ""
+        add_contact_email = ""
+        if contact_row is not None and _clean_text(contact_row.get("add_contact_include_email")) == "1":
+            add_contact_email = _clean_text(contact_row.get("add_contact_email"))
+
+        recipient_emails = [email for email in [contact_email] if email]
+        cc_emails = [email for email in [add_contact_email] if email and email not in recipient_emails]
+
+        greeting_name = contact_first_name or (f"{company_name} team" if company_name else "team")
+        subject = f"Mercanta reservation reminder: expired reservations for {company_name or client_id or 'client'}"
+
+        group_rows = group.sort_values(
+            ["days_expired", "reservation_key", "product_reference"],
+            ascending=[False, True, True],
+            kind="stable",
+            na_position="last",
+        )
+        line_items: list[dict] = []
+        for _, row in group_rows.iterrows():
+            reservation_key = _clean_text(row["reservation_key"])
+            product_reference = _clean_text(row["product_reference"])
+            expiry_date = row["expiry_dt"].date().isoformat() if pd.notna(row["expiry_dt"]) else ""
+            bags_remaining = round(float(row["bags_remaining"]), 4)
+            remaining_kg = round(float(row["remaining_kg_value"]), 4) if pd.notna(row["bag_size_kg_raw"]) else None
+            remaining_value_gbp = (
+                round(float(row["remaining_value_gbp_value"]), 2) if bool(row["value_complete"]) else None
+            )
+            line_items.append(
+                {
+                    "reservation_key": reservation_key,
+                    "product_reference": product_reference,
+                    "bags_remaining": bags_remaining,
+                    "remaining_kg": remaining_kg,
+                    "remaining_value_gbp": remaining_value_gbp,
+                    "expiry_date": expiry_date,
+                    "days_expired": int(row["days_expired"]),
+                }
+            )
+
+        intro = (
+            f"Dear {greeting_name},\n\n"
+            "We are writing to remind you that the reservations below are now past their expiry date on our latest workspace snapshot.\n"
+        )
+        bullet_lines = []
+        for item in line_items:
+            kg_segment = (
+                f" | {int(round(item['remaining_kg'], 0))} kg remaining"
+                if item["remaining_kg"] is not None
+                else ""
+            )
+            value_segment = (
+                f", value GBP {int(round(item['remaining_value_gbp'], 0)):,}"
+                if item["remaining_value_gbp"] is not None
+                else ""
+            )
+            bullet_lines.append(
+                f"- Reservation {item['reservation_key']} | {item['product_reference']} | "
+                f"{int(round(item['bags_remaining'], 0))} bags remaining | "
+                f"expired on {item['expiry_date']} | {item['days_expired']} days expired"
+                f"{kg_segment}"
+                f"{value_segment}"
+            )
+        closing = (
+            "\nPlease review these reservations and let us know how you would like to proceed with release planning.\n\n"
+            "Kind regards,\nMercanta"
+        )
+        body = intro + "\n".join(bullet_lines) + closing
+        drafts.append(
+            {
+                "company_name": company_name,
+                "client_id": client_id,
+                "contact_first_name": contact_first_name,
+                "contact_last_name": contact_last_name,
+                "contact_email": contact_email,
+                "cc_emails": cc_emails,
+                "to_emails": recipient_emails,
+                "missing_primary_email": not bool(contact_email),
+                "greeting_name": greeting_name,
+                "subject": subject,
+                "body": body,
+                "breached_reservation_count": _unique_reservation_count(group_rows),
+                "breached_row_count": int(len(group_rows)),
+                "line_items": line_items,
+            }
+        )
+
+    drafts = sorted(
+        drafts,
+        key=lambda row: (
+            row["missing_primary_email"],
+            row["company_name"].lower(),
+            row["client_id"].lower(),
+        ),
+    )
+    return {
+        "summary": {
+            "as_of_date": snapshot_date,
+            "breached_rows": int(len(rows)),
+            "breached_reservations": _unique_reservation_count(rows),
+            "draft_client_count": int(len(drafts)),
+            "drafts_missing_primary_email": int(sum(1 for draft in drafts if draft["missing_primary_email"])),
+            "status": (
+                f"Prepared {len(drafts)} grouped draft reminder(s) from breached reservations only. "
+                "Manual review required before any external send."
+            ),
+        },
+        "drafts": drafts,
+    }
+
+
 def _build_client_geography(
     latest: pd.DataFrame,
     clients: pd.DataFrame,
-) -> tuple[dict, list[dict], list[dict], list[dict], list[dict]]:
+) -> tuple[dict, list[dict], list[dict], list[dict], list[dict], list[dict]]:
     empty_summary = _empty_client_geography_summary()
+    coordinate_cache = _load_client_geography_coordinate_cache()
     clients_master, metadata = _prepare_clients_master(clients)
     clients_lookup = {
         _clean_text(row["client_id"]): row
@@ -903,7 +1258,7 @@ def _build_client_geography(
         detail_rows = []
 
     if clients_master.empty and not detail_rows:
-        return empty_summary, [], [], [], []
+        return empty_summary, [], [], [], [], []
 
     mapped_records: list[dict] = []
     unmapped_records: list[dict] = []
@@ -947,6 +1302,8 @@ def _build_client_geography(
                 "reserved_bags": reserved_bags,
                 "reserved_kg": reserved_kg,
                 "has_exposure": bool(reserved_bags > 0),
+                "distinct_reference_count": int(exposure["distinct_reference_count"]) if exposure is not None else 0,
+                "primary_reference": _clean_text(exposure["primary_reference"]) if exposure is not None else "",
             }
         )
 
@@ -1108,6 +1465,74 @@ def _build_client_geography(
         ),
     )
 
+    map_client_rows: list[dict] = []
+    coordinate_conflicts = 0
+    for row in mapped_records:
+        coordinate, reason = _resolve_client_geography_coordinate(
+            row["country"],
+            row["city"],
+            row["postcode"],
+            coordinate_cache,
+        )
+        if coordinate is None:
+            if "conflict" in reason.lower():
+                coordinate_conflicts += 1
+            continue
+        map_client_rows.append(
+            {
+                "marker_id": (_clean_text(row["client_id"]) or _clean_text(row["company_name"])),
+                "company_name": _clean_text(row["company_name"]),
+                "client_id": _clean_text(row["client_id"]),
+                "country": _clean_text(row["country"]),
+                "city": _clean_text(row["city"]),
+                "postcode": _clean_text(row["postcode"]),
+                "location_label": ", ".join(
+                    [
+                        part
+                        for part in (
+                            _clean_text(row["city"]),
+                            _clean_text(row["postcode"]),
+                            _clean_text(row["country"]),
+                        )
+                        if part
+                    ]
+                ) or "Unknown",
+                "latitude": float(coordinate["latitude"]),
+                "longitude": float(coordinate["longitude"]),
+                "coordinate_match_level": _clean_text(coordinate["match_level"]),
+                "reserved_value_gbp": round(float(row["reserved_value_gbp"]), 2),
+                "reserved_value_available": bool(row["reserved_value_available"]),
+                "reserved_bags": round(float(row["reserved_bags"]), 4),
+                "reserved_kg": round(float(row["reserved_kg"]), 4),
+                "has_exposure": bool(row["has_exposure"]),
+                "distinct_reference_count": int(row["distinct_reference_count"]),
+                "primary_reference": _clean_text(row["primary_reference"]),
+            }
+        )
+
+    map_client_rows = sorted(
+        map_client_rows,
+        key=lambda row: (
+            not bool(row["has_exposure"]),
+            -float(row["reserved_value_gbp"]),
+            -float(row["reserved_bags"]),
+            _clean_text(row["company_name"]).lower(),
+            _clean_text(row["client_id"]).lower(),
+        ),
+    )
+
+    resolved_map_clients = int(len(map_client_rows))
+    unresolved_map_clients = int(max(mapped_clients - resolved_map_clients, 0))
+    if resolved_map_clients > 0:
+        map_status = (
+            f"Plotting {resolved_map_clients} deterministically resolved client markers; "
+            f"{unresolved_map_clients} mapped clients remain unplotted."
+        )
+    else:
+        map_status = "No deterministically resolved client coordinates are available for plotting."
+    if coordinate_conflicts > 0:
+        map_status = f"{map_status} {coordinate_conflicts} mapped clients hit coordinate-cache conflicts."
+
     summary = {
         "mapped_clients": int(mapped_clients),
         "unmapped_clients": int(unmapped_clients),
@@ -1126,10 +1551,13 @@ def _build_client_geography(
         "duplicate_client_rows": int(metadata["duplicate_client_rows"]),
         "matched_client_rows": int(matched_client_rows),
         "unmatched_client_rows": int(unmatched_client_rows),
-        "map_included": False,
-        "map_status": "Plotted map deferred: no deterministic local coordinate cache is included in v1.",
+        "resolved_map_clients": resolved_map_clients,
+        "unresolved_map_clients": unresolved_map_clients,
+        "coordinate_conflicts": int(coordinate_conflicts),
+        "map_included": True,
+        "map_status": map_status,
     }
-    return summary, location_rows, country_rows, city_rows, unmapped_records
+    return summary, location_rows, country_rows, city_rows, unmapped_records, map_client_rows
 
 
 def _empty_action_queue_dataset(snapshot_date: str) -> dict:
@@ -1179,6 +1607,7 @@ def _empty_action_queue_dataset(snapshot_date: str) -> dict:
             "status": "No landed open reservation rows.",
             "rows": [],
         },
+        "expired_draft_workflow": _empty_expired_draft_workflow(snapshot_date),
         "details": [],
     }
 
@@ -1553,6 +1982,7 @@ def _empty_dataset(
         "client_geography_top_countries": [],
         "client_geography_top_cities": [],
         "client_geography_unmapped_clients": [],
+        "client_geography_map_clients": [],
         "reservation_action_queue": _empty_action_queue_dataset(""),
     }
 
@@ -1607,12 +2037,14 @@ def build_reference_workspace_dataset(
             client_geography_top_countries,
             client_geography_top_cities,
             client_geography_unmapped_clients,
+            client_geography_map_clients,
         ) = _build_client_geography(pd.DataFrame(), clients_frame)
         empty_dataset["client_geography_summary"] = client_geography_summary
         empty_dataset["client_geography_locations"] = client_geography_locations
         empty_dataset["client_geography_top_countries"] = client_geography_top_countries
         empty_dataset["client_geography_top_cities"] = client_geography_top_cities
         empty_dataset["client_geography_unmapped_clients"] = client_geography_unmapped_clients
+        empty_dataset["client_geography_map_clients"] = client_geography_map_clients
         return empty_dataset
 
     reservations["request_type"] = (
@@ -1677,12 +2109,14 @@ def build_reference_workspace_dataset(
             client_geography_top_countries,
             client_geography_top_cities,
             client_geography_unmapped_clients,
+            client_geography_map_clients,
         ) = _build_client_geography(pd.DataFrame(), clients_frame)
         empty_dataset["client_geography_summary"] = client_geography_summary
         empty_dataset["client_geography_locations"] = client_geography_locations
         empty_dataset["client_geography_top_countries"] = client_geography_top_countries
         empty_dataset["client_geography_top_cities"] = client_geography_top_cities
         empty_dataset["client_geography_unmapped_clients"] = client_geography_unmapped_clients
+        empty_dataset["client_geography_map_clients"] = client_geography_map_clients
         return empty_dataset
 
     reservations["reservation_key"] = reservations["id_booking"].where(
@@ -1903,8 +2337,14 @@ def build_reference_workspace_dataset(
         client_geography_top_countries,
         client_geography_top_cities,
         client_geography_unmapped_clients,
+        client_geography_map_clients,
     ) = _build_client_geography(latest, clients_frame)
     reservation_action_queue = _build_reservation_action_queue(latest, snapshot_date)
+    reservation_action_queue["expired_draft_workflow"] = _build_expired_reservation_draft_workflow(
+        latest,
+        clients_frame,
+        snapshot_date,
+    )
 
     return {
         "snapshot_date": snapshot_date,
@@ -1932,5 +2372,6 @@ def build_reference_workspace_dataset(
         "client_geography_top_countries": client_geography_top_countries,
         "client_geography_top_cities": client_geography_top_cities,
         "client_geography_unmapped_clients": client_geography_unmapped_clients,
+        "client_geography_map_clients": client_geography_map_clients,
         "reservation_action_queue": reservation_action_queue,
     }

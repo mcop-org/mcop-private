@@ -387,6 +387,68 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       background: color-mix(in srgb, var(--panel-strong) 94%, transparent);
       box-shadow: var(--shadow-md);
     }}
+    .draft-review-shell {{
+      margin-top: 18px;
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      background: color-mix(in srgb, var(--panel-strong) 94%, transparent);
+      box-shadow: var(--shadow-md);
+    }}
+    .draft-review-grid {{
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+    }}
+    .draft-card {{
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: color-mix(in srgb, var(--panel-strong) 94%, transparent);
+      padding: 18px;
+      display: grid;
+      gap: 12px;
+      box-shadow: var(--shadow-md);
+    }}
+    .draft-card.is-missing-recipient {{
+      border-color: color-mix(in srgb, var(--warn) 40%, var(--line));
+      background: color-mix(in srgb, var(--warn-soft) 36%, var(--panel-strong));
+    }}
+    .draft-card-head {{
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }}
+    .draft-card-title {{
+      margin: 0;
+      font-size: 18px;
+    }}
+    .draft-card-meta {{
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }}
+    .draft-line-list {{
+      margin: 0;
+      padding-left: 18px;
+      display: grid;
+      gap: 8px;
+    }}
+    .draft-body {{
+      margin: 0;
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: color-mix(in srgb, var(--panel-soft) 88%, transparent);
+      color: var(--label);
+      white-space: pre-wrap;
+      font: 13px/1.55 ui-monospace, "SFMono-Regular", "SF Mono", Consolas, monospace;
+    }}
+    .warning-text {{
+      color: var(--warn);
+      font-weight: 600;
+    }}
     .table-topbar {{
       display: flex;
       justify-content: space-between;
@@ -1543,6 +1605,32 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
           </div>
           <div class="empty" id="action-detail-empty" hidden>No action rows match the current filters.</div>
         </section>
+
+        <section class="draft-review-shell" aria-label="Expired reservation draft review">
+          <div class="table-topbar">
+            <div>
+              <h3 class="table-title">Expired Reservation Draft Review</h3>
+              <p class="table-subtitle">Grouped by client from breached reservations only. Drafts are review-only and are not sent from MCOP.</p>
+            </div>
+          </div>
+          <section class="draft-review-grid" aria-label="Expired reservation draft review KPIs">
+            <article class="kpi-card">
+              <div class="kpi-label">Draft Clients</div>
+              <div class="kpi-value" id="expired-draft-kpi-clients">-</div>
+            </article>
+            <article class="kpi-card">
+              <div class="kpi-label">Breached Reservations In Drafts</div>
+              <div class="kpi-value" id="expired-draft-kpi-reservations">-</div>
+            </article>
+            <article class="kpi-card">
+              <div class="kpi-label">Missing Primary Email</div>
+              <div class="kpi-value" id="expired-draft-kpi-missing-email">-</div>
+              <div class="kpi-submeta" id="expired-draft-kpi-status">-</div>
+            </article>
+          </section>
+          <div class="draft-review-grid" id="expired-draft-list"></div>
+          <div class="empty" id="expired-draft-empty" hidden>No expired reservation drafts are available in the current workspace snapshot.</div>
+        </section>
       </div>
     </section>
       </div>
@@ -1601,6 +1689,8 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const actionBucketFilter = document.getElementById("action-bucket-filter");
     const actionLandingFilter = document.getElementById("action-landing-filter");
     const actionDataFilter = document.getElementById("action-data-filter");
+    const expiredDraftList = document.getElementById("expired-draft-list");
+    const expiredDraftEmpty = document.getElementById("expired-draft-empty");
     const tabButtons = Array.from(document.querySelectorAll(".module-nav-button"));
     const sortButtons = Array.from(document.querySelectorAll("[data-sort]"));
     const reservationView = document.getElementById("reservation-view");
@@ -1629,6 +1719,9 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
     const actionBucketCounts = Array.isArray(actionQueue.action_bucket_counts) ? actionQueue.action_bucket_counts : [];
     const actionExpiryBuckets = Array.isArray(actionQueue.open_bags_by_expiry_bucket) ? actionQueue.open_bags_by_expiry_bucket : [];
     const actionTopReferences = actionQueue.top_landed_references || {{ rows: [] }};
+    const expiredDraftWorkflow = actionQueue.expired_draft_workflow || {{ summary: {{}}, drafts: [] }};
+    const expiredDraftSummary = expiredDraftWorkflow.summary || {{}};
+    const expiredDrafts = Array.isArray(expiredDraftWorkflow.drafts) ? expiredDraftWorkflow.drafts : [];
     const actionDetails = Array.isArray(actionQueue.details) ? actionQueue.details : [];
     const landedAgingByBucket = new Map(
       landedAgingRaw.map((row) => [String(row.aging_bucket || "").trim(), Number(row.unsold_bags || 0)])
@@ -3248,6 +3341,68 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       }}).join("");
     }}
 
+    function formatEmailList(values) {{
+      if (!Array.isArray(values) || !values.length) {{
+        return "Missing";
+      }}
+      return values.map((value) => String(value || "").trim()).filter(Boolean).join(", ") || "Missing";
+    }}
+
+    function renderExpiredDraftReview() {{
+      const clientCount = document.getElementById("expired-draft-kpi-clients");
+      const reservationCount = document.getElementById("expired-draft-kpi-reservations");
+      const missingEmailCount = document.getElementById("expired-draft-kpi-missing-email");
+      const status = document.getElementById("expired-draft-kpi-status");
+
+      clientCount.textContent = formatNumber(expiredDraftSummary.draft_client_count || 0, 0);
+      reservationCount.textContent = formatNumber(expiredDraftSummary.breached_reservations || 0, 0);
+      missingEmailCount.textContent = formatNumber(expiredDraftSummary.drafts_missing_primary_email || 0, 0);
+      status.textContent = String(expiredDraftSummary.status || "").trim() || "No expired reservation draft candidates in the current workspace snapshot.";
+
+      expiredDraftEmpty.hidden = expiredDrafts.length > 0;
+      expiredDraftList.innerHTML = expiredDrafts.map((draft) => {{
+        const items = Array.isArray(draft.line_items) ? draft.line_items : [];
+        const recipientWarning = draft.missing_primary_email
+          ? "<p class='warning-text'>Primary recipient email missing. Draft retained for internal review only.</p>"
+          : "";
+        const ccLine = Array.isArray(draft.cc_emails) && draft.cc_emails.length
+          ? "<p class='draft-card-meta'><strong>CC:</strong> " + escapeHtml(formatEmailList(draft.cc_emails)) + "</p>"
+          : "";
+        const itemList = items.map((item) => {{
+          const parts = [
+            formatReservationKey(item.reservation_key || "-"),
+            item.product_reference || "-",
+            formatNumber(item.bags_remaining, 0) + " bags",
+            item.expiry_date || "-",
+            formatNumber(item.days_expired, 0) + " days expired",
+          ];
+          if (item.remaining_kg !== null && item.remaining_kg !== undefined) {{
+            parts.splice(3, 0, formatKilos(item.remaining_kg));
+          }}
+          if (item.remaining_value_gbp !== null && item.remaining_value_gbp !== undefined) {{
+            parts.push("Value " + formatCompactMoney(item.remaining_value_gbp));
+          }}
+          return "<li>" + escapeHtml(parts.join(" | ")) + "</li>";
+        }}).join("");
+        return "<article class='draft-card" + (draft.missing_primary_email ? " is-missing-recipient" : "") + "'>" +
+          "<div class='draft-card-head'>" +
+            "<div>" +
+              "<h4 class='draft-card-title'>" + escapeHtml(draft.company_name || draft.client_id || "Unknown client") + "</h4>" +
+              "<p class='draft-card-meta'>Client ID: " + escapeHtml(draft.client_id || "-") + "</p>" +
+              "<p class='draft-card-meta'><strong>To:</strong> " + escapeHtml(formatEmailList(draft.to_emails)) + "</p>" +
+              ccLine +
+            "</div>" +
+            renderStatusChip(draft.missing_primary_email ? "Missing Recipient" : "Review Ready") +
+          "</div>" +
+          recipientWarning +
+          "<p class='draft-card-meta'><strong>Subject:</strong> " + escapeHtml(draft.subject || "-") + "</p>" +
+          "<p class='draft-card-meta'><strong>Included rows:</strong> " + escapeHtml(formatNumber(draft.breached_row_count || 0, 0)) + " rows across " + escapeHtml(formatNumber(draft.breached_reservation_count || 0, 0)) + " reservations.</p>" +
+          "<ol class='draft-line-list'>" + itemList + "</ol>" +
+          "<pre class='draft-body'>" + escapeHtml(draft.body || "") + "</pre>" +
+        "</article>";
+      }}).join("");
+    }}
+
     function renderTabs() {{
       const reservationActive = state.activeTab === "reservation";
       const productActive = state.activeTab === "product";
@@ -3295,6 +3450,7 @@ def write_reference_workspace_html(path: Path, dataset: dict) -> None:
       renderActionKpis();
       renderActionCharts();
       renderActionTable();
+      renderExpiredDraftReview();
       renderTabs();
     }}
 
