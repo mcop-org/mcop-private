@@ -10,6 +10,78 @@ If a metric definition is unclear or ambiguous, **agents must request clarificat
 
 ---
 
+# Client Master Dataset
+
+## `clients.xlsx`
+
+`clients.xlsx` is a **client master dataset**. It should be used as the canonical client reference dataset for future client geography or map features and for later client communication workflows.
+
+Preferred key fields:
+
+- Primary join key: `client_id`
+- Preferred company display field: `company_name`
+
+Address handling:
+
+- For geography or map work, default to **delivery address** fields, not billing address fields.
+- Delivery address fields to prefer by default are `country`, `city`, and `postcode`.
+- Billing address fields with the `po_*` prefix are separate billing fields and should **not** be used by default for geography unless explicitly intended.
+
+Operational notes:
+
+- `reservation_days` starts counting when a reservation is approved.
+- `account_activated` uses `"0"` = no and `"1"` = yes.
+- `add_contact_include_email` uses `"0"` = no and `"1"` = yes.
+
+## `clients.xlsx` Field Definitions
+
+| Field | Definition |
+| --- | --- |
+| `id_all_info` | id for all the events. Typically not required in any of the modules |
+| `client_id` | unique client id |
+| `company_name` | client company name |
+| `client_reference` | client reference use in other applications |
+| `contact_first_name` | client first name |
+| `contact_last_name` | client last name |
+| `contact_email` | client email address |
+| `po_address_line_1` | client billing address line 1 |
+| `po_address_line_2` | client billing address line 2 |
+| `po_address_line_3` | client billing address line 3 |
+| `po_address_line_4` | client billing address line 4 |
+| `po_country_id` | client billing country unique id |
+| `po_country` | client billing country |
+| `po_city_id` | client billing city unique id |
+| `po_city` | client billing city |
+| `po_department` | client billing department/county |
+| `po_postcode` | client billing post code |
+| `address_line_1` | client delivery address line 1 |
+| `address_line_2` | client delivery address line 2 |
+| `address_line_3` | client delivery address line 3 |
+| `address_line_4` | client delivery address line 4 |
+| `country_id` | client delivery country unique id |
+| `country` | client delivery country |
+| `city_id` | client delivery city unique id |
+| `city` | client delivery city |
+| `department_id` | client delivery department/county |
+| `postcode` | client delivery post code |
+| `phone_number` | client contact phone number |
+| `tax_number` | client tax or VAT number |
+| `sales_tax` | Typically "Zero Rated Income" |
+| `company_reg_number` | client's company registration number |
+| `sales_account` | sales account in our accountancy software. Typically "200" |
+| `add_contact_first_name` | additional contact person first name |
+| `add_contact_last_name` | additional contact person last name |
+| `add_contact_email` | additional contact person email address |
+| `add_contact_include_email` | include additional contact in correspondence? "0" for no and "1" for yes |
+| `contact_exported` | Has all this client information been exported? Yes/No |
+| `account_activated` | is this account active? "0" for no and "1" for yes. We have the ability to activate/deactivate account |
+| `access_offfer_list` | has the client got access to our offer list? Options are Yes, No, or Pending |
+| `reservation_days` | start counting when reservation is approved. It relates to the number of days a client contractually will have to release all their coffees from the warehouse |
+| `contract` | is this client required to sign a contract? Yes or No |
+| `payment_days` | payment terms offer to the client contractually |
+
+---
+
 # Activity Dataset
 
 The **activity dataset** records events related to client interactions with coffee inventory.
