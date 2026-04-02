@@ -12,3 +12,8 @@ Service flow:
 6. Adapt builder outputs into UI-facing read-models in `app/workspace/readmodels/`.
 
 Protected standalone dashboard and reference workspace renderer code remain untouched.
+
+Local launch entrypoint:
+
+- `python3 scripts/run_app.py`
+- See `docs/app/local-launcher.md` for the one-command advanced-UI flow.
