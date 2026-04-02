@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
+import { ClientGeographyCharts } from "../components/geography/ClientGeographyCharts";
 import { ClientGeographyDetailPanel } from "../components/geography/ClientGeographyDetailPanel";
 import { ClientGeographyFilters } from "../components/geography/ClientGeographyFilters";
 import { ClientGeographyLocationTable } from "../components/geography/ClientGeographyLocationTable";
@@ -11,6 +12,23 @@ import type {
 } from "../lib/contracts";
 import { getClientGeographyReadModel } from "../lib/api";
 import { useAsyncData } from "../lib/query";
+import { useSessionStorageState } from "../lib/sessionState";
+
+const CLIENT_GEOGRAPHY_PAGE_STATE_KEY = "mcop-advanced-ui:client-geography";
+
+type ClientGeographyPageState = {
+  country: string;
+  city: string;
+  exposure: string;
+  selectedMarkerId: string;
+};
+
+const INITIAL_CLIENT_GEOGRAPHY_PAGE_STATE: ClientGeographyPageState = {
+  country: "",
+  city: "",
+  exposure: "all",
+  selectedMarkerId: "",
+};
 
 function matchesFilters<T extends { country: string; city: string }>(
   row: T,
@@ -48,10 +66,11 @@ function matchesExposureOnClient(row: ClientGeographyMapClientRow, exposure: str
 
 export function ClientGeographyPage() {
   const { data, error, loading } = useAsyncData(getClientGeographyReadModel, []);
-  const [country, setCountry] = useState("");
-  const [city, setCity] = useState("");
-  const [exposure, setExposure] = useState("all");
-  const [selectedMarkerId, setSelectedMarkerId] = useState("");
+  const { state, setState, resetState } = useSessionStorageState<ClientGeographyPageState>(
+    CLIENT_GEOGRAPHY_PAGE_STATE_KEY,
+    INITIAL_CLIENT_GEOGRAPHY_PAGE_STATE,
+  );
+  const { country, city, exposure, selectedMarkerId } = state;
 
   const locations = data?.locations || [];
   const mapClients = data?.map_clients || [];
@@ -87,24 +106,25 @@ export function ClientGeographyPage() {
   useEffect(() => {
     if (!filteredMapClients.length) {
       if (selectedMarkerId !== "") {
-        setSelectedMarkerId("");
+        setState((current) => ({ ...current, selectedMarkerId: "" }));
       }
       return;
     }
     if (filteredMapClients.some((row) => row.marker_id === selectedMarkerId)) {
       return;
     }
-    setSelectedMarkerId(filteredMapClients[0].marker_id);
-  }, [filteredMapClients, selectedMarkerId]);
+    if (selectedMarkerId) {
+      setState((current) => ({ ...current, selectedMarkerId: "" }));
+      return;
+    }
+    setState((current) => ({ ...current, selectedMarkerId: filteredMapClients[0].marker_id }));
+  }, [filteredMapClients, selectedMarkerId, setState]);
 
   const selectedClient =
     filteredMapClients.find((row) => row.marker_id === selectedMarkerId) || null;
 
   function handleResetFilters() {
-    setCountry("");
-    setCity("");
-    setExposure("all");
-    setSelectedMarkerId("");
+    resetState(INITIAL_CLIENT_GEOGRAPHY_PAGE_STATE);
   }
 
   return (
@@ -126,11 +146,27 @@ export function ClientGeographyPage() {
             city={city}
             exposure={exposure}
             onCountryChange={(value) => {
-              setCountry(value);
-              setCity("");
+              setState((current) => ({
+                ...current,
+                country: value,
+                city: "",
+                selectedMarkerId: "",
+              }));
             }}
-            onCityChange={setCity}
-            onExposureChange={setExposure}
+            onCityChange={(value) =>
+              setState((current) => ({
+                ...current,
+                city: value,
+                selectedMarkerId: "",
+              }))
+            }
+            onExposureChange={(value) =>
+              setState((current) => ({
+                ...current,
+                exposure: value,
+                selectedMarkerId: "",
+              }))
+            }
             onReset={handleResetFilters}
           />
           <ClientGeographySummaryCards
@@ -141,10 +177,19 @@ export function ClientGeographyPage() {
             <ClientGeographyMap
               rows={filteredMapClients}
               selectedMarkerId={selectedMarkerId}
-              onSelectMarker={setSelectedMarkerId}
+              onSelectMarker={(markerId) =>
+                setState((current) => ({
+                  ...current,
+                  selectedMarkerId: markerId,
+                }))
+              }
             />
             <ClientGeographyDetailPanel selectedClient={selectedClient} />
           </div>
+          <ClientGeographyCharts
+            filteredLocations={filteredLocations}
+            summary={data.summary}
+          />
           <ClientGeographyLocationTable
             rows={filteredLocations}
             selectedClient={selectedClient}
