@@ -1,19 +1,9 @@
 import type { ClientGeographyUnmappedClientRow } from "../../lib/contracts";
+import { formatCount, formatKg, formatMoney } from "../../lib/presentation";
 
 type ClientGeographyUnmappedTableProps = {
   rows: ClientGeographyUnmappedClientRow[];
 };
-
-function formatNumber(value: number, digits = 0) {
-  return new Intl.NumberFormat("en-GB", {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: digits,
-  }).format(value);
-}
-
-function formatMoney(value: number) {
-  return `GBP ${formatNumber(value, 0)}`;
-}
 
 export function ClientGeographyUnmappedTable({
   rows,
@@ -36,7 +26,7 @@ export function ClientGeographyUnmappedTable({
               <th>Client ID</th>
               <th className="num">Reserved Bags</th>
               <th className="num">Reserved KG</th>
-              <th className="num">Reserved Value GBP</th>
+              <th className="num">Reserved Value</th>
               <th>Reason</th>
             </tr>
           </thead>
@@ -47,8 +37,8 @@ export function ClientGeographyUnmappedTable({
                   <strong>{row.company_name || "-"}</strong>
                 </td>
                 <td>{row.client_id || "-"}</td>
-                <td className="num">{formatNumber(Number(row.reserved_bags || 0))}</td>
-                <td className="num">{formatNumber(Number(row.reserved_kg || 0))} kg</td>
+                <td className="num">{formatCount(Number(row.reserved_bags || 0), 2)}</td>
+                <td className="num">{formatKg(Number(row.reserved_kg || 0))}</td>
                 <td className="num">
                   {row.reserved_value_available
                     ? formatMoney(Number(row.reserved_value_gbp || 0))

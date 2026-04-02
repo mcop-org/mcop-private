@@ -1,5 +1,5 @@
 import type { ActionQueueChartRow, ActionQueueSummary } from "../../lib/contracts";
-import { getStatusChipClass } from "../../lib/presentation";
+import { formatCount, formatMoney, getStatusChipClass } from "../../lib/presentation";
 
 type ActionQueueSummaryCardsProps = {
   summary: ActionQueueSummary;
@@ -12,17 +12,6 @@ type ActionQueueSummaryCardsProps = {
     rows?: ActionQueueChartRow[];
   };
 };
-
-function formatNumber(value: number, maximumFractionDigits = 0) {
-  return new Intl.NumberFormat("en-GB", {
-    maximumFractionDigits,
-    minimumFractionDigits: maximumFractionDigits,
-  }).format(value);
-}
-
-function formatMoney(value: number) {
-  return `GBP ${formatNumber(value, 2)}`;
-}
 
 function valueOrUnavailable(value: unknown, available: unknown) {
   if (!available) {
@@ -85,29 +74,29 @@ export function ActionQueueSummaryCards({
       <div className="card-grid action-kpi-grid-app">
         <section className="card stat-card-strong">
           <span className="stat-label">Open Reservations</span>
-          <strong>{formatNumber(Number(summary.open_reservations || 0), 0)}</strong>
+          <strong>{formatCount(Number(summary.open_reservations || 0))}</strong>
         </section>
         <section className="card stat-card-strong">
           <span className="stat-label">Open Reserved Bags</span>
-          <strong>{formatNumber(Number(summary.open_reserved_bags || 0), 0)}</strong>
+          <strong>{formatCount(Number(summary.open_reserved_bags || 0))}</strong>
           <span className="stat-label">
-            {formatNumber(Number(summary.open_reserved_bags_landed || 0), 0)} landed
+            {formatCount(Number(summary.open_reserved_bags_landed || 0))} landed
           </span>
           <span className="stat-label">
-            {formatNumber(Number(summary.open_reserved_bags_incoming || 0), 0)} incoming
+            {formatCount(Number(summary.open_reserved_bags_incoming || 0))} incoming
           </span>
         </section>
         <section className="card stat-card-strong">
           <span className="stat-label">Near-Expiry Reservations</span>
-          <strong>{formatNumber(Number(summary.near_expiry_reservations || 0), 0)}</strong>
+          <strong>{formatCount(Number(summary.near_expiry_reservations || 0))}</strong>
           <span className="stat-label">
-            {formatNumber(Number(summary.near_expiry_rows || 0), 0)} rows within{" "}
-            {formatNumber(Number(summary.near_expiry_threshold_days || 0), 0)} days
+            {formatCount(Number(summary.near_expiry_rows || 0))} rows within{" "}
+            {formatCount(Number(summary.near_expiry_threshold_days || 0))} days
           </span>
         </section>
         <section className="card stat-card-strong">
           <span className="stat-label">Breached Reservations</span>
-          <strong>{formatNumber(Number(summary.breached_reservations || 0), 0)}</strong>
+          <strong>{formatCount(Number(summary.breached_reservations || 0))}</strong>
         </section>
         <section className="card stat-card-strong">
           <span className="stat-label">Open Reserved Value</span>
@@ -131,11 +120,11 @@ export function ActionQueueSummaryCards({
         </section>
         <section className="card stat-card-strong">
           <span className="stat-label">Open Exposure Reservations</span>
-          <strong>{formatNumber(Number(summary.open_exposure_reservations || 0), 0)}</strong>
+          <strong>{formatCount(Number(summary.open_exposure_reservations || 0))}</strong>
         </section>
         <section className="card stat-card-strong">
           <span className="stat-label">Action Now Reservations</span>
-          <strong>{formatNumber(Number(summary.action_now_reservations || 0), 0)}</strong>
+          <strong>{formatCount(Number(summary.action_now_reservations || 0))}</strong>
         </section>
       </div>
 
@@ -154,7 +143,7 @@ export function ActionQueueSummaryCards({
               "action_bucket",
               "row_count",
               "No open reservation exposure in the current view.",
-              (value) => formatNumber(value, 0),
+              (value) => formatCount(value),
             )}
           </section>
           <section className="stat-card">
@@ -165,7 +154,7 @@ export function ActionQueueSummaryCards({
               "expiry_bucket",
               "open_bags",
               "No open reservation exposure in the current view.",
-              (value) => formatNumber(value, 0),
+              (value) => formatCount(value),
             )}
           </section>
           <section className="stat-card">
@@ -178,7 +167,7 @@ export function ActionQueueSummaryCards({
               "No landed open reservation references in the current view.",
               (value) =>
                 topReferenceValueKey === "open_bags"
-                  ? formatNumber(value, 0)
+                  ? formatCount(value)
                   : formatMoney(value),
             )}
             <p className="chart-metric-copy">{topReferenceMetric}</p>

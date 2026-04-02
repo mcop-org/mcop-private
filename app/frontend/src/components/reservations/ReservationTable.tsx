@@ -1,5 +1,12 @@
 import type { ReservationDetailRow } from "../../lib/contracts";
-import { formatReservationKey, getStatusChipClass } from "../../lib/presentation";
+import {
+  formatCount,
+  formatIsoDate,
+  formatKg,
+  formatMoney,
+  formatReservationKey,
+  getStatusChipClass,
+} from "../../lib/presentation";
 
 type ReservationTableProps = {
   rows: ReservationDetailRow[];
@@ -146,13 +153,13 @@ export function ReservationTable({ rows, sortKey, sortDirection, onSortChange }:
               <td>
                 <span className={getStatusChipClass(row.request_status)}>{row.request_status}</span>
               </td>
-              <td className="num">{row.effective_bags ?? row.bags ?? row.bags_remaining ?? "-"}</td>
-              <td className="num">{row.reserved_kg}</td>
-              <td className="num">{row.reserved_value_gbp?.toFixed(2) ?? "-"}</td>
+              <td className="num">{formatCount(row.effective_bags ?? row.bags ?? row.bags_remaining, 2)}</td>
+              <td className="num">{formatKg(row.reserved_kg)}</td>
+              <td className="num">{formatMoney(row.reserved_value_gbp)}</td>
               <td>
                 <span className={getStatusChipClass(row.landing_status || "Unknown")}>{row.landing_status || "-"}</span>
               </td>
-              <td>{row.landing_date || "-"}</td>
+              <td>{formatIsoDate(row.landing_date)}</td>
               <td>{row.warehouse || "-"}</td>
               <td>{formatReservationKey(row.reservation_key)}</td>
             </tr>

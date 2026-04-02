@@ -1,14 +1,11 @@
 import type { ProductLandingProfileRow } from "../../lib/contracts";
+import { formatCount, formatIsoDate } from "../../lib/presentation";
 
 type ProductReferenceDetailTableProps = {
   rows: ProductLandingProfileRow[];
   snapshotDate: string;
   hasSelection: boolean;
 };
-
-function formatInt(value: number) {
-  return new Intl.NumberFormat("en-GB", { maximumFractionDigits: 0 }).format(value);
-}
 
 function dayDiff(fromDate: string, toDate: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fromDate) || !/^\d{4}-\d{2}-\d{2}$/.test(toDate)) {
@@ -28,7 +25,7 @@ function renderDaysLabel(row: ProductLandingProfileRow, snapshotDate: string) {
   if (landingStatus === "landed") {
     const diff = dayDiff(row.landing_date || "", snapshotDate);
     if (diff !== null && diff >= 0) {
-      return `${formatInt(diff)} days`;
+      return `${formatCount(diff)} days`;
     }
   }
   return "Date unavailable";
@@ -83,10 +80,10 @@ export function ProductReferenceDetailTable({
                     {row.landing_status || "-"}
                   </span>
                 </td>
-                <td>{row.landing_date || "-"}</td>
+                <td>{formatIsoDate(row.landing_date)}</td>
                 <td>{renderDaysLabel(row, snapshotDate)}</td>
-                <td className="num">{row.bags === null ? "Unavailable" : formatInt(Number(row.bags || 0))}</td>
-                <td className="num">{row.bags_available === null ? "Unavailable" : formatInt(Number(row.bags_available || 0))}</td>
+                <td className="num">{row.bags === null ? "Unavailable" : formatCount(Number(row.bags || 0), 2)}</td>
+                <td className="num">{row.bags_available === null ? "Unavailable" : formatCount(Number(row.bags_available || 0), 2)}</td>
               </tr>
             ))}
           </tbody>

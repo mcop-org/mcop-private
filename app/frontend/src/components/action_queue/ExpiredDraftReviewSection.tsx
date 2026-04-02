@@ -1,22 +1,22 @@
 import type { ActionQueueReadModel } from "../../lib/contracts";
-import { formatReservationKey, getStatusChipClass } from "../../lib/presentation";
+import {
+  formatCount,
+  formatIsoDate,
+  formatKg,
+  formatMoney,
+  formatReservationKey,
+  getStatusChipClass,
+} from "../../lib/presentation";
 
 type ExpiredDraftReviewSectionProps = {
   workflow: ActionQueueReadModel["expired_draft_workflow"];
 };
 
-function formatNumber(value: number, maximumFractionDigits = 0) {
-  return new Intl.NumberFormat("en-GB", {
-    maximumFractionDigits,
-    minimumFractionDigits: maximumFractionDigits,
-  }).format(value);
-}
-
-function formatMoney(value: number | null | undefined) {
+function formatDraftValue(value: number | null | undefined) {
   if (typeof value !== "number") {
     return "";
   }
-  return `, value GBP ${formatNumber(value, 2)}`;
+  return `, value ${formatMoney(value)}`;
 }
 
 type DraftLineItem = {
@@ -44,11 +44,11 @@ type DraftRecord = {
 };
 
 function formatDraftLineItem(item: DraftLineItem): string {
-  const bags = typeof item.bags_remaining === "number" ? formatNumber(item.bags_remaining, 0) : "-";
-  const daysExpired = typeof item.days_expired === "number" ? formatNumber(item.days_expired, 0) : "-";
-  const remainingKg = typeof item.remaining_kg === "number" ? formatNumber(item.remaining_kg, 0) : "-";
+  const bags = typeof item.bags_remaining === "number" ? formatCount(item.bags_remaining, 2) : "-";
+  const daysExpired = typeof item.days_expired === "number" ? formatCount(item.days_expired) : "-";
+  const remainingKg = typeof item.remaining_kg === "number" ? formatKg(item.remaining_kg).replace(" kg", "") : "-";
 
-  return `Reservation ${formatReservationKey(item.reservation_key)} | ${item.product_reference || "-"} | ${bags} bags remaining | expired on ${item.expiry_date || "-"} | ${daysExpired} days expired | ${remainingKg} kg remaining${formatMoney(item.remaining_value_gbp)}`;
+  return `Reservation ${formatReservationKey(item.reservation_key)} | ${item.product_reference || "-"} | ${bags} bags remaining | expired on ${formatIsoDate(item.expiry_date)} | ${daysExpired} days expired | ${remainingKg} kg remaining${formatDraftValue(item.remaining_value_gbp)}`;
 }
 
 function renderDraftBody(draft: DraftRecord) {
@@ -84,15 +84,15 @@ export function ExpiredDraftReviewSection({ workflow }: ExpiredDraftReviewSectio
       <div className="card-grid three-up">
         <section className="stat-card">
           <span className="stat-label">Draft Clients</span>
-          <strong>{formatNumber(Number(summary.draft_client_count || 0), 0)}</strong>
+          <strong>{formatCount(Number(summary.draft_client_count || 0))}</strong>
         </section>
         <section className="stat-card">
           <span className="stat-label">Breached Reservations In Drafts</span>
-          <strong>{formatNumber(Number(summary.breached_reservations || 0), 0)}</strong>
+          <strong>{formatCount(Number(summary.breached_reservations || 0))}</strong>
         </section>
         <section className="stat-card">
           <span className="stat-label">Missing Primary Email</span>
-          <strong>{formatNumber(Number(summary.drafts_missing_primary_email || 0), 0)}</strong>
+          <strong>{formatCount(Number(summary.drafts_missing_primary_email || 0))}</strong>
           <span className="stat-label">{String(summary.status || "-")}</span>
         </section>
       </div>
@@ -112,8 +112,8 @@ export function ExpiredDraftReviewSection({ workflow }: ExpiredDraftReviewSectio
                 </span>
               </div>
               <p>
-                Breached reservations: {formatNumber(Number(draft.breached_reservation_count || 0), 0)} | Breached rows:{" "}
-                {formatNumber(Number(draft.breached_row_count || 0), 0)}
+                Breached reservations: {formatCount(Number(draft.breached_reservation_count || 0))} | Breached rows:{" "}
+                {formatCount(Number(draft.breached_row_count || 0))}
               </p>
               <p><strong>Subject:</strong> {draft.subject || "-"}</p>
               {renderDraftBody(draft)}

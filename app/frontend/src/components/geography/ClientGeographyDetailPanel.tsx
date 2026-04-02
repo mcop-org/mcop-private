@@ -1,19 +1,9 @@
 import type { ClientGeographyMapClientRow } from "../../lib/contracts";
+import { formatCount, formatKg, formatMoney } from "../../lib/presentation";
 
 type ClientGeographyDetailPanelProps = {
   selectedClient: ClientGeographyMapClientRow | null;
 };
-
-function formatNumber(value: number, digits = 0) {
-  return new Intl.NumberFormat("en-GB", {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: digits,
-  }).format(value);
-}
-
-function formatMoney(value: number) {
-  return `GBP ${formatNumber(value, 0)}`;
-}
 
 export function ClientGeographyDetailPanel({
   selectedClient,
@@ -56,15 +46,15 @@ export function ClientGeographyDetailPanel({
         </div>
         <div className="stat-card">
           <span className="stat-label">Reserved Bags</span>
-          <strong>{formatNumber(Number(selectedClient.reserved_bags || 0))}</strong>
+          <strong>{formatCount(Number(selectedClient.reserved_bags || 0), 2)}</strong>
         </div>
         <div className="stat-card">
           <span className="stat-label">Reserved KG</span>
-          <strong>{formatNumber(Number(selectedClient.reserved_kg || 0))} kg</strong>
+          <strong>{formatKg(Number(selectedClient.reserved_kg || 0))}</strong>
         </div>
         <div className="stat-card">
           <span className="stat-label">Linked References</span>
-          <strong>{formatNumber(Number(selectedClient.distinct_reference_count || 0))}</strong>
+          <strong>{formatCount(Number(selectedClient.distinct_reference_count || 0))}</strong>
         </div>
       </div>
       <div className="metadata">

@@ -1,5 +1,11 @@
 import type { ReservationDetailRow, ReservationSummaryRow } from "../../lib/contracts";
-import { getStatusChipClass } from "../../lib/presentation";
+import {
+  formatCount,
+  formatIsoDate,
+  formatKg,
+  formatMoney,
+  getStatusChipClass,
+} from "../../lib/presentation";
 
 type ReservationSummaryCardsProps = {
   snapshotDate: string;
@@ -7,19 +13,8 @@ type ReservationSummaryCardsProps = {
   rows: ReservationDetailRow[];
 };
 
-function formatNumber(value: number, maximumFractionDigits = 0) {
-  return new Intl.NumberFormat("en-GB", {
-    maximumFractionDigits,
-    minimumFractionDigits: maximumFractionDigits,
-  }).format(value);
-}
-
 function formatPercent(value: number) {
-  return `${formatNumber(value * 100, 1)}%`;
-}
-
-function formatMoney(value: number) {
-  return `GBP ${formatNumber(value, 2)}`;
+  return `${formatCount(value * 100, 1)}%`;
 }
 
 function landingSupportText(
@@ -37,12 +32,7 @@ function landingSupportText(
   }
 
   const landingDate = uniqueDates[0];
-  const landingLabel = new Intl.DateTimeFormat("en-GB", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-    timeZone: "UTC",
-  }).format(new Date(`${landingDate}T00:00:00Z`));
+  const landingLabel = formatIsoDate(landingDate);
 
   const snapshot = snapshotDate ? new Date(`${snapshotDate}T00:00:00Z`) : null;
   const landing = new Date(`${landingDate}T00:00:00Z`);
@@ -56,7 +46,7 @@ function landingSupportText(
       return `Expected on ${landingLabel}.`;
     }
     if (diff > 0) {
-      return `Expected on ${landingLabel}, in ${formatNumber(diff, 0)} days.`;
+      return `Expected on ${landingLabel}, in ${formatCount(diff)} days.`;
     }
     if (diff === 0) {
       return `Expected to land today, ${landingLabel}.`;
@@ -68,7 +58,7 @@ function landingSupportText(
     if (diff === null || diff >= 0) {
       return `Recorded as landed on ${landingLabel}.`;
     }
-    return `Recorded as landed on ${landingLabel}, ${formatNumber(Math.abs(diff), 0)} days ago.`;
+    return `Recorded as landed on ${landingLabel}, ${formatCount(Math.abs(diff))} days ago.`;
   }
 
   return "Landing date not available for this reference.";
@@ -79,21 +69,21 @@ export function ReservationSummaryCards({ snapshotDate, summary, rows }: Reserva
     <div className="card-grid reservation-kpi-grid">
       <section className="card stat-card-strong">
         <span className="stat-label">Reserved KG</span>
-        <strong>{summary ? `${formatNumber(summary.reserved_kg, 0)} kg` : "0 kg"}</strong>
-        <span className="stat-label">{summary ? `${formatNumber(summary.reserved_bags, 0)} reserved bags` : "0 reserved bags"}</span>
+        <strong>{summary ? formatKg(summary.reserved_kg) : "0 kg"}</strong>
+        <span className="stat-label">{summary ? `${formatCount(summary.reserved_bags)} reserved bags` : "0 reserved bags"}</span>
       </section>
       <section className="card stat-card-strong">
         <span className="stat-label">Reserved Value</span>
-        <strong>{summary ? formatMoney(summary.reserved_value_gbp) : "GBP 0.00"}</strong>
+        <strong>{summary ? formatMoney(summary.reserved_value_gbp) : "£0"}</strong>
       </section>
       <section className="card stat-card-strong">
         <span className="stat-label">Reserved %</span>
         <strong>{summary ? formatPercent(summary.reserved_pct) : "0.0%"}</strong>
-        <span className="stat-label">{summary ? `${formatNumber(summary.bags_available, 0)} bags still available` : "0 bags still available"}</span>
+        <span className="stat-label">{summary ? `${formatCount(summary.bags_available)} bags still available` : "0 bags still available"}</span>
       </section>
       <section className="card stat-card-strong">
         <span className="stat-label">Clients</span>
-        <strong>{summary ? formatNumber(summary.client_count, 0) : "0"}</strong>
+        <strong>{summary ? formatCount(summary.client_count) : "0"}</strong>
       </section>
       <section className="card stat-card-strong">
         <span className="stat-label">Landing Status</span>

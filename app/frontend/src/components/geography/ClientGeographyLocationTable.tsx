@@ -2,22 +2,12 @@ import type {
   ClientGeographyLocationRow,
   ClientGeographyMapClientRow,
 } from "../../lib/contracts";
+import { formatCount, formatKg, formatMoney } from "../../lib/presentation";
 
 type ClientGeographyLocationTableProps = {
   rows: ClientGeographyLocationRow[];
   selectedClient: ClientGeographyMapClientRow | null;
 };
-
-function formatNumber(value: number, digits = 0) {
-  return new Intl.NumberFormat("en-GB", {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: digits,
-  }).format(value);
-}
-
-function formatMoney(value: number) {
-  return `GBP ${formatNumber(value, 0)}`;
-}
 
 function locationKey(row: { country: string; city: string; postcode: string }) {
   return [row.country, row.city, row.postcode].join("||");
@@ -52,7 +42,7 @@ export function ClientGeographyLocationTable({
               <th className="num">Exposed Client Count</th>
               <th className="num">Reserved Bags</th>
               <th className="num">Reserved KG</th>
-              <th className="num">Reserved Value GBP</th>
+              <th className="num">Reserved Value</th>
               <th>Top Client</th>
             </tr>
           </thead>
@@ -66,10 +56,10 @@ export function ClientGeographyLocationTable({
                   </td>
                   <td>{row.city || "-"}</td>
                   <td>{row.postcode || "-"}</td>
-                  <td className="num">{formatNumber(Number(row.client_count || 0))}</td>
-                  <td className="num">{formatNumber(Number(row.exposed_client_count || 0))}</td>
-                  <td className="num">{formatNumber(Number(row.reserved_bags || 0))}</td>
-                  <td className="num">{formatNumber(Number(row.reserved_kg || 0))} kg</td>
+                  <td className="num">{formatCount(Number(row.client_count || 0))}</td>
+                  <td className="num">{formatCount(Number(row.exposed_client_count || 0))}</td>
+                  <td className="num">{formatCount(Number(row.reserved_bags || 0), 2)}</td>
+                  <td className="num">{formatKg(Number(row.reserved_kg || 0))}</td>
                   <td className="num">
                     {row.reserved_value_available
                       ? formatMoney(Number(row.reserved_value_gbp || 0))

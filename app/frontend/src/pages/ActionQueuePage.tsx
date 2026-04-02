@@ -98,6 +98,13 @@ export function ActionQueuePage() {
   const landingStatusOptions = deriveDistinctRowValues(data?.details || [], "landing_status");
   const dataStatusOptions = deriveDistinctRowValues(data?.details || [], "data_status");
 
+  function handleReset() {
+    setSearch("");
+    setActionBucket("");
+    setLandingStatus("");
+    setDataStatus("");
+  }
+
   return (
     <section className="page">
       <div className="page-header">
@@ -126,6 +133,7 @@ export function ActionQueuePage() {
             onActionBucketChange={setActionBucket}
             onLandingStatusChange={setLandingStatus}
             onDataStatusChange={setDataStatus}
+            onReset={handleReset}
           />
           <ActionQueueTable rows={details} />
           <ExpiredDraftReviewSection workflow={data.expired_draft_workflow} />
