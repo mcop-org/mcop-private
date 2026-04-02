@@ -1,26 +1,4 @@
 :root {
-  --bg: #ede3d2;
-  --paper: rgba(255, 252, 247, 0.84);
-  --paper-strong: rgba(255, 252, 247, 0.96);
-  --paper-muted: rgba(255, 248, 239, 0.72);
-  --ink: #17212b;
-  --muted: #5a6470;
-  --line: rgba(23, 33, 43, 0.11);
-  --line-strong: rgba(23, 33, 43, 0.18);
-  --brand: #114f5c;
-  --brand-soft: rgba(17, 79, 92, 0.12);
-  --accent: #ad6536;
-  --accent-soft: rgba(173, 101, 54, 0.14);
-  --ok: #1f7858;
-  --ok-soft: rgba(31, 120, 88, 0.12);
-  --warn: #9f5c17;
-  --warn-soft: rgba(159, 92, 23, 0.14);
-  --error: #972f2f;
-  --error-soft: rgba(151, 47, 47, 0.12);
-  --neutral: #6b747d;
-  --neutral-soft: rgba(107, 116, 125, 0.12);
-  --shadow: 0 24px 70px rgba(46, 31, 17, 0.12);
-  --shadow-soft: 0 14px 34px rgba(43, 30, 18, 0.08);
   --font: "Avenir Next", "Segoe UI", sans-serif;
 }
 
@@ -35,11 +13,7 @@ html {
 body {
   margin: 0;
   font-family: var(--font);
-  color: var(--ink);
-  background:
-    radial-gradient(circle at top left, rgba(173, 101, 54, 0.18), transparent 24%),
-    radial-gradient(circle at top right, rgba(17, 79, 92, 0.16), transparent 30%),
-    linear-gradient(180deg, #f7f0e6 0%, var(--bg) 100%);
+  background: #f4eddf;
 }
 
 button,
@@ -53,18 +27,84 @@ p {
 }
 
 .app-shell {
+  --bg: #efe6d8;
+  --bg-deep: #e1d3c0;
+  --paper: rgba(255, 252, 247, 0.82);
+  --paper-strong: rgba(255, 252, 247, 0.95);
+  --paper-muted: rgba(255, 247, 237, 0.68);
+  --ink: #17212b;
+  --muted: #5d6875;
+  --line: rgba(30, 39, 48, 0.1);
+  --line-strong: rgba(30, 39, 48, 0.16);
+  --brand: #1b5f6d;
+  --brand-strong: #124b58;
+  --brand-soft: rgba(27, 95, 109, 0.14);
+  --accent: #b56d35;
+  --accent-soft: rgba(181, 109, 53, 0.16);
+  --ok: #2a7e61;
+  --ok-soft: rgba(42, 126, 97, 0.13);
+  --warn: #b06a26;
+  --warn-soft: rgba(176, 106, 38, 0.14);
+  --error: #9b3939;
+  --error-soft: rgba(155, 57, 57, 0.13);
+  --neutral: #65707a;
+  --neutral-soft: rgba(101, 112, 122, 0.14);
+  --shadow: 0 28px 80px rgba(72, 44, 17, 0.14);
+  --shadow-soft: 0 16px 36px rgba(62, 42, 21, 0.09);
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   min-height: 100vh;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(181, 109, 53, 0.18), transparent 24%),
+    radial-gradient(circle at top right, rgba(27, 95, 109, 0.18), transparent 28%),
+    linear-gradient(180deg, #faf4ec 0%, var(--bg) 48%, var(--bg-deep) 100%);
+}
+
+.app-shell[data-theme="dark"] {
+  --bg: #182026;
+  --bg-deep: #11181e;
+  --paper: rgba(24, 33, 40, 0.8);
+  --paper-strong: rgba(28, 37, 45, 0.95);
+  --paper-muted: rgba(34, 45, 54, 0.68);
+  --ink: #e7ebe8;
+  --muted: #aab4bb;
+  --line: rgba(216, 228, 236, 0.1);
+  --line-strong: rgba(216, 228, 236, 0.16);
+  --brand: #88b9c3;
+  --brand-strong: #b7d8dd;
+  --brand-soft: rgba(123, 176, 188, 0.18);
+  --accent: #d7a06a;
+  --accent-soft: rgba(215, 160, 106, 0.18);
+  --ok: #82c0a5;
+  --ok-soft: rgba(130, 192, 165, 0.16);
+  --warn: #e0b07a;
+  --warn-soft: rgba(224, 176, 122, 0.18);
+  --error: #e19a9a;
+  --error-soft: rgba(225, 154, 154, 0.16);
+  --neutral: #b5c0c8;
+  --neutral-soft: rgba(181, 192, 200, 0.16);
+  --shadow: 0 26px 72px rgba(0, 0, 0, 0.34);
+  --shadow-soft: 0 14px 32px rgba(0, 0, 0, 0.24);
+  background:
+    radial-gradient(circle at top left, rgba(215, 160, 106, 0.1), transparent 24%),
+    radial-gradient(circle at top right, rgba(123, 176, 188, 0.11), transparent 30%),
+    linear-gradient(180deg, #202931 0%, var(--bg) 44%, var(--bg-deep) 100%);
 }
 
 .sidebar {
-  padding: 28px 24px;
+  padding: 28px 22px;
   border-right: 1px solid var(--line);
   background:
-    linear-gradient(180deg, rgba(255, 248, 238, 0.78), rgba(248, 237, 223, 0.64)),
-    rgba(255, 248, 238, 0.72);
+    linear-gradient(180deg, rgba(255, 250, 243, 0.76), rgba(247, 235, 220, 0.56)),
+    rgba(255, 248, 238, 0.68);
   backdrop-filter: blur(18px);
+}
+
+.app-shell[data-theme="dark"] .sidebar {
+  background:
+    linear-gradient(180deg, rgba(24, 34, 41, 0.8), rgba(18, 25, 31, 0.72)),
+    rgba(22, 31, 38, 0.76);
 }
 
 .brand-card,
@@ -78,10 +118,31 @@ p {
 }
 
 .brand-card {
+  display: grid;
+  gap: 14px;
   padding: 24px;
   background:
-    linear-gradient(135deg, rgba(17, 79, 92, 0.08), transparent 45%),
-    linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(255, 248, 239, 0.9));
+    radial-gradient(circle at top left, rgba(27, 95, 109, 0.14), transparent 36%),
+    linear-gradient(180deg, rgba(255, 252, 247, 0.98), rgba(255, 247, 236, 0.9));
+}
+
+.app-shell[data-theme="dark"] .brand-card {
+  background:
+    radial-gradient(circle at top left, rgba(123, 176, 188, 0.16), transparent 38%),
+    linear-gradient(180deg, rgba(31, 41, 49, 0.98), rgba(24, 32, 39, 0.92));
+}
+
+.brand-mark {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+}
+
+.brand-logo {
+  display: block;
+  max-width: 156px;
+  width: 100%;
+  height: auto;
 }
 
 .brand-eyebrow,
@@ -103,7 +164,8 @@ p {
 }
 
 .brand-card h1 {
-  font-size: 2rem;
+  font-size: 2.1rem;
+  line-height: 1;
 }
 
 .brand-card p,
@@ -117,7 +179,6 @@ p {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 18px;
 }
 
 .sidebar-nav {
@@ -129,12 +190,17 @@ p {
 .nav-link {
   text-decoration: none;
   color: var(--ink);
-  padding: 16px 18px;
+  padding: 15px 18px;
   border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.4);
-  background: rgba(255, 255, 255, 0.52);
+  border: 1px solid rgba(255, 255, 255, 0.36);
+  background: rgba(255, 255, 255, 0.44);
   box-shadow: var(--shadow-soft);
   transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.app-shell[data-theme="dark"] .nav-link {
+  border-color: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
 }
 
 .nav-link:hover {
@@ -143,11 +209,18 @@ p {
 }
 
 .nav-link.active {
-  border-color: rgba(17, 79, 92, 0.28);
+  border-color: rgba(27, 95, 109, 0.3);
   background:
-    linear-gradient(135deg, rgba(17, 79, 92, 0.16), rgba(255, 255, 255, 0.88)),
+    linear-gradient(135deg, rgba(27, 95, 109, 0.16), rgba(255, 255, 255, 0.88)),
     var(--brand-soft);
   color: var(--brand);
+}
+
+.app-shell[data-theme="dark"] .nav-link.active {
+  background:
+    linear-gradient(135deg, rgba(123, 176, 188, 0.18), rgba(255, 255, 255, 0.04)),
+    var(--brand-soft);
+  color: var(--brand-strong);
 }
 
 .nav-link-label {
@@ -163,16 +236,58 @@ p {
   align-items: flex-start;
   justify-content: space-between;
   gap: 18px;
-  padding: 20px 24px;
+  padding: 22px 24px;
   margin-bottom: 22px;
   background:
-    linear-gradient(135deg, rgba(255, 252, 247, 0.98), rgba(247, 239, 228, 0.92)),
+    linear-gradient(135deg, rgba(255, 252, 247, 0.98), rgba(247, 238, 226, 0.9)),
+    var(--paper);
+}
+
+.app-shell[data-theme="dark"] .topbar {
+  background:
+    linear-gradient(135deg, rgba(29, 39, 47, 0.96), rgba(24, 32, 39, 0.9)),
     var(--paper);
 }
 
 .topbar-copy {
   display: grid;
   gap: 4px;
+}
+
+.topbar-actions {
+  display: grid;
+  justify-items: end;
+  gap: 12px;
+}
+
+.topbar-chip-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  gap: 6px;
+  padding: 4px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.46);
+}
+
+.app-shell[data-theme="dark"] .theme-toggle {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.theme-toggle-button {
+  min-width: 76px;
+}
+
+.theme-toggle-button.active {
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--brand), var(--brand-strong));
+  color: #fffdf8;
 }
 
 .topbar-chip,
@@ -191,6 +306,13 @@ p {
   font-size: 13px;
   font-weight: 600;
   line-height: 1;
+}
+
+.app-shell[data-theme="dark"] .topbar-chip,
+.app-shell[data-theme="dark"] .column-chip,
+.app-shell[data-theme="dark"] .status-chip,
+.app-shell[data-theme="dark"] .status-pill {
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .status-chip.tone-good,
@@ -240,6 +362,12 @@ p {
     var(--paper);
 }
 
+.app-shell[data-theme="dark"] .card {
+  background:
+    linear-gradient(180deg, rgba(31, 41, 48, 0.96), rgba(25, 33, 40, 0.9)),
+    var(--paper);
+}
+
 .card-grid {
   display: grid;
   gap: 18px;
@@ -260,6 +388,13 @@ p {
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 251, 246, 0.54)),
     rgba(255, 255, 255, 0.55);
+}
+
+.app-shell[data-theme="dark"] .stat-card-strong,
+.app-shell[data-theme="dark"] .stat-card {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.03)),
+    rgba(255, 255, 255, 0.03);
 }
 
 .stat-card-strong {
@@ -364,10 +499,19 @@ p {
 .secondary-button,
 .sort-button {
   border-radius: 16px;
-  border: 1px solid rgba(23, 33, 43, 0.12);
+  border: 1px solid var(--line);
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.86);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+  color: var(--ink);
+}
+
+.app-shell[data-theme="dark"] .text-input,
+.app-shell[data-theme="dark"] .select-input,
+.app-shell[data-theme="dark"] .secondary-button,
+.app-shell[data-theme="dark"] .ghost-button {
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
 .text-input,
@@ -390,6 +534,10 @@ p {
   border-color: transparent;
 }
 
+.app-shell[data-theme="dark"] .primary-button {
+  color: #17212b;
+}
+
 .secondary-button,
 .sort-button {
   cursor: pointer;
@@ -397,10 +545,11 @@ p {
 
 .ghost-button {
   border-radius: 16px;
-  border: 1px solid rgba(23, 33, 43, 0.12);
+  border: 1px solid var(--line);
   padding: 12px 14px;
   background: rgba(255, 255, 255, 0.72);
   cursor: pointer;
+  color: var(--ink);
 }
 
 .secondary-button {
@@ -452,8 +601,16 @@ p {
   top: 0;
 }
 
+.app-shell[data-theme="dark"] .data-table thead th {
+  background: rgba(255, 255, 255, 0.04);
+}
+
 .data-table tbody tr:nth-child(even) {
   background: rgba(255, 255, 255, 0.26);
+}
+
+.app-shell[data-theme="dark"] .data-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.025);
 }
 
 .data-table tbody tr:hover {
@@ -487,7 +644,7 @@ p {
 .control-stack input,
 .control-stack select {
   border-radius: 16px;
-  border: 1px solid rgba(23, 33, 43, 0.12);
+  border: 1px solid var(--line);
   padding: 12px 14px;
   min-height: 48px;
   background: rgba(255, 255, 255, 0.86);
@@ -659,14 +816,23 @@ p {
   gap: 18px;
 }
 
+.geography-workspace {
+  display: grid;
+  gap: 18px;
+}
+
 .geography-map-layout {
-  grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
+  grid-template-columns: minmax(0, 1.8fr) minmax(280px, 0.62fr);
   align-items: start;
 }
 
 .geography-map-card,
 .geography-detail-card {
   min-height: 100%;
+}
+
+.geography-map-card {
+  padding-bottom: 18px;
 }
 
 .geography-map-toolbar {
@@ -688,16 +854,27 @@ p {
   box-shadow: var(--shadow-soft);
 }
 
+.app-shell[data-theme="dark"] .geography-basemap-toggle {
+  background: rgba(255, 255, 255, 0.05);
+}
+
 .geography-basemap-button {
   min-width: 78px;
 }
 
 .geography-basemap-button.active {
-  border-color: rgba(17, 79, 92, 0.28);
+  border-color: rgba(27, 95, 109, 0.28);
   background:
-    linear-gradient(135deg, rgba(17, 79, 92, 0.16), rgba(255, 255, 255, 0.9)),
+    linear-gradient(135deg, rgba(27, 95, 109, 0.16), rgba(255, 255, 255, 0.9)),
     var(--brand-soft);
   color: var(--brand);
+}
+
+.app-shell[data-theme="dark"] .geography-basemap-button.active {
+  background:
+    linear-gradient(135deg, rgba(123, 176, 188, 0.2), rgba(255, 255, 255, 0.05)),
+    var(--brand-soft);
+  color: var(--brand-strong);
 }
 
 .geography-map-legend {
@@ -723,27 +900,33 @@ p {
 }
 
 .geography-legend-swatch.exposure {
-  background: #114f5c;
+  background: #3c8d9c;
 }
 
 .geography-legend-swatch.no-exposure {
-  background: #ad6536;
+  background: #d08a52;
 }
 
 .geography-legend-swatch.cluster {
-  background: #2f6c79;
+  background: #5e8793;
 }
 
 .geography-map-frame {
   position: relative;
-  min-height: 520px;
-  border-radius: 24px;
+  min-height: 600px;
+  border-radius: 28px;
   overflow: hidden;
   border: 1px solid var(--line);
   background:
-    radial-gradient(circle at 18% 20%, rgba(17, 79, 92, 0.06), transparent 30%),
-    linear-gradient(180deg, rgba(225, 233, 237, 0.96), rgba(212, 223, 228, 0.98));
+    radial-gradient(circle at 18% 20%, rgba(27, 95, 109, 0.08), transparent 30%),
+    linear-gradient(180deg, rgba(231, 238, 241, 0.96), rgba(217, 226, 231, 0.98));
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.2);
+}
+
+.app-shell[data-theme="dark"] .geography-map-frame {
+  background:
+    radial-gradient(circle at 16% 18%, rgba(123, 176, 188, 0.11), transparent 28%),
+    linear-gradient(180deg, rgba(52, 67, 77, 0.92), rgba(37, 48, 57, 0.96));
 }
 
 .geography-map-canvas {
@@ -757,8 +940,12 @@ p {
 
 .geography-map-canvas .maplibregl-control-container .maplibregl-ctrl-group {
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.86);
   box-shadow: var(--shadow-soft);
+}
+
+.app-shell[data-theme="dark"] .geography-map-canvas .maplibregl-control-container .maplibregl-ctrl-group {
+  background: rgba(248, 250, 252, 0.8);
 }
 
 .geography-map-canvas .maplibregl-ctrl-bottom-right,
@@ -772,6 +959,11 @@ p {
   background: rgba(255, 252, 247, 0.9);
   color: var(--muted);
   box-shadow: var(--shadow-soft);
+}
+
+.app-shell[data-theme="dark"] .geography-map-canvas .maplibregl-ctrl-attrib {
+  background: rgba(247, 248, 250, 0.8);
+  color: #44525d;
 }
 
 .geography-map-canvas .maplibregl-ctrl-attrib a {
@@ -794,12 +986,27 @@ p {
   background: rgba(255, 252, 247, 0.7);
 }
 
-.geography-detail-card .stat-card strong {
-  font-size: 1.25rem;
+.app-shell[data-theme="dark"] .geography-map-empty {
+  background: rgba(20, 28, 34, 0.46);
 }
 
-.geography-detail-card .metadata {
+.geography-detail-card {
+  padding: 20px 20px 22px;
+}
+
+.geography-detail-card .stat-card strong {
+  font-size: 1.15rem;
+}
+
+.geography-detail-grid {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.geography-detail-meta {
   margin-top: 14px;
+  display: grid;
+  gap: 8px;
 }
 
 .geography-chart-list {
@@ -975,6 +1182,14 @@ p {
   .geography-chart-grid {
     grid-template-columns: 1fr;
   }
+
+  .geography-map-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .geography-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 960px) {
@@ -1014,7 +1229,20 @@ p {
     padding: 18px;
   }
 
+  .topbar-actions {
+    width: 100%;
+    justify-items: start;
+  }
+
+  .topbar-chip-wrap {
+    justify-content: flex-start;
+  }
+
   .client-filter-search {
     grid-column: span 1;
+  }
+
+  .geography-detail-grid {
+    grid-template-columns: 1fr;
   }
 }

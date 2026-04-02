@@ -11,6 +11,7 @@ export function ClientGeographyDetailPanel({
   if (!selectedClient) {
     return (
       <aside className="card geography-detail-card">
+        <div className="eyebrow">Selection Context</div>
         <h4>Client Detail</h4>
         <p className="meta-note">
           Select a resolved client marker to inspect the delivery geography and reservation footprint.
@@ -27,6 +28,7 @@ export function ClientGeographyDetailPanel({
 
   return (
     <aside className="card geography-detail-card">
+      <div className="eyebrow">Selection Context</div>
       <div className="section-head">
         <div>
           <h4>{selectedClient.company_name || "Unknown Client"}</h4>
@@ -39,7 +41,7 @@ export function ClientGeographyDetailPanel({
           {selectedClient.has_exposure ? "With Current Exposure" : "Zero Exposure"}
         </span>
       </div>
-      <div className="stat-grid">
+      <div className="stat-grid geography-detail-grid">
         <div className="stat-card">
           <span className="stat-label">Reservation Value</span>
           <strong>{reservedValue}</strong>
@@ -57,7 +59,7 @@ export function ClientGeographyDetailPanel({
           <strong>{formatCount(Number(selectedClient.distinct_reference_count || 0))}</strong>
         </div>
       </div>
-      <div className="metadata">
+      <div className="metadata geography-detail-meta">
         <span>Client ID: {selectedClient.client_id || "-"}</span>
         <span>Primary Reference: {primaryReference}</span>
         <span>Coordinate Match: {selectedClient.coordinate_match_level || "-"}</span>

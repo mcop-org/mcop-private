@@ -115,9 +115,9 @@ function installClientLayers(
     source: "clients",
     filter: ["has", "point_count"],
     paint: {
-      "circle-color": "#2f6c79",
-      "circle-opacity": 0.9,
-      "circle-stroke-color": "#fefaf3",
+      "circle-color": "#5e8793",
+      "circle-opacity": 0.88,
+      "circle-stroke-color": "#f5f1e8",
       "circle-stroke-width": 2,
       "circle-radius": [
         "step",
@@ -143,7 +143,7 @@ function installClientLayers(
       "text-size": 12,
     },
     paint: {
-      "text-color": "#ffffff",
+      "text-color": "#f8fafc",
     },
   });
 
@@ -156,13 +156,13 @@ function installClientLayers(
       "circle-color": [
         "case",
         ["boolean", ["get", "has_exposure"], false],
-        "#114f5c",
-        "#ad6536",
+        "#3c8d9c",
+        "#d08a52",
       ],
-      "circle-opacity": 0.9,
+      "circle-opacity": 0.94,
       "circle-radius": ["get", "marker_radius"] as ExpressionSpecification,
-      "circle-stroke-color": "#fefaf3",
-      "circle-stroke-width": 2,
+      "circle-stroke-color": "#f7f3ea",
+      "circle-stroke-width": 2.4,
     },
   });
 
@@ -175,13 +175,13 @@ function installClientLayers(
       "circle-color": [
         "case",
         ["boolean", ["get", "has_exposure"], false],
-        "#0b3340",
-        "#8e4d23",
+        "#2d6572",
+        "#b56d35",
       ],
       "circle-opacity": 1,
       "circle-radius": ["+", ["get", "marker_radius"], 4] as ExpressionSpecification,
-      "circle-stroke-color": "#ffffff",
-      "circle-stroke-width": 3,
+      "circle-stroke-color": "#fffdf8",
+      "circle-stroke-width": 3.4,
     },
   });
 
@@ -369,6 +369,7 @@ export function ClientGeographyMap({
     <section className="card geography-map-card">
       <div className="section-head">
         <div>
+          <div className="eyebrow">Map Workspace</div>
           <h4>Resolved Client Map</h4>
           <p className="meta-note">
             Local-only client overlays on top of an OpenFreeMap cartography foundation rendered with MapLibre.

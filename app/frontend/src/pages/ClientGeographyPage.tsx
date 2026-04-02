@@ -179,26 +179,28 @@ export function ClientGeographyPage() {
             summary={data.summary}
             filteredLocations={filteredLocations}
           />
-          <div className="card-grid geography-map-layout">
-            <ClientGeographyMap
-              basemapMode={basemapMode}
-              onBasemapModeChange={(value) =>
-                setState((current) => ({
-                  ...current,
-                  basemapMode: value,
-                }))
-              }
-              rows={filteredMapClients}
-              selectedMarkerId={selectedMarkerId}
-              onSelectMarker={(markerId) =>
-                setState((current) => ({
-                  ...current,
-                  selectedMarkerId: markerId,
-                }))
-              }
-            />
-            <ClientGeographyDetailPanel selectedClient={selectedClient} />
-          </div>
+          <section className="geography-workspace">
+            <div className="card-grid geography-map-layout">
+              <ClientGeographyMap
+                basemapMode={basemapMode}
+                onBasemapModeChange={(value) =>
+                  setState((current) => ({
+                    ...current,
+                    basemapMode: value,
+                  }))
+                }
+                rows={filteredMapClients}
+                selectedMarkerId={selectedMarkerId}
+                onSelectMarker={(markerId) =>
+                  setState((current) => ({
+                    ...current,
+                    selectedMarkerId: markerId,
+                  }))
+                }
+              />
+              <ClientGeographyDetailPanel selectedClient={selectedClient} />
+            </div>
+          </section>
           <ClientGeographyCharts
             filteredLocations={filteredLocations}
             summary={data.summary}
