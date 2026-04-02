@@ -21,6 +21,15 @@ export function ClientIntelligenceCharts({
   concentration,
 }: ClientIntelligenceChartsProps) {
   const maxExposureValue = Math.max(...topExposure.map((row) => Number(row.reserved_value_gbp || 0)), 0);
+  const references = [...new Set(
+    concentration
+      .map((row) => String(row.product_reference || "").trim())
+      .filter(Boolean),
+  )].sort((left, right) => left.localeCompare(right, "en", { sensitivity: "base" }));
+  const palette = ["#215376", "#a96a3e", "#2f7d4a", "#8f4f8b", "#8a6d1d", "#56657a", "#6e8f2a", "#b35656"];
+  const colorByReference = new Map(
+    references.map((reference, index) => [reference, palette[index % palette.length]]),
+  );
 
   const groupedConcentration = topExposure.map((clientRow) => ({
     clientKey: `${clientRow.company_name}__${clientRow.client_id}`,
@@ -93,13 +102,31 @@ export function ClientIntelligenceCharts({
                       <div
                         className="client-stack-segment"
                         key={`${row.clientKey}-${segment.product_reference}`}
-                        style={{ width }}
+                        style={{
+                          width,
+                          background: colorByReference.get(segment.product_reference) || "#215376",
+                        }}
                         title={`${segment.product_reference}: ${formatCompactMoney(Number(segment.reserved_value_gbp || 0))}`}
-                      >
-                        <span>{segment.product_reference}</span>
-                      </div>
+                      />
                     );
                   })}
+                </div>
+                <div className="client-stack-legend">
+                  {row.rows.map((segment) => (
+                    <div
+                      className="client-stack-legend-item"
+                      key={`${row.clientKey}-${segment.product_reference}-legend`}
+                    >
+                      <span
+                        className="client-stack-swatch"
+                        style={{ background: colorByReference.get(segment.product_reference) || "#215376" }}
+                      />
+                      <span className="client-stack-legend-label">{segment.product_reference}</span>
+                      <span className="client-stack-legend-value">
+                        {formatCompactMoney(Number(segment.reserved_value_gbp || 0))}
+                      </span>
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
