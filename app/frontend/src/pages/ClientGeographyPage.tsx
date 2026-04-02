@@ -6,6 +6,10 @@ import { ClientGeographyLocationTable } from "../components/geography/ClientGeog
 import { ClientGeographyMap } from "../components/geography/ClientGeographyMap";
 import { ClientGeographySummaryCards } from "../components/geography/ClientGeographySummaryCards";
 import { ClientGeographyUnmappedTable } from "../components/geography/ClientGeographyUnmappedTable";
+import {
+  DEFAULT_CLIENT_GEOGRAPHY_BASEMAP_MODE,
+  type ClientGeographyBasemapMode,
+} from "../components/geography/clientGeographyBasemap";
 import type {
   ClientGeographyLocationRow,
   ClientGeographyMapClientRow,
@@ -17,6 +21,7 @@ import { useSessionStorageState } from "../lib/sessionState";
 const CLIENT_GEOGRAPHY_PAGE_STATE_KEY = "mcop-advanced-ui:client-geography";
 
 type ClientGeographyPageState = {
+  basemapMode: ClientGeographyBasemapMode;
   country: string;
   city: string;
   exposure: string;
@@ -24,6 +29,7 @@ type ClientGeographyPageState = {
 };
 
 const INITIAL_CLIENT_GEOGRAPHY_PAGE_STATE: ClientGeographyPageState = {
+  basemapMode: DEFAULT_CLIENT_GEOGRAPHY_BASEMAP_MODE,
   country: "",
   city: "",
   exposure: "all",
@@ -70,7 +76,7 @@ export function ClientGeographyPage() {
     CLIENT_GEOGRAPHY_PAGE_STATE_KEY,
     INITIAL_CLIENT_GEOGRAPHY_PAGE_STATE,
   );
-  const { country, city, exposure, selectedMarkerId } = state;
+  const { basemapMode, country, city, exposure, selectedMarkerId } = state;
 
   const locations = data?.locations || [];
   const mapClients = data?.map_clients || [];
@@ -175,6 +181,13 @@ export function ClientGeographyPage() {
           />
           <div className="card-grid geography-map-layout">
             <ClientGeographyMap
+              basemapMode={basemapMode}
+              onBasemapModeChange={(value) =>
+                setState((current) => ({
+                  ...current,
+                  basemapMode: value,
+                }))
+              }
               rows={filteredMapClients}
               selectedMarkerId={selectedMarkerId}
               onSelectMarker={(markerId) =>

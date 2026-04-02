@@ -2,14 +2,19 @@ import { useEffect, useMemo, useRef } from "react";
 import maplibregl, {
   type ExpressionSpecification,
   type GeoJSONSource,
-  type StyleSpecification,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Feature, FeatureCollection, Point } from "geojson";
 import type { ClientGeographyMapClientRow } from "../../lib/contracts";
-import basemapImageUrl from "./client-geography-basemap.svg";
+import {
+  CLIENT_GEOGRAPHY_BASEMAPS,
+  type ClientGeographyBasemapMode,
+  getClientGeographyBasemapStyleUrl,
+} from "./clientGeographyBasemap";
 
 type ClientGeographyMapProps = {
+  basemapMode: ClientGeographyBasemapMode;
+  onBasemapModeChange: (mode: ClientGeographyBasemapMode) => void;
   rows: ClientGeographyMapClientRow[];
   selectedMarkerId: string;
   onSelectMarker: (markerId: string) => void;
@@ -34,109 +39,188 @@ type MapFeatureProperties = {
   marker_radius: number;
 };
 
-const STYLE: StyleSpecification = {
-  version: 8,
-  sources: {
-    "basemap-image": {
-      type: "image",
-      url: basemapImageUrl,
-      coordinates: [
-        [-13, 72],
-        [33, 72],
-        [33, 34],
-        [-13, 34],
-      ],
-    },
-    "basemap-grid": {
-      type: "geojson",
-      data: {
-        type: "FeatureCollection",
-        features: [
-          {
-            type: "Feature",
-            properties: {},
-            geometry: {
-              type: "LineString",
-              coordinates: [
-                [-13, 50],
-                [33, 50],
-              ],
-            },
-          },
-          {
-            type: "Feature",
-            properties: {},
-            geometry: {
-              type: "LineString",
-              coordinates: [
-                [-13, 60],
-                [33, 60],
-              ],
-            },
-          },
-          {
-            type: "Feature",
-            properties: {},
-            geometry: {
-              type: "LineString",
-              coordinates: [
-                [-4, 34],
-                [-4, 72],
-              ],
-            },
-          },
-          {
-            type: "Feature",
-            properties: {},
-            geometry: {
-              type: "LineString",
-              coordinates: [
-                [12, 34],
-                [12, 72],
-              ],
-            },
-          },
-        ],
-      },
-    },
-  },
-  layers: [
-    {
-      id: "background",
-      type: "background",
-      paint: {
-        "background-color": "#dbe4e8",
-      },
-    },
-    {
-      id: "basemap-image-layer",
-      type: "raster",
-      source: "basemap-image",
-      paint: {
-        "raster-opacity": 0.97,
-        "raster-saturation": -0.18,
-        "raster-contrast": -0.05,
-        "raster-fade-duration": 0,
-      },
-    },
-    {
-      id: "basemap-grid-lines",
-      type: "line",
-      source: "basemap-grid",
-      paint: {
-        "line-color": "#f7fbfc",
-        "line-width": 0.8,
-        "line-opacity": 0.18,
-        "line-dasharray": [2, 2],
-      },
-    },
-  ],
-};
-
 const EMPTY_COLLECTION: FeatureCollection<Point, MapFeatureProperties> = {
   type: "FeatureCollection",
   features: [],
 };
+
+const DEFAULT_CENTER: [number, number] = [-1.5, 53.2];
+const DEFAULT_ZOOM = 4.2;
+
+function fitMapToFeatures(
+  map: maplibregl.Map,
+  features: FeatureCollection<Point, MapFeatureProperties>,
+  duration: number,
+) {
+  if (!features.features.length) {
+    map.easeTo({ center: DEFAULT_CENTER, zoom: DEFAULT_ZOOM, duration });
+    return;
+  }
+
+  if (features.features.length === 1) {
+    map.easeTo({
+      center: features.features[0].geometry.coordinates as [number, number],
+      zoom: 8,
+      duration,
+    });
+    return;
+  }
+
+  const bounds = new maplibregl.LngLatBounds();
+  for (const feature of features.features) {
+    bounds.extend(feature.geometry.coordinates as [number, number]);
+  }
+  map.fitBounds(bounds, { padding: 48, duration, maxZoom: 8.5 });
+}
+
+function setClientSourceData(
+  map: maplibregl.Map,
+  features: FeatureCollection<Point, MapFeatureProperties>,
+) {
+  const source = map.getSource("clients") as GeoJSONSource | undefined;
+  if (!source) {
+    return;
+  }
+  source.setData(features);
+}
+
+function setSelectedMarker(map: maplibregl.Map, selectedMarkerId: string) {
+  if (!map.getLayer("client-points-selected")) {
+    return;
+  }
+  map.setFilter("client-points-selected", [
+    "all",
+    ["!", ["has", "point_count"]],
+    ["==", ["get", "marker_id"], selectedMarkerId || ""],
+  ]);
+}
+
+function installClientLayers(
+  map: maplibregl.Map,
+  onSelectMarker: (markerId: string) => void,
+) {
+  if (!map.getSource("clients")) {
+    map.addSource("clients", {
+      type: "geojson",
+      data: EMPTY_COLLECTION,
+      cluster: true,
+      clusterMaxZoom: 8,
+      clusterRadius: 42,
+    });
+  }
+
+  map.addLayer({
+    id: "client-clusters",
+    type: "circle",
+    source: "clients",
+    filter: ["has", "point_count"],
+    paint: {
+      "circle-color": "#2f6c79",
+      "circle-opacity": 0.9,
+      "circle-stroke-color": "#fefaf3",
+      "circle-stroke-width": 2,
+      "circle-radius": [
+        "step",
+        ["get", "point_count"],
+        18,
+        10,
+        22,
+        25,
+        28,
+        50,
+        34,
+      ],
+    },
+  });
+
+  map.addLayer({
+    id: "client-cluster-count",
+    type: "symbol",
+    source: "clients",
+    filter: ["has", "point_count"],
+    layout: {
+      "text-field": ["get", "point_count_abbreviated"],
+      "text-size": 12,
+    },
+    paint: {
+      "text-color": "#ffffff",
+    },
+  });
+
+  map.addLayer({
+    id: "client-points",
+    type: "circle",
+    source: "clients",
+    filter: ["all", ["!", ["has", "point_count"]], ["!=", ["get", "marker_id"], ""]],
+    paint: {
+      "circle-color": [
+        "case",
+        ["boolean", ["get", "has_exposure"], false],
+        "#114f5c",
+        "#ad6536",
+      ],
+      "circle-opacity": 0.9,
+      "circle-radius": ["get", "marker_radius"] as ExpressionSpecification,
+      "circle-stroke-color": "#fefaf3",
+      "circle-stroke-width": 2,
+    },
+  });
+
+  map.addLayer({
+    id: "client-points-selected",
+    type: "circle",
+    source: "clients",
+    filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "marker_id"], ""]],
+    paint: {
+      "circle-color": [
+        "case",
+        ["boolean", ["get", "has_exposure"], false],
+        "#0b3340",
+        "#8e4d23",
+      ],
+      "circle-opacity": 1,
+      "circle-radius": ["+", ["get", "marker_radius"], 4] as ExpressionSpecification,
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 3,
+    },
+  });
+
+  map.on("click", "client-clusters", (event) => {
+    const feature = event.features?.[0];
+    const clusterId = feature?.properties?.cluster_id;
+    if (clusterId === undefined || feature?.geometry.type !== "Point") {
+      return;
+    }
+    const source = map.getSource("clients") as GeoJSONSource;
+    source.getClusterExpansionZoom(Number(clusterId)).then((zoom) => {
+      map.easeTo({
+        center: (feature.geometry as Point).coordinates as [number, number],
+        zoom,
+        duration: 500,
+      });
+    });
+  });
+
+  const selectMarker = (event: maplibregl.MapLayerMouseEvent) => {
+    const feature = event.features?.[0];
+    const markerId = String(feature?.properties?.marker_id || "");
+    if (markerId) {
+      onSelectMarker(markerId);
+    }
+  };
+
+  map.on("click", "client-points", selectMarker);
+  map.on("click", "client-points-selected", selectMarker);
+
+  for (const layerId of ["client-clusters", "client-points", "client-points-selected"]) {
+    map.on("mouseenter", layerId, () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+    map.on("mouseleave", layerId, () => {
+      map.getCanvas().style.cursor = "";
+    });
+  }
+}
 
 function markerRadius(row: ClientGeographyMapClientRow) {
   if (row.reserved_value_available) {
@@ -203,6 +287,8 @@ function buildFeatureCollection(rows: ClientGeographyMapClientRow[]): FeatureCol
 }
 
 export function ClientGeographyMap({
+  basemapMode,
+  onBasemapModeChange,
   rows,
   selectedMarkerId,
   onSelectMarker,
@@ -210,6 +296,16 @@ export function ClientGeographyMap({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const features = useMemo(() => buildFeatureCollection(rows), [rows]);
+  const featuresRef = useRef(features);
+  const selectedMarkerRef = useRef(selectedMarkerId);
+
+  useEffect(() => {
+    featuresRef.current = features;
+  }, [features]);
+
+  useEffect(() => {
+    selectedMarkerRef.current = selectedMarkerId;
+  }, [selectedMarkerId]);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) {
@@ -218,172 +314,39 @@ export function ClientGeographyMap({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: STYLE,
-      center: [-1.5, 53.2],
-      zoom: 4.2,
-      attributionControl: false,
+      style: getClientGeographyBasemapStyleUrl(basemapMode),
+      center: DEFAULT_CENTER,
+      zoom: DEFAULT_ZOOM,
+      attributionControl: {
+        compact: true,
+      },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     mapRef.current = map;
 
     map.on("load", () => {
-      map.addSource("clients", {
-        type: "geojson",
-        data: EMPTY_COLLECTION,
-        cluster: true,
-        clusterMaxZoom: 8,
-        clusterRadius: 42,
-      });
-
-      map.addLayer({
-        id: "client-clusters",
-        type: "circle",
-        source: "clients",
-        filter: ["has", "point_count"],
-        paint: {
-          "circle-color": "#2f6c79",
-          "circle-opacity": 0.9,
-          "circle-stroke-color": "#fefaf3",
-          "circle-stroke-width": 2,
-          "circle-radius": [
-            "step",
-            ["get", "point_count"],
-            18,
-            10,
-            22,
-            25,
-            28,
-            50,
-            34,
-          ],
-        },
-      });
-
-      map.addLayer({
-        id: "client-cluster-count",
-        type: "symbol",
-        source: "clients",
-        filter: ["has", "point_count"],
-        layout: {
-          "text-field": ["get", "point_count_abbreviated"],
-          "text-size": 12,
-        },
-        paint: {
-          "text-color": "#ffffff",
-        },
-      });
-
-      map.addLayer({
-        id: "client-points",
-        type: "circle",
-        source: "clients",
-        filter: ["all", ["!", ["has", "point_count"]], ["!=", ["get", "marker_id"], ""]],
-        paint: {
-          "circle-color": [
-            "case",
-            ["boolean", ["get", "has_exposure"], false],
-            "#114f5c",
-            "#ad6536",
-          ],
-          "circle-opacity": 0.9,
-          "circle-radius": ["get", "marker_radius"] as ExpressionSpecification,
-          "circle-stroke-color": "#fefaf3",
-          "circle-stroke-width": 2,
-        },
-      });
-
-      map.addLayer({
-        id: "client-points-selected",
-        type: "circle",
-        source: "clients",
-        filter: ["all", ["!", ["has", "point_count"]], ["==", ["get", "marker_id"], ""]],
-        paint: {
-          "circle-color": [
-            "case",
-            ["boolean", ["get", "has_exposure"], false],
-            "#0b3340",
-            "#8e4d23",
-          ],
-          "circle-opacity": 1,
-          "circle-radius": ["+", ["get", "marker_radius"], 4] as ExpressionSpecification,
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 3,
-        },
-      });
-
-      map.on("click", "client-clusters", (event) => {
-        const feature = event.features?.[0];
-        const clusterId = feature?.properties?.cluster_id;
-        if (clusterId === undefined || feature?.geometry.type !== "Point") {
-          return;
-        }
-        const source = map.getSource("clients") as GeoJSONSource;
-        source.getClusterExpansionZoom(Number(clusterId)).then((zoom) => {
-          map.easeTo({
-            center: (feature.geometry as Point).coordinates as [number, number],
-            zoom,
-            duration: 500,
-          });
-        });
-      });
-
-      const selectMarker = (event: maplibregl.MapLayerMouseEvent) => {
-        const feature = event.features?.[0];
-        const markerId = String(feature?.properties?.marker_id || "");
-        if (markerId) {
-          onSelectMarker(markerId);
-        }
-      };
-
-      map.on("click", "client-points", selectMarker);
-      map.on("click", "client-points-selected", selectMarker);
-
-      for (const layerId of ["client-clusters", "client-points", "client-points-selected"]) {
-        map.on("mouseenter", layerId, () => {
-          map.getCanvas().style.cursor = "pointer";
-        });
-        map.on("mouseleave", layerId, () => {
-          map.getCanvas().style.cursor = "";
-        });
-      }
+      installClientLayers(map, onSelectMarker);
+      setClientSourceData(map, featuresRef.current);
+      setSelectedMarker(map, selectedMarkerRef.current);
+      fitMapToFeatures(map, featuresRef.current, 0);
     });
 
     return () => {
       map.remove();
       mapRef.current = null;
     };
-  }, [onSelectMarker]);
+  }, [basemapMode, onSelectMarker]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) {
       return;
     }
-    const source = map.getSource("clients") as GeoJSONSource | undefined;
-    if (!source) {
+    if (!map.getSource("clients")) {
       return;
     }
-    source.setData(features);
-
-    if (!features.features.length) {
-      map.easeTo({ center: [-1.5, 53.2], zoom: 4.2, duration: 400 });
-      return;
-    }
-
-    if (features.features.length === 1) {
-      map.easeTo({
-        center: features.features[0].geometry.coordinates as [number, number],
-        zoom: 8,
-        duration: 500,
-      });
-      return;
-    }
-
-    const bounds = new maplibregl.LngLatBounds();
-    for (const feature of features.features) {
-      bounds.extend(feature.geometry.coordinates as [number, number]);
-    }
-    map.fitBounds(bounds, { padding: 48, duration: 500, maxZoom: 8.5 });
+    setClientSourceData(map, features);
+    fitMapToFeatures(map, features, 500);
   }, [features]);
 
   useEffect(() => {
@@ -391,11 +354,7 @@ export function ClientGeographyMap({
     if (!map || !map.isStyleLoaded()) {
       return;
     }
-    map.setFilter("client-points-selected", [
-      "all",
-      ["!", ["has", "point_count"]],
-      ["==", ["get", "marker_id"], selectedMarkerId || ""],
-    ]);
+    setSelectedMarker(map, selectedMarkerId);
   }, [selectedMarkerId]);
 
   function handleResetView() {
@@ -403,23 +362,7 @@ export function ClientGeographyMap({
     if (!map) {
       return;
     }
-    if (!features.features.length) {
-      map.easeTo({ center: [-1.5, 53.2], zoom: 4.2, duration: 400 });
-      return;
-    }
-    if (features.features.length === 1) {
-      map.easeTo({
-        center: features.features[0].geometry.coordinates as [number, number],
-        zoom: 8,
-        duration: 400,
-      });
-      return;
-    }
-    const bounds = new maplibregl.LngLatBounds();
-    for (const feature of features.features) {
-      bounds.extend(feature.geometry.coordinates as [number, number]);
-    }
-    map.fitBounds(bounds, { padding: 48, duration: 400, maxZoom: 8.5 });
+    fitMapToFeatures(map, features, 400);
   }
 
   return (
@@ -428,12 +371,31 @@ export function ClientGeographyMap({
         <div>
           <h4>Resolved Client Map</h4>
           <p className="meta-note">
-            Local-only MapLibre view with deterministic client markers and clustering for dense delivery footprints.
+            Local-only client overlays on top of an OpenFreeMap cartography foundation rendered with MapLibre.
           </p>
         </div>
-        <button className="secondary-button" type="button" onClick={handleResetView}>
-          Reset View
-        </button>
+        <div className="geography-map-toolbar">
+          <div className="geography-basemap-toggle" aria-label="Basemap mode">
+            {(
+              Object.entries(CLIENT_GEOGRAPHY_BASEMAPS) as Array<
+                [ClientGeographyBasemapMode, (typeof CLIENT_GEOGRAPHY_BASEMAPS)[ClientGeographyBasemapMode]]
+              >
+            ).map(([mode, definition]) => (
+              <button
+                key={mode}
+                className={`secondary-button geography-basemap-button${basemapMode === mode ? " active" : ""}`}
+                type="button"
+                aria-pressed={basemapMode === mode}
+                onClick={() => onBasemapModeChange(mode)}
+              >
+                {definition.label}
+              </button>
+            ))}
+          </div>
+          <button className="secondary-button" type="button" onClick={handleResetView}>
+            Reset View
+          </button>
+        </div>
       </div>
       <div className="geography-map-legend">
         <span className="geography-legend-item">

@@ -669,6 +669,37 @@ p {
   min-height: 100%;
 }
 
+.geography-map-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.geography-basemap-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.56);
+  box-shadow: var(--shadow-soft);
+}
+
+.geography-basemap-button {
+  min-width: 78px;
+}
+
+.geography-basemap-button.active {
+  border-color: rgba(17, 79, 92, 0.28);
+  background:
+    linear-gradient(135deg, rgba(17, 79, 92, 0.16), rgba(255, 255, 255, 0.9)),
+    var(--brand-soft);
+  color: var(--brand);
+}
+
 .geography-map-legend {
   display: flex;
   flex-wrap: wrap;
@@ -728,6 +759,23 @@ p {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.9);
   box-shadow: var(--shadow-soft);
+}
+
+.geography-map-canvas .maplibregl-ctrl-bottom-right,
+.geography-map-canvas .maplibregl-ctrl-bottom-left {
+  bottom: 10px;
+}
+
+.geography-map-canvas .maplibregl-ctrl-attrib {
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 252, 247, 0.9);
+  color: var(--muted);
+  box-shadow: var(--shadow-soft);
+}
+
+.geography-map-canvas .maplibregl-ctrl-attrib a {
+  color: var(--brand);
 }
 
 .geography-map-canvas .maplibregl-ctrl button {
