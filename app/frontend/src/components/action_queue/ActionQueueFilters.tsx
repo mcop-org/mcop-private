@@ -28,17 +28,17 @@ export function ActionQueueFilters({
   onReset,
 }: ActionQueueFiltersProps) {
   return (
-    <section className="card reservation-selector-card">
+    <section className="card reservation-selector-card filter-card-consistent">
       <div className="section-head">
         <div>
-          <div className="eyebrow">Trusted Filters</div>
+          <div className="eyebrow">Filters</div>
           <h4>Action Queue Filters</h4>
         </div>
-        <button className="secondary-button" type="button" onClick={onReset}>
+        <button className="ghost-button" type="button" onClick={onReset}>
           Reset
         </button>
       </div>
-      <div className="filters">
+      <div className="filters filters-consistent">
         <input
           className="text-input"
           type="search"
