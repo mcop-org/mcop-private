@@ -6,6 +6,12 @@ from pathlib import Path
 
 import pandas as pd
 
+from mcop.reference_workspace.geography_resolver import (
+    RESOLVER_VERSION as GEOGRAPHY_RESOLVER_VERSION,
+    OfflineGeographyResolver,
+)
+from mcop.reference_workspace.uk_postcode_service import UKPostcodeServiceConfig
+
 
 RESERVATION_NOTE = (
     "Reservation completed means all products within the reservation have been released."
@@ -32,12 +38,16 @@ def _normalise_geo_part(value: object) -> str:
     return " ".join(_clean_text(value).split()).casefold()
 
 
+def _normalise_postcode_part(value: object) -> str:
+    return "".join(_clean_text(value).split()).casefold()
+
+
 def _client_geography_exact_key(country: object, city: object, postcode: object) -> str:
     return "||".join(
         [
             _normalise_geo_part(country),
             _normalise_geo_part(city),
-            _normalise_geo_part(postcode),
+            _normalise_postcode_part(postcode),
         ]
     )
 
@@ -170,13 +180,42 @@ def _empty_client_geography_summary() -> dict:
     }
 
 
+def _empty_client_geography_plot_diagnostics() -> dict:
+    return {
+        "total_usable_rows": 0,
+        "total_plotted_rows": 0,
+        "grouped_exclusion_stages": [],
+        "grouped_exclusion_reasons": [],
+        "excluded_candidate_rows": [],
+        "location_key_counts": {
+            "table_visible": 0,
+            "plotted": 0,
+            "missing_from_markers": 0,
+        },
+        "missing_location_keys_from_markers": [],
+        "client_key_counts": {
+            "candidate_rows": 0,
+            "plotted": 0,
+            "missing_from_markers": 0,
+        },
+        "missing_client_keys_from_markers": [],
+        "resolver_cache_summary": {
+            "resolver_version": GEOGRAPHY_RESOLVER_VERSION,
+            "entry_count": 0,
+            "datasets": [],
+            "country_sources": [],
+        },
+    }
+
+
 def _load_client_geography_coordinate_cache() -> dict[str, object]:
     if not CLIENT_GEOGRAPHY_COORDINATE_CACHE.exists():
-        return {"exact": {}, "city": {}, "conflicts": set()}
+        return {"exact": {}, "city": {}, "postcode": {}, "conflicts": set()}
 
     raw = json.loads(CLIENT_GEOGRAPHY_COORDINATE_CACHE.read_text(encoding="utf-8"))
     exact_candidates: dict[str, list[dict]] = {}
     city_candidates: dict[str, list[dict]] = {}
+    postcode_candidates: dict[str, list[dict]] = {}
 
     entries = raw if isinstance(raw, list) else []
     for entry in entries:
@@ -203,12 +242,14 @@ def _load_client_geography_coordinate_cache() -> dict[str, object]:
         }
         if postcode:
             exact_candidates.setdefault(_client_geography_exact_key(country, city, postcode), []).append(record)
+            postcode_candidates.setdefault(_normalise_postcode_part(postcode), []).append(record)
         elif bool(entry.get("postcode_independent")):
             city_candidates.setdefault(_client_geography_city_key(country, city), []).append(record)
 
     conflicts: set[str] = set()
     exact: dict[str, dict] = {}
     city: dict[str, dict] = {}
+    postcode: dict[str, list[dict]] = {}
     for key, records in exact_candidates.items():
         if len(records) == 1:
             exact[key] = records[0]
@@ -219,29 +260,196 @@ def _load_client_geography_coordinate_cache() -> dict[str, object]:
             city[key] = records[0]
         else:
             conflicts.add(key)
-    return {"exact": exact, "city": city, "conflicts": conflicts}
+    for key, records in postcode_candidates.items():
+        postcode[key] = sorted(
+            records,
+            key=lambda row: (
+                _normalise_geo_part(row.get("country")),
+                _normalise_geo_part(row.get("city")),
+                _normalise_postcode_part(row.get("postcode")),
+            ),
+        )
+    return {"exact": exact, "city": city, "postcode": postcode, "conflicts": conflicts}
 
 
 def _resolve_client_geography_coordinate(
     country: str,
     city: str,
     postcode: str,
-    cache: dict[str, object],
-) -> tuple[dict | None, str]:
-    exact_key = _client_geography_exact_key(country, city, postcode)
-    exact_cache = cache.get("exact", {})
-    if exact_key in exact_cache:
-        return exact_cache[exact_key], ""
-    if exact_key in cache.get("conflicts", set()):
-        return None, "Coordinate cache conflict on exact delivery geography key"
+    resolver: OfflineGeographyResolver,
+) -> tuple[dict | None, str, str]:
+    return resolver.resolve(country, city, postcode)
 
+
+def _resolve_client_geography_city_fallback(
+    country: str,
+    city: str,
+    cache: dict[str, object],
+) -> tuple[dict | None, str, str]:
     city_key = _client_geography_city_key(country, city)
+    if not _clean_text(country) or not _clean_text(city):
+        return None, "No deterministic coordinate cache coverage for delivery geography", ""
+
     city_cache = cache.get("city", {})
     if city_key in city_cache:
-        return city_cache[city_key], ""
+        return city_cache[city_key], "", ""
     if city_key in cache.get("conflicts", set()):
-        return None, "Coordinate cache conflict on postcode-independent delivery geography key"
-    return None, "No deterministic coordinate cache match for delivery geography"
+        return None, "City fallback matched multiple postcode-independent cache rows", "city fallback conflict"
+    return None, "City fallback found no deterministic cache match", "city fallback miss"
+
+
+def _client_geography_exclusion_row(
+    row: dict[str, object],
+    reason: str,
+    stage: str,
+) -> dict[str, object]:
+    country = _clean_text(row.get("country"))
+    city = _clean_text(row.get("city"))
+    postcode = _clean_text(row.get("postcode"))
+    return {
+        "client_id": _clean_text(row.get("client_id")),
+        "company_name": _clean_text(row.get("company_name")),
+        "country": country,
+        "city": city,
+        "postcode": postcode,
+        "normalized_country": _normalise_geo_part(country),
+        "normalized_city": _normalise_geo_part(city),
+        "normalized_postcode": _normalise_postcode_part(postcode),
+        "failure_stage": _clean_text(stage),
+        "reason": _clean_text(reason),
+    }
+
+
+def _build_client_geography_plot_diagnostics(
+    location_rows: list[dict],
+    mapped_records: list[dict],
+    map_client_rows: list[dict],
+    excluded_candidate_rows: list[dict],
+    resolver_cache_entries: dict[str, dict[str, object]],
+) -> dict:
+    exclusion_stage_counts: dict[str, int] = {}
+    exclusion_reason_counts: dict[str, int] = {}
+    for row in excluded_candidate_rows:
+        stage = _clean_text(row.get("failure_stage"))
+        reason = _clean_text(row.get("reason"))
+        if stage:
+            exclusion_stage_counts[stage] = exclusion_stage_counts.get(stage, 0) + 1
+        if not reason:
+            continue
+        exclusion_reason_counts[reason] = exclusion_reason_counts.get(reason, 0) + 1
+
+    grouped_exclusion_stages = [
+        {"failure_stage": stage, "row_count": int(exclusion_stage_counts[stage])}
+        for stage in sorted(exclusion_stage_counts)
+    ]
+    grouped_exclusion_reasons = [
+        {"reason": reason, "row_count": int(exclusion_reason_counts[reason])}
+        for reason in sorted(exclusion_reason_counts)
+    ]
+
+    location_keys = {
+        (
+            _clean_text(row.get("country")),
+            _clean_text(row.get("city")),
+            _clean_text(row.get("postcode")),
+        )
+        for row in location_rows
+    }
+    marker_location_keys = {
+        (
+            _clean_text(row.get("country")),
+            _clean_text(row.get("city")),
+            _clean_text(row.get("postcode")),
+        )
+        for row in map_client_rows
+    }
+    missing_location_keys = sorted(location_keys - marker_location_keys)
+    missing_location_key_rows = [
+        {
+            "country": country,
+            "city": city,
+            "postcode": postcode,
+            "normalized_country": _normalise_geo_part(country),
+            "normalized_city": _normalise_geo_part(city),
+            "normalized_postcode": _normalise_postcode_part(postcode),
+        }
+        for country, city, postcode in missing_location_keys
+    ]
+
+    candidate_client_rows = sorted(
+        {
+            (
+                _clean_text(row.get("client_id")),
+                _clean_text(row.get("company_name")),
+            )
+            for row in mapped_records
+        }
+    )
+    plotted_client_rows = {
+        (
+            _clean_text(row.get("client_id")),
+            _clean_text(row.get("company_name")),
+        )
+        for row in map_client_rows
+    }
+    missing_client_keys = [
+        {"client_id": client_id, "company_name": company_name}
+        for client_id, company_name in candidate_client_rows
+        if (client_id, company_name) not in plotted_client_rows
+    ]
+
+    excluded_candidate_rows = sorted(
+        excluded_candidate_rows,
+        key=lambda row: (
+            _clean_text(row["reason"]).lower(),
+            _clean_text(row["company_name"]).lower(),
+            _clean_text(row["client_id"]).lower(),
+            _clean_text(row["country"]).lower(),
+            _clean_text(row["city"]).lower(),
+            _clean_text(row["postcode"]).lower(),
+        ),
+    )
+
+    dataset_versions = sorted(
+        {
+            _clean_text(entry.get("dataset_version"))
+            for entry in resolver_cache_entries.values()
+            if _clean_text(entry.get("dataset_version"))
+        }
+    )
+    country_sources = sorted(
+        {
+            _clean_text(entry.get("country_source"))
+            for entry in resolver_cache_entries.values()
+            if _clean_text(entry.get("country_source"))
+        }
+    )
+
+    return {
+        "total_usable_rows": int(len(mapped_records)),
+        "total_plotted_rows": int(len(map_client_rows)),
+        "grouped_exclusion_stages": grouped_exclusion_stages,
+        "grouped_exclusion_reasons": grouped_exclusion_reasons,
+        "excluded_candidate_rows": excluded_candidate_rows,
+        "location_key_counts": {
+            "table_visible": int(len(location_keys)),
+            "plotted": int(len(marker_location_keys)),
+            "missing_from_markers": int(len(missing_location_keys)),
+        },
+        "missing_location_keys_from_markers": missing_location_key_rows,
+        "client_key_counts": {
+            "candidate_rows": int(len(candidate_client_rows)),
+            "plotted": int(len(plotted_client_rows)),
+            "missing_from_markers": int(len(missing_client_keys)),
+        },
+        "missing_client_keys_from_markers": missing_client_keys,
+        "resolver_cache_summary": {
+            "resolver_version": GEOGRAPHY_RESOLVER_VERSION,
+            "entry_count": int(len(resolver_cache_entries)),
+            "datasets": dataset_versions,
+            "country_sources": country_sources,
+        },
+    }
 
 
 def _available_bags_by_reference(products: pd.DataFrame) -> dict[str, float]:
@@ -1236,9 +1444,11 @@ def _build_expired_reservation_draft_workflow(
 def _build_client_geography(
     latest: pd.DataFrame,
     clients: pd.DataFrame,
-) -> tuple[dict, list[dict], list[dict], list[dict], list[dict], list[dict]]:
+    geography_resolver: OfflineGeographyResolver | None = None,
+) -> tuple[dict, list[dict], list[dict], list[dict], list[dict], list[dict], list[dict], dict]:
     empty_summary = _empty_client_geography_summary()
-    coordinate_cache = _load_client_geography_coordinate_cache()
+    empty_diagnostics = _empty_client_geography_plot_diagnostics()
+    coordinate_resolver = geography_resolver or OfflineGeographyResolver(CLIENT_GEOGRAPHY_COORDINATE_CACHE)
     clients_master, metadata = _prepare_clients_master(clients)
     clients_lookup = {
         _clean_text(row["client_id"]): row
@@ -1258,7 +1468,81 @@ def _build_client_geography(
         detail_rows = []
 
     if clients_master.empty and not detail_rows:
-        return empty_summary, [], [], [], [], []
+        return empty_summary, [], [], [], [], [], [], empty_diagnostics
+
+    client_geography_activity_rows: list[dict] = []
+    sorted_client_rows = client_rows
+    if not client_rows.empty:
+        sorted_client_rows = client_rows.sort_values(
+            ["company_name", "client_id", "product_reference", "request_date"],
+            kind="stable",
+            na_position="last",
+        )
+    for _, row in sorted_client_rows.iterrows():
+        client_id = _clean_text(row["client_id"])
+        company_name = _clean_text(row["company_name"])
+        request_date = _clean_text(row["request_date"])
+        product_reference = _clean_text(row["product_reference"])
+        reserved_bags = round(float(row["effective_bags"]), 4)
+        reserved_kg = round(float(row["reserved_kg"]), 4)
+        reserved_value_gbp = round(float(row["reserved_value_gbp"]), 2)
+        reserved_value_available = bool(row["value_complete"])
+        country = ""
+        city = ""
+        postcode = ""
+        location_label = "Unknown"
+        coordinate_match_level = ""
+        latitude = None
+        longitude = None
+        unmapped_reason = ""
+        coordinate: dict | None = None
+
+        if not client_id:
+            unmapped_reason = "Missing client_id on activity rows"
+        else:
+            client_master = clients_lookup.get(client_id)
+            if client_master is None:
+                unmapped_reason = "No matching clients master row for client_id"
+            else:
+                country = _clean_text(client_master.get("country"))
+                city = _clean_text(client_master.get("city"))
+                postcode = _clean_text(client_master.get("postcode"))
+                location_label = ", ".join([part for part in (city, postcode, country) if part]) or "Unknown"
+                if not any((country, city, postcode)):
+                    unmapped_reason = "Missing delivery geography on clients master row"
+                else:
+                    coordinate, _reason, _failure_stage = _resolve_client_geography_coordinate(
+                        country,
+                        city,
+                        postcode,
+                        coordinate_resolver,
+                    )
+                    if coordinate is not None:
+                        coordinate_match_level = _clean_text(coordinate["match_level"])
+                        latitude = float(coordinate["latitude"])
+                        longitude = float(coordinate["longitude"])
+
+        client_geography_activity_rows.append(
+            {
+                "company_name": company_name,
+                "client_id": client_id,
+                "product_reference": product_reference,
+                "request_date": request_date,
+                "request_date_available": bool(request_date),
+                "reserved_bags": reserved_bags,
+                "reserved_kg": reserved_kg,
+                "reserved_value_gbp": reserved_value_gbp,
+                "reserved_value_available": reserved_value_available,
+                "country": country,
+                "city": city,
+                "postcode": postcode,
+                "location_label": location_label,
+                "coordinate_match_level": coordinate_match_level,
+                "latitude": latitude,
+                "longitude": longitude,
+                "unmapped_reason": unmapped_reason,
+            }
+        )
 
     mapped_records: list[dict] = []
     unmapped_records: list[dict] = []
@@ -1466,17 +1750,19 @@ def _build_client_geography(
     )
 
     map_client_rows: list[dict] = []
+    excluded_candidate_rows: list[dict] = []
     coordinate_conflicts = 0
     for row in mapped_records:
-        coordinate, reason = _resolve_client_geography_coordinate(
+        coordinate, reason, failure_stage = _resolve_client_geography_coordinate(
             row["country"],
             row["city"],
             row["postcode"],
-            coordinate_cache,
+            coordinate_resolver,
         )
         if coordinate is None:
             if "conflict" in reason.lower():
                 coordinate_conflicts += 1
+            excluded_candidate_rows.append(_client_geography_exclusion_row(row, reason, failure_stage))
             continue
         map_client_rows.append(
             {
@@ -1557,7 +1843,23 @@ def _build_client_geography(
         "map_included": True,
         "map_status": map_status,
     }
-    return summary, location_rows, country_rows, city_rows, unmapped_records, map_client_rows
+    diagnostics = _build_client_geography_plot_diagnostics(
+        location_rows,
+        mapped_records,
+        map_client_rows,
+        excluded_candidate_rows,
+        coordinate_resolver.memo_entries,
+    )
+    return (
+        summary,
+        location_rows,
+        country_rows,
+        city_rows,
+        unmapped_records,
+        map_client_rows,
+        client_geography_activity_rows,
+        diagnostics,
+    )
 
 
 def _empty_action_queue_dataset(snapshot_date: str) -> dict:
@@ -1983,6 +2285,8 @@ def _empty_dataset(
         "client_geography_top_cities": [],
         "client_geography_unmapped_clients": [],
         "client_geography_map_clients": [],
+        "client_geography_activity_rows": [],
+        "client_geography_plot_diagnostics": _empty_client_geography_plot_diagnostics(),
         "reservation_action_queue": _empty_action_queue_dataset(""),
     }
 
@@ -1991,8 +2295,17 @@ def build_reference_workspace_dataset(
     activity: pd.DataFrame,
     products: pd.DataFrame,
     clients: pd.DataFrame | None = None,
+    enable_uk_postcode_service: bool = False,
+    uk_postcode_service_config: UKPostcodeServiceConfig | None = None,
+    uk_postcode_service_cache_path: Path | None = None,
+    geography_resolver: OfflineGeographyResolver | None = None,
 ) -> dict:
     clients_frame = clients.copy() if clients is not None else pd.DataFrame()
+    coordinate_resolver = geography_resolver or OfflineGeographyResolver(
+        CLIENT_GEOGRAPHY_COORDINATE_CACHE,
+        uk_success_cache_path=uk_postcode_service_cache_path or Path(__file__).with_name("client_geography_service_cache.json"),
+        uk_postcode_service_config=uk_postcode_service_config or UKPostcodeServiceConfig(enabled=enable_uk_postcode_service),
+    )
     product_ref_by_id, landing_status_by_reference = _product_reference_fallbacks(products)
     available_bags_by_reference = _available_bags_by_reference(products)
 
@@ -2038,13 +2351,17 @@ def build_reference_workspace_dataset(
             client_geography_top_cities,
             client_geography_unmapped_clients,
             client_geography_map_clients,
-        ) = _build_client_geography(pd.DataFrame(), clients_frame)
+            client_geography_activity_rows,
+            client_geography_plot_diagnostics,
+        ) = _build_client_geography(pd.DataFrame(), clients_frame, coordinate_resolver)
         empty_dataset["client_geography_summary"] = client_geography_summary
         empty_dataset["client_geography_locations"] = client_geography_locations
         empty_dataset["client_geography_top_countries"] = client_geography_top_countries
         empty_dataset["client_geography_top_cities"] = client_geography_top_cities
         empty_dataset["client_geography_unmapped_clients"] = client_geography_unmapped_clients
         empty_dataset["client_geography_map_clients"] = client_geography_map_clients
+        empty_dataset["client_geography_activity_rows"] = client_geography_activity_rows
+        empty_dataset["client_geography_plot_diagnostics"] = client_geography_plot_diagnostics
         return empty_dataset
 
     reservations["request_type"] = (
@@ -2110,6 +2427,8 @@ def build_reference_workspace_dataset(
             client_geography_top_cities,
             client_geography_unmapped_clients,
             client_geography_map_clients,
+            client_geography_activity_rows,
+            client_geography_plot_diagnostics,
         ) = _build_client_geography(pd.DataFrame(), clients_frame)
         empty_dataset["client_geography_summary"] = client_geography_summary
         empty_dataset["client_geography_locations"] = client_geography_locations
@@ -2117,6 +2436,8 @@ def build_reference_workspace_dataset(
         empty_dataset["client_geography_top_cities"] = client_geography_top_cities
         empty_dataset["client_geography_unmapped_clients"] = client_geography_unmapped_clients
         empty_dataset["client_geography_map_clients"] = client_geography_map_clients
+        empty_dataset["client_geography_activity_rows"] = client_geography_activity_rows
+        empty_dataset["client_geography_plot_diagnostics"] = client_geography_plot_diagnostics
         return empty_dataset
 
     reservations["reservation_key"] = reservations["id_booking"].where(
@@ -2338,7 +2659,9 @@ def build_reference_workspace_dataset(
         client_geography_top_cities,
         client_geography_unmapped_clients,
         client_geography_map_clients,
-    ) = _build_client_geography(latest, clients_frame)
+        client_geography_activity_rows,
+        client_geography_plot_diagnostics,
+    ) = _build_client_geography(latest, clients_frame, coordinate_resolver)
     reservation_action_queue = _build_reservation_action_queue(latest, snapshot_date)
     reservation_action_queue["expired_draft_workflow"] = _build_expired_reservation_draft_workflow(
         latest,
@@ -2373,5 +2696,7 @@ def build_reference_workspace_dataset(
         "client_geography_top_cities": client_geography_top_cities,
         "client_geography_unmapped_clients": client_geography_unmapped_clients,
         "client_geography_map_clients": client_geography_map_clients,
+        "client_geography_activity_rows": client_geography_activity_rows,
+        "client_geography_plot_diagnostics": client_geography_plot_diagnostics,
         "reservation_action_queue": reservation_action_queue,
     }
